@@ -128,7 +128,7 @@ export function createRenderer(canvas, city) {
   addDyn(progs.litInst, pedHeadGeom(), 340, 'ped_heads');
   addDyn(progs.litInst, pedHairGeom(), 340, 'ped_hair');
   addDyn(progs.litInst, plainBox(0.06, 1.2, 0.06, [1, 1, 1]), 260, 'rain');
-  addDyn(progs.unlitInst, headlightGeom(), 160, 'headlights');
+  addDyn(progs.unlitInst, headlightGeom(), 240, 'headlights');
   addDyn(progs.transpInst, landmarks.beamGeom, 1, 'beam');
   // Aircraft: police helicopter (body + spinning rotor), daytime plane,
   // heli spotlight cone (night only), mission marker column.

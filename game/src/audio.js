@@ -863,6 +863,9 @@ export function createSettingsUI(audio) {
   const closeBtn = panel.querySelector('[data-close]');
   if (closeBtn) closeBtn.addEventListener('click', () => { panel.style.display = 'none'; });
   btn.addEventListener('click', () => {
+    // Re-sync the mute box on every open: mute can change through the API
+    // or a saved setting, and the box was only set once at creation.
+    if (muteBox) muteBox.checked = audio.muted;
     panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
     audio.uiClick();
   });

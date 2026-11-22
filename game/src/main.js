@@ -476,6 +476,15 @@ if (params.sim) {
           v.heading, beamW, 1, beamLen));
         hb.tints.push([1, 0.93, 0.75]);
       }
+      // Boat lamps: one warm dot above each boat, so boats read against
+      // the dark sea at night (a dark-blue boat on dark-blue water was
+      // nearly invisible).
+      for (const b of traffic.boats) {
+        const d = Math.hypot(b.x - camX, b.z - camZ);
+        if (d > CULL_DIST) continue;
+        hl.matrices.push(mat4TRS(b.x, b.y + 2.0, b.z, 0, 1, 1, 1));
+        hl.tints.push([1, 0.85, 0.55]);
+      }
       dyn.headlights = hl;
       dyn.headbeams = hb;
       // Lighthouse beam sweeps the sea at night.

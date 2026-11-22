@@ -19,7 +19,7 @@ export const WORLD = {
 };
 export const MONEY_START = 0;
 export const START_TIME = 10; // 10:00, morning
-export const START_POS = { x: 0, z: 120 }; // on main road x=0, facing downtown
+export const START_POS = { x: 7.5, z: 120 }; // on the sidewalk beside main road x=0 (asphalt ends at 6 m, plots at 9 m), facing downtown
 
 // Vehicle tuning: max speed (m/s), acceleration, turn rate. Motorbike is
 // the main vehicle; scooter is its own slower, step-through type.
