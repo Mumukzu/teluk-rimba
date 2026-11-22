@@ -20,7 +20,7 @@ export const MISSION_BOARD = { x: -50, z: -50 };
 //   drive  — be driving any vehicle
 //   goto   — reach (x, z) within radius, driving or on foot
 //   onfoot — reach (x, z) within radius on foot only (get out first)
-//   chase  — get within 7 m of the getaway vehicle (it escapes after 2 laps)
+//   chase  — get within 4 m of the getaway vehicle (it escapes after 2 laps)
 //   board  — get into the boat (mission boat)
 //   sail   — reach (x, z) while driving the boat
 export const MISSIONS = [
@@ -201,7 +201,11 @@ export function createMissions(ctx) {
     }
     if (step.type === 'chase') {
       if (!chaseJeep) return null;
-      return { x: chaseJeep.x, z: chaseJeep.z, radius: 7, onFoot: false, label: step.label };
+      // Radius 4 matches the mission's catch check below: the autopilot
+      // (and the map marker) must aim at the real catch distance, not 7 m —
+      // at 7 m the autopilot stops short and can only catch the jeep if the
+      // jeep drives into the parked sedan.
+      return { x: chaseJeep.x, z: chaseJeep.z, radius: 4, onFoot: false, label: step.label };
     }
     if (step.type === 'board') {
       if (!missionBoat) return null;

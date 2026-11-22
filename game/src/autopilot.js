@@ -89,8 +89,14 @@ export function createAutopilot(city) {
   };
 
   ap.setTarget = function setTarget(t) {
-    const same = ap.target && t && ap.target.x === t.x && ap.target.z === t.z;
-    if (!same) {
+    // Only re-plan when the target moved materially (>15 m). The chase
+    // target is the getaway jeep's LIVE position, which moves ~0.3 m per
+    // step — resetting the BFS route on every tiny move thrashed the route
+    // and the sedan zigzagged instead of pursuing (M3 failed twice in the
+    // E3 final pass). Static targets never move, so their behaviour is
+    // unchanged; a moving target re-plans about once a second of game time.
+    const moved = !ap.target || !t || Math.hypot(t.x - ap.target.x, t.z - ap.target.z) > 15;
+    if (moved) {
       ap.target = t ? { x: t.x, z: t.z, radius: t.radius || 6, onFoot: !!t.onFoot } : null;
       ap.route = [];
       ap.routeIdx = 0;
