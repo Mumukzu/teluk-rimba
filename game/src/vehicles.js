@@ -83,8 +83,14 @@ export function createTraffic(city, opts = {}) {
     const d = edgeDir(edge);
     const a = nodesById.get(edge.a);
     const tune = VEHICLES[type];
+    // Right-hand traffic: the lane side picks the travel direction — a
+    // vehicle on the right side of the a->b direction travels a->b, one on
+    // the left side travels b->a. (Before this, every vehicle travelled
+    // a->b only: south/west turns teleported it back, so all traffic
+    // drained to the north-east perimeter and the centre looked empty.)
     const v = {
       id: nextId++, type, edge, s, lane,
+      dir: lane >= 0 ? 1 : -1,
       speed: 0, targetSpeed: tune.maxSpeed * range(rand, 0.55, 0.85),
       x: 0, z: 0, heading: 0, y: 0,
       parked: false, driven: false, dwell: 0,
@@ -105,10 +111,13 @@ export function createTraffic(city, opts = {}) {
     const d = edgeDir(v.edge);
     const a = nodesById.get(v.edge.a);
     // Right-hand traffic: offset to the right of the direction of travel.
-    const rx = d.dz, rz = -d.dx;
+    // s is the fraction along a->b; a dir=-1 vehicle travels b->a.
+    const dir = v.dir || 1;
+    const fdx = d.dx * dir, fdz = d.dz * dir;
+    const rx = fdz, rz = -fdx;
     v.x = a.x + d.dx * d.len * v.s + rx * v.lane;
     v.z = a.z + d.dz * d.len * v.s + rz * v.lane;
-    v.heading = Math.atan2(d.dx, d.dz);
+    v.heading = Math.atan2(fdx, fdz);
     v.y = Math.max(0, terrainHeight(v.x, v.z));
   }
 
@@ -142,26 +151,32 @@ export function createTraffic(city, opts = {}) {
       }
     }
     // Prefer going straight (smallest heading change), else random.
+    // Keep main roads busy: when a main-road edge is available, take it
+    // almost always — otherwise traffic diffuses over the whole graph
+    // and every single street frame looks empty.
+    let options2 = options;
+    const mainOpts = options.filter((o) => o.edge.main);
+    if (mainOpts.length && rand() < 0.9) options2 = mainOpts;
     const cur = edgeDir(v.edge);
-    options.sort((p, q) => {
+    options2.sort((p, q) => {
       const pd = edgeDir(p.edge), qd = edgeDir(q.edge);
       const pa = Math.abs(Math.atan2(pd.dx, pd.dz) - Math.atan2(cur.dx, cur.dz));
       const qa = Math.abs(Math.atan2(qd.dx, qd.dz) - Math.atan2(cur.dx, cur.dz));
       return pa - qa;
     });
-    return rand() < 0.6 ? options[0] : options[Math.floor(rand() * options.length)];
+    return rand() < 0.6 ? options2[0] : options2[Math.floor(rand() * options2.length)];
   }
 
   // --- spawn moving traffic ---
   // Dense on MAIN roads (Mu: intersections must look busy, not empty):
-  // ~70% of vehicles spawn on a main-road edge, the rest anywhere.
+  // ~85% of vehicles spawn on a main-road edge, the rest anywhere.
   const mainEdges = city.edges.filter((e) => e.main);
-  const pickEdge = () => (rand() < 0.7 && mainEdges.length
+  const pickEdge = () => (rand() < 0.85 && mainEdges.length
     ? mainEdges[Math.floor(rand() * mainEdges.length)]
     : city.edges[Math.floor(rand() * city.edges.length)]);
   const MOVING = [
-    ['motorbike', 55], ['scooter', 26], ['car', 20], ['sedan', 16],
-    ['mpv', 12], ['jeep', 10], ['angkot', 14], ['bajaj', 14],
+    ['motorbike', 65], ['scooter', 32], ['car', 26], ['sedan', 20],
+    ['mpv', 16], ['jeep', 10], ['angkot', 14], ['bajaj', 14],
     ['truck', 8], ['bus', 8], ['firetruck', 2], ['ambulance', 3], ['supercar', 6],
   ];
   const route = busRouteNodes(city);
@@ -180,7 +195,10 @@ export function createTraffic(city, opts = {}) {
         const outs = adj.get(startNode) || [];
         const onRoute = outs.find((o) => route.includes(o.to));
         if (onRoute) {
-          v.edge = onRoute.edge; v.s = 0; v.lane = 1.5;
+          v.edge = onRoute.edge;
+          v.dir = onRoute.edge.a === startNode ? 1 : -1;
+          v.s = v.dir === 1 ? 0 : 1;
+          v.lane = v.dir === 1 ? 1.5 : -1.5;
           v.route = route;
           v.routeIdx = route.indexOf(onRoute.to);
         }
@@ -237,27 +255,32 @@ export function createTraffic(city, opts = {}) {
   function stepVehicle(v, dt) {
     if (v.parked || v.driven) return;
     if (v.dwell > 0) { v.dwell -= dt; v.speed = 0; return; }
-    // Follow-the-leader: slow down for a vehicle ahead on the same edge.
+    // Follow-the-leader: slow down for a vehicle ahead on the same edge,
+    // same direction (opposite-direction traffic is on the other side).
     let target = v.targetSpeed;
     for (const o of vehicles) {
-      if (o === v || o.parked || o.driven || o.edge !== v.edge) continue;
-      const gap = (o.s - v.s) * edgeLen(v.edge);
+      if (o === v || o.parked || o.driven || o.edge !== v.edge || o.dir !== v.dir) continue;
+      const gap = (o.s - v.s) * edgeLen(v.edge) * (v.dir || 1);
       if (gap > 0 && gap < 10) target = Math.min(target, o.speed);
     }
     v.speed += clamp(target - v.speed, -14 * dt, 8 * dt);
     if (v.speed < 0.05) v.speed = 0;
     const d = edgeDir(v.edge);
-    v.s += (v.speed * dt) / d.len;
-    if (v.s >= 1) {
-      const nodeId = v.edge.b;
+    const dir = v.dir || 1;
+    v.s += (dir * v.speed * dt) / d.len;
+    if ((dir === 1 && v.s >= 1) || (dir === -1 && v.s <= 0)) {
+      const nodeId = dir === 1 ? v.edge.b : v.edge.a;
       const next = pickNextEdge(v, nodeId);
-      if (!next) { v.s = 1; v.speed = 0; return; }
-      // Moving onto the next edge: keep the same lane side (right-hand).
-      const keepLane = v.lane > 0 ? 1 : -1;
+      if (!next) { v.s = dir === 1 ? 1 : 0; v.speed = 0; return; }
+      // Moving onto the next edge: travel from the node we stand on
+      // toward the far node (the edge's own a->b order may point either
+      // way — travelling it backwards used to teleport the vehicle back).
       const main = next.edge.main;
       v.edge = next.edge;
-      v.s = 0;
-      v.lane = keepLane * (main ? (Math.abs(v.lane) > 3 ? 4.5 : 1.5) : 2.0);
+      v.dir = next.edge.a === nodeId ? 1 : -1;
+      v.s = v.dir === 1 ? 0 : 1;
+      // Lane side follows the travel direction (right-hand traffic).
+      v.lane = v.dir * (main ? (Math.abs(v.lane) > 3 ? 4.5 : 1.5) : 2.0);
       // Bus stop dwell: the bus stops at marked route nodes.
       if (v.type === 'bus' && BUS_STOPS.has(nodeId)) {
         v.dwell = 3;
