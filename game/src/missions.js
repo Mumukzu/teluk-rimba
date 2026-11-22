@@ -9,8 +9,11 @@
 // Mission state (money, completed missions, active mission + step) is saved
 // on every mission event (see save.js).
 import { buildingAABBs, terrainHeight, riverDistance } from './city.js';
+import { ACTION_ENTER } from './input.js';
 
-// Mission board at Rimba Plaza: walk up to it and the next job starts.
+// Mission board at Rimba Plaza: walk up to it on foot and press E to take
+// the next job. It never auto-starts (a job finishing at the plaza used to
+// chain straight into the next one, even while the player was driving).
 export const MISSION_BOARD = { x: -50, z: -50 };
 
 // Step types:
@@ -127,20 +130,24 @@ export function createMissions(ctx) {
   const doneIds = [];
   let chaseJeep = null; // mission 3 getaway vehicle (traffic vehicle object)
   let missionBoat = null; // mission 5 escape boat (traffic boat object)
+  let boardCooldown = 0; // seconds after a mission ends before the board takes E
 
   // The getaway jeep runs a loop of forest-road nodes; after 2 full laps it
   // is gone for good. It drives straight segments (the nodes are on roads).
+  // It starts on the FAR side of the loop (-500,-600), ~225 m from the
+  // player — a real chase, not a 22 m grab (the old spawn at (-600,-400)
+  // was caught in seconds).
   const CHASE_ROUTE = [[-600, -400], [-600, -600], [-500, -600], [-500, -400]];
   const CHASE_SPEED = 13;
   function spawnChaseJeep() {
-    const [x, z] = CHASE_ROUTE[0];
+    const [x, z] = CHASE_ROUTE[2];
     const v = {
       id: 9001, type: 'jeep', edge: null, s: 0, lane: 0,
       speed: CHASE_SPEED, targetSpeed: CHASE_SPEED, x, z,
       heading: Math.atan2(0, -1), y: Math.max(0, terrainHeight(x, z)),
       parked: false, driven: true, dwell: 0, mode: 'chase',
       color: [0.9, 0.3, 0.25], route: null, routeIdx: 0,
-      wp: 1, laps: 0, escaped: false,
+      wp: 3, laps: 0, escaped: false,
     };
     traffic.vehicles.push(v);
     return v;
@@ -243,6 +250,7 @@ export function createMissions(ctx) {
     removeChaseJeep();
     state.status = result;
     state.failReason = reason;
+    boardCooldown = 10; // linger at the plaza without chaining into the next job
     onSave();
     // Back to idle after a beat (the HUD keeps the last result).
     state.status = 'idle';
@@ -269,13 +277,21 @@ export function createMissions(ctx) {
     onSave();
   }
 
-  function step(dt) {
-    // Idle: the mission board at Rimba Plaza starts the next job.
+  function step(dt, actions = 0) {
+    // Idle: the mission board at Rimba Plaza hands out the next job — but
+    // only when the player walks up on foot and presses E (ACTION_ENTER).
+    // Driving past, or standing here right after a job ends, never starts
+    // one. main.js passes the step's actions in (it already spent E on
+    // enter/exit, so E near a car enters the car instead of taking a job).
     if (state.status === 'idle') {
+      boardCooldown = Math.max(0, boardCooldown - dt);
       const next = MISSIONS.find((m) => !doneIds.includes(m.id));
       if (next && game.started) {
         const d = Math.hypot(player.state.x - MISSION_BOARD.x, player.state.z - MISSION_BOARD.z);
-        if (d < 6) start(next.id);
+        if (d < 6 && !game.driving) {
+          hud.showHint('Press E to take the next job: ' + next.name, 2);
+          if (boardCooldown <= 0 && (actions & ACTION_ENTER)) start(next.id);
+        }
       }
       return;
     }

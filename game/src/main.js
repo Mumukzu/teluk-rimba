@@ -281,7 +281,8 @@ function stepWorld(dt) {
       if (missions.active) missions.fail('Busted by the police');
     }
     // Missions, autopilot and aircraft tick with the player.
-    missions.step(dt);
+    // (actions go to the mission board: E on foot at the plaza takes a job.)
+    missions.step(dt, actions);
     // Audio: one update per step with the full world state (area ambience,
     // engine, siren, helicopter, rain, footsteps, random street life).
     audio.update(dt, {

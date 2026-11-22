@@ -9,6 +9,7 @@ import { createWanted } from '../game/src/police.js';
 import { createMissions, MISSIONS, missionById } from '../game/src/missions.js';
 import { createAutopilot } from '../game/src/autopilot.js';
 import { createAircraft } from '../game/src/air.js';
+import { ACTION_ENTER } from '../game/src/input.js';
 import { saveGame, loadGame, clearSave, SAVE_KEY } from '../game/src/save.js';
 
 // localStorage stub for Node.
@@ -186,12 +187,39 @@ check('mission 5 boat escape target is in the sea', missionById(5).steps[2].x > 
     && missions.state.lastResult.reason === 'Time ran out', JSON.stringify(missions.state.lastResult));
 }
 
-// --- mission board auto-starts the next job ---
+// --- mission board: E on foot takes the next job, never auto-starts ---
 {
   const { player, missions } = freshCtx();
   player.state.x = -50; player.state.z = -50;
   missions.step(1 / 60);
-  check('mission board starts mission 1', missions.state.status === 'active' && missions.state.id === 1);
+  check('mission board does NOT auto-start without E', missions.state.status === 'idle');
+  missions.step(1 / 60, ACTION_ENTER);
+  check('mission board starts mission 1 on E', missions.state.status === 'active' && missions.state.id === 1);
+}
+{
+  // Driving through the plaza never starts a job (E is for the vehicle).
+  const { game, player, missions } = freshCtx();
+  player.state.x = -50; player.state.z = -50;
+  game.driving = { type: 'car' };
+  missions.step(1 / 60, ACTION_ENTER);
+  check('mission board does NOT start while driving', missions.state.status === 'idle');
+}
+{
+  // Cooldown: right after finishing a mission, E at the board does nothing.
+  const { game, player, missions } = freshCtx();
+  missions.start(1);
+  game.driving = { type: 'scooter' };
+  missions.step(1 / 60); // drive step done
+  stepTo(missions, player, 51, -51);
+  stepTo(missions, player, 620, -100); // completes mission 1
+  check('mission 1 done for cooldown test', missions.state.lastResult && missions.state.lastResult.result === 'done');
+  player.state.x = -50; player.state.z = -50;
+  game.driving = null;
+  missions.step(1 / 60, ACTION_ENTER);
+  check('mission board ignores E during the post-mission cooldown', missions.state.status === 'idle');
+  for (let i = 0; i < 11 * 60; i++) missions.step(1 / 60); // 10 s cooldown expires
+  missions.step(1 / 60, ACTION_ENTER);
+  check('mission board takes E again after the cooldown', missions.state.status === 'active' && missions.state.id === 2);
 }
 
 // --- save / load round-trip ---
