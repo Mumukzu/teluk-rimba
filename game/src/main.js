@@ -38,7 +38,7 @@ const game = {
   money: 0,
   timeHours: timeForShot(params.shot, START_TIME),
   wanted: 0,
-  objective: 'Jelajahi Teluk Rimba — WASD jalan, seret mouse untuk kamera',
+  objective: 'Explore Teluk Rimba — WASD to walk, drag mouse for camera',
   elapsed: 0,
   started: false,
   speedKmh: 0,
@@ -62,7 +62,7 @@ function startGame(skipAudio) {
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
   } catch { /* audio is optional in Phase A */ }
-  hud.showHint('WASD jalan • Shift lari • seret mouse untuk kamera • M peta (nanti)');
+  hud.showHint('WASD walk • Shift run • drag mouse for camera • M map (later)');
 }
 overlay.addEventListener('click', startGame);
 overlay.addEventListener('keydown', (e) => { if (e.code === 'Enter' || e.code === 'Space') startGame(); });

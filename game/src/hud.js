@@ -8,6 +8,7 @@ export function createHud(city) {
   const starsEl = document.getElementById('hud-stars');
   const speedEl = document.getElementById('hud-speed');
   const objEl = document.getElementById('hud-objective');
+  const areaEl = document.getElementById('hud-area');
   const hintEl = document.getElementById('hud-hint');
   const map = document.getElementById('minimap');
   const ctx = map.getContext('2d');
@@ -24,7 +25,7 @@ export function createHud(city) {
   }
 
   function update(dt, s) {
-    // s: {money, timeHours, wanted, speedKmh, objective}
+    // s: {money, timeHours, wanted, speedKmh, objective, place}
     moneyEl.textContent = '$' + s.money.toLocaleString('en-US');
     const hh = Math.floor(s.timeHours) % 24;
     const mm = Math.floor((s.timeHours % 1) * 60);
@@ -33,6 +34,7 @@ export function createHud(city) {
     starsEl.style.color = s.wanted > 0 ? '#ffd23f' : '#888';
     speedEl.textContent = Math.round(s.speedKmh) + ' km/h';
     if (s.objective) objEl.textContent = s.objective;
+    if (s.place && areaEl) areaEl.textContent = s.place;
     if (hintTimer > 0) {
       hintTimer -= dt;
       if (hintTimer <= 0) hintEl.style.display = 'none';

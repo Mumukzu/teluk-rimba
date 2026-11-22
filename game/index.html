@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Teluk Rimba — kota pelabuhan tropis</title>
+<title>Teluk Rimba — tropical port city</title>
 <link rel="icon" href="data:,">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #0a1226; font-family: system-ui, sans-serif; }
@@ -12,6 +12,7 @@
   #hud-top { position: absolute; top: 12px; left: 14px; font-size: 20px; font-weight: 700; line-height: 1.5; }
   #hud-stars { letter-spacing: 2px; font-size: 22px; }
   #hud-objective { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); font-size: 15px; background: rgba(0,0,0,.45); padding: 6px 14px; border-radius: 6px; }
+  #hud-area { position: absolute; top: 48px; left: 50%; transform: translateX(-50%); font-size: 13px; background: rgba(0,0,0,.35); padding: 3px 10px; border-radius: 5px; }
   #minimap { position: absolute; top: 12px; right: 14px; width: 200px; height: 200px; border: 2px solid rgba(255,255,255,.6); border-radius: 8px; background: #1a2f22; }
   #hud-speed { position: absolute; bottom: 14px; right: 16px; font-size: 18px; font-weight: 700; }
   #hud-hint { position: absolute; bottom: 52px; left: 50%; transform: translateX(-50%); font-size: 14px; background: rgba(0,0,0,.55); padding: 8px 16px; border-radius: 6px; display: none; }
@@ -23,24 +24,25 @@
 </style>
 </head>
 <body>
-<canvas id="game" aria-label="Teluk Rimba: kota pelabuhan tropis yang bisa dijelajahi dengan berjalan kaki"></canvas>
+<canvas id="game" aria-label="Teluk Rimba: a tropical port city you can explore on foot"></canvas>
 <div id="hud">
   <div id="hud-top">
     <div id="hud-money">$0</div>
     <div id="hud-time">10:00</div>
     <div id="hud-stars">☆☆☆</div>
   </div>
-  <div id="hud-objective">Jelajahi Teluk Rimba</div>
+  <div id="hud-objective">Explore Teluk Rimba</div>
+  <div id="hud-area">Rimba Central</div>
   <canvas id="minimap" width="200" height="200"></canvas>
   <div id="hud-speed">0 km/h</div>
   <div id="hud-hint"></div>
 </div>
 <div id="start-screen" tabindex="0">
   <h1>TELUK RIMBA</h1>
-  <p>Kota pelabuhan tropis &middot; gunung berapi di belakang, laut biru di depan</p>
-  <p>1.000 bangunan &middot; lalu lintas &middot; polisi &middot; 6 misi &middot; toko pasar</p>
-  <p>WASD jalan &middot; Shift lari &middot; seret mouse untuk kamera</p>
-  <div class="go">KLIK UNTUK MULAI</div>
+  <p>A tropical port city &middot; volcano behind, blue sea ahead</p>
+  <p>1,000 buildings &middot; traffic &middot; police &middot; 6 missions &middot; market shops</p>
+  <p>WASD walk &middot; Shift run &middot; drag mouse for camera</p>
+  <div class="go">CLICK TO START</div>
 </div>
 <p id="status" role="status" aria-live="polite"></p>
 <script type="module" src="./src/main.js"></script>

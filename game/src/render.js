@@ -5,6 +5,7 @@ import { createPrograms, createMesh, createInstancedMesh, drawMesh, mat4Identity
 import { buildWorldGeoms } from './world.js';
 import { buildBuildingMeshes, buildTreeMesh } from './buildings.js';
 import { buildRoadMesh, buildLampMeshes, buildTrafficLightMesh } from './roads.js';
+import { buildBeachPropMeshes } from './beach.js';
 import { DAY_LENGTH } from './config.js';
 
 export function createRenderer(canvas, city) {
@@ -20,6 +21,7 @@ export function createRenderer(canvas, city) {
   const treeMesh = buildTreeMesh(gl, progs, city);
   const lampMeshes = buildLampMeshes(city);
   const trafficMesh = buildTrafficLightMesh(city);
+  const beachMeshes = buildBeachPropMeshes(city);
 
   const meshes = [];
   const addStatic = (prog, geom, model) => {
@@ -44,6 +46,11 @@ export function createRenderer(canvas, city) {
   addInst(progs.litInst, lampMeshes.poles);
   addInst(progs.unlitInst, lampMeshes.heads);
   addInst(progs.unlitInst, trafficMesh);
+  addStatic(progs.lit, beachMeshes.poles, mat4Identity());
+  addInst(progs.litInst, beachMeshes.umbrella);
+  addInst(progs.litInst, beachMeshes.lounger);
+  addInst(progs.litInst, beachMeshes.ring);
+  addInst(progs.litInst, beachMeshes.ball);
   // Clouds drift: three separate static meshes sharing one geometry.
   const cloudMesh = createMesh(gl, progs.lit, world.clouds);
   const cloudModels = [

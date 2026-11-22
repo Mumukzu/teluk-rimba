@@ -3,7 +3,7 @@
 // tests, so everything always matches. Deterministic: same seed -> same city.
 // Importable from Node for the connectivity test and from the browser game.
 
-import { mulberry32, range, rangeInt, clamp, smoothstep } from './rng.js';
+import { mulberry32, range, rangeInt, clamp, smoothstep, hash2 } from './rng.js';
 
 export const SEED = 20261122;
 export const TARGET_BUILDINGS = 1000;
@@ -71,6 +71,95 @@ function zoneOf(cx, cz) {
   if (r <= 260) return 'downtown';
   if (r <= 460) return 'commercial';
   return 'residential';
+}
+
+// --- Names: every block and every area has an English name (Mu's rule). ---
+// Names are picked with the deterministic hash2 (NOT the rand stream), so
+// naming never changes the city layout. All in-game text is English; the
+// city proper name stays "Teluk Rimba".
+export const AREA_NAMES = {
+  downtown: 'Rimba Central',
+  commercial: 'Merchant Quarter',
+  residential: 'Palm Gardens',
+  beach: 'Coral Beach',
+  port: 'Rimba Harbor',
+  forest: 'Volcano Woods',
+  river: 'Rimba River',
+  plaza: 'Rimba Plaza',
+  market: 'Rimba Market',
+  sea: 'Rimba Bay',
+  volcano: 'Mount Rimba',
+};
+
+const NAME_FIRST = [
+  'Coral', 'Palm', 'Jasmine', 'Harbor', 'Sunset', 'Mango', 'Coconut', 'Orchid',
+  'Banyan', 'Lotus', 'Pearl', 'Amber', 'Marina', 'Lagoon', 'Breeze', 'Turtle',
+  'Dolphin', 'Frangipani', 'Hibiscus', 'Kapok', 'Sandalwood', 'Nutmeg', 'Clove',
+  'Papaya', 'Tamarind', 'Rattan', 'Seashell', 'Starfish', 'Moonlight', 'Sunrise',
+  'Emerald', 'Jade', 'Ruby', 'Sapphire', 'Ivory', 'Opal', 'Garnet', 'Quartz',
+  'Onyx', 'Willow',
+];
+const NAME_SUFFIX = {
+  downtown: ['Tower', 'Heights', 'Plaza', 'Center', 'Square', 'Terrace'],
+  commercial: ['Market', 'Row', 'Square', 'Walk', 'Court', 'Lane'],
+  residential: ['Gardens', 'Court', 'Lane', 'Park', 'Terrace', 'Village'],
+  beach: ['Beach', 'Bay', 'Shore', 'Cove', 'Sands', 'Point'],
+  port: ['Harbor', 'Dock', 'Wharf', 'Yard', 'Pier', 'Terminal'],
+  forest: ['Woods', 'Grove', 'Hill', 'Trail', 'Glade', 'Ridge'],
+  river: ['Riverside', 'Bend', 'Bank', 'Reach', 'Ford', 'Creek'],
+  plaza: ['Plaza'],
+  market: ['Market'],
+};
+
+function blockNameFor(i, j, zone, used) {
+  if (zone === 'plaza') return 'Rimba Plaza';
+  if (zone === 'market') return 'Rimba Market';
+  const suffixes = NAME_SUFFIX[zone] || NAME_SUFFIX.residential;
+  const first = NAME_FIRST[Math.floor(hash2(i * 7 + 3, j * 11 + 5) * NAME_FIRST.length)];
+  let suffix = suffixes[Math.floor(hash2(i * 13 + 1, j * 5 + 7) * suffixes.length)];
+  let name = first + ' ' + suffix;
+  if (!used.has(name)) { used.add(name); return name; }
+  // Collision: try every other suffix, then a compass word, then a numeral.
+  for (const s of suffixes) {
+    const cand = first + ' ' + s;
+    if (!used.has(cand)) { used.add(cand); return cand; }
+  }
+  for (const dir of ['North', 'South', 'East', 'West']) {
+    const cand = first + ' ' + suffix + ' ' + dir;
+    if (!used.has(cand)) { used.add(cand); return cand; }
+  }
+  let n = 2;
+  while (used.has(name + ' ' + n)) n++;
+  name = name + ' ' + n;
+  used.add(name);
+  return name;
+}
+
+// Area name at a world position: sea, river and volcano first, then the
+// block the point stands in (plaza/market included), else the zone under it.
+export function areaNameAt(city, x, z) {
+  if (x > 640) return AREA_NAMES.sea;
+  if (riverDistance(x, z) < 26) return AREA_NAMES.river;
+  if (terrainHeight(x, z) > 60) return AREA_NAMES.volcano;
+  const b = blockAt(city, x, z);
+  if (b) return AREA_NAMES[b.zone] || AREA_NAMES.residential;
+  return AREA_NAMES[zoneOf(x, z)] || AREA_NAMES.residential;
+}
+
+// The named block at a world position (null when standing on a road).
+export function blockAt(city, x, z) {
+  for (const b of city.blocks) {
+    if (x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1) return b;
+  }
+  return null;
+}
+
+// Display name for the HUD: "Area — Block" inside a block, else just the area.
+export function placeNameAt(city, x, z) {
+  const area = areaNameAt(city, x, z);
+  const b = blockAt(city, x, z);
+  if (b && b.zone !== 'plaza' && b.zone !== 'market') return area + ' — ' + b.name;
+  return area;
 }
 
 const ZONE_COUNT = {
@@ -171,6 +260,11 @@ export function generateCity(seed = SEED) {
       if (i === 6 && j === 5) zone = 'market';
       blocks.push({ i, j, x0, x1, z0, z1, cx, cz, zone });
     }
+  }
+  // Every block gets a unique name (deterministic, hash-based).
+  {
+    const used = new Set();
+    for (const b of blocks) b.name = blockNameFor(b.i, b.j, b.zone, used);
   }
 
   // --- buildings: per-block counts, then adjust to exactly 1000 ---
@@ -343,6 +437,36 @@ export function generateCity(seed = SEED) {
     }
   }
 
+  // --- beach props: umbrellas, loungers, swim rings, beach balls. ---
+  // On the sand near the shoreline (x 612-645, damp sand above the water),
+  // in small clusters, never on a road or in the river mouth. Appended at
+  // the END of generateCity so the rand stream above (and the whole city)
+  // is unchanged. Colours are soft pastels, in step with the city palette.
+  const beachProps = [];
+  const PROP_TINTS = [
+    [0.9, 0.72, 0.74], [0.64, 0.84, 0.7], [0.92, 0.84, 0.6],
+    [0.68, 0.78, 0.88], [0.78, 0.7, 0.86], [0.9, 0.74, 0.58],
+    [0.6, 0.82, 0.8],
+  ];
+  let clusterTries = 0;
+  while (beachProps.filter((p) => p.kind === 'umbrella').length < 36 && clusterTries++ < 800) {
+    const cx = range(rand, 614, 644);
+    const cz = range(rand, -480, 280);
+    if (riverDistance(cx, cz) < 30) continue;
+    const rot = range(rand, 0, Math.PI * 2);
+    beachProps.push({ kind: 'umbrella', x: cx, z: cz, rot, s: range(rand, 0.9, 1.15), color: PROP_TINTS[Math.floor(rand() * PROP_TINTS.length)] });
+    const nLounge = rangeInt(rand, 1, 2);
+    for (let k = 0; k < nLounge; k++) {
+      beachProps.push({ kind: 'lounger', x: cx + range(rand, -2.6, 2.6), z: cz + range(rand, -2.2, 2.2), rot: rot + range(rand, -0.4, 0.4), s: range(rand, 0.95, 1.1), color: PROP_TINTS[Math.floor(rand() * PROP_TINTS.length)] });
+    }
+    if (rand() < 0.55) {
+      beachProps.push({ kind: 'ring', x: cx + range(rand, -3.5, 3.5), z: cz + range(rand, -3, 3), rot: range(rand, 0, Math.PI * 2), s: range(rand, 0.9, 1.1), color: PROP_TINTS[Math.floor(rand() * PROP_TINTS.length)] });
+    }
+    if (rand() < 0.4) {
+      beachProps.push({ kind: 'ball', x: cx + range(rand, -4, 4), z: cz + range(rand, -3.5, 3.5), rot: 0, s: range(rand, 0.9, 1.1), color: PROP_TINTS[Math.floor(rand() * PROP_TINTS.length)] });
+    }
+  }
+
   const zoneCounts = {};
   for (const b of buildings) zoneCounts[b.zone] = (zoneCounts[b.zone] || 0) + 1;
 
@@ -356,6 +480,7 @@ export function generateCity(seed = SEED) {
     forestTrees,
     lamps,
     trafficLights,
+    beachProps,
     stats: {
       buildings: buildings.length,
       nodes: nodes.length,
@@ -365,6 +490,7 @@ export function generateCity(seed = SEED) {
       forestTrees: forestTrees.length,
       lamps: lamps.length,
       trafficLights: trafficLights.length,
+      beachProps: beachProps.length,
       zones: zoneCounts,
     },
   };
