@@ -2,7 +2,7 @@
 // Deterministic schedule: rain falls 15:00-16:30, the roads stay wet and
 // shiny until 18:00, then dry. Rains fade in/out over ~12 game-minutes.
 // ?weather=rain|wet|clear overrides the schedule (tests / screenshots only).
-import { mulberry32, clamp } from './rng.js';
+import { mulberry32, clamp, range } from './rng.js';
 import { mat4TRS } from './gl.js';
 
 const RAIN_START = 15.0, RAIN_END = 16.5, WET_END = 18.0;

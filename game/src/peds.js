@@ -22,6 +22,10 @@ const SKINS = [
   [0.85, 0.65, 0.5], [0.72, 0.52, 0.38], [0.6, 0.42, 0.3],
   [0.92, 0.75, 0.6], [0.78, 0.58, 0.44], [0.5, 0.35, 0.25],
 ];
+const HAIRS = [
+  [0.12, 0.1, 0.09], [0.35, 0.22, 0.12], [0.85, 0.7, 0.4],
+  [0.6, 0.6, 0.62], [0.5, 0.3, 0.15], [0.2, 0.16, 0.12],
+];
 
 export function createPeds(city, opts = {}) {
   const rand = mulberry32(opts.seed || 20261124);
@@ -51,6 +55,7 @@ export function createPeds(city, opts = {}) {
       shirt: SHIRTS[Math.floor(rand() * SHIRTS.length)],
       pants: PANTS[Math.floor(rand() * PANTS.length)],
       skin: SKINS[Math.floor(rand() * SKINS.length)],
+      hair: HAIRS[Math.floor(rand() * HAIRS.length)],
       state: 'walk', // walk | cross | flee | board | stand
       stateT: 0,
       target: null,
@@ -197,6 +202,7 @@ export function createPeds(city, opts = {}) {
       p.state = 'chase';
       p.shirt = [0.15, 0.2, 0.45];
       p.pants = [0.1, 0.12, 0.25];
+      p.hair = [0.15, 0.2, 0.45]; // police cap, same dark blue as the uniform
       p.kind = 'officer';
       return p;
     },
@@ -205,12 +211,13 @@ export function createPeds(city, opts = {}) {
         if (peds[i].kind === 'officer') peds.splice(i, 1);
       }
     },
-    // Visible instances, culled by distance; three tintable parts so every
-    // NPC wears different clothes (shirt / pants / skin).
+    // Visible instances, culled by distance; four tintable parts so every
+    // NPC is a distinct humanoid: shirt / pants / skin (face + hands) / hair.
     matricesFor(camX, camZ, maxDist) {
       const torso = { matrices: [], tints: [] };
       const legs = { matrices: [], tints: [] };
       const heads = { matrices: [], tints: [] };
+      const hair = { matrices: [], tints: [] };
       for (const p of peds) {
         const d = Math.hypot(p.x - camX, p.z - camZ);
         if (d > maxDist) continue;
@@ -219,8 +226,9 @@ export function createPeds(city, opts = {}) {
         torso.matrices.push(m); torso.tints.push(p.shirt);
         legs.matrices.push(m); legs.tints.push(p.pants);
         heads.matrices.push(m); heads.tints.push(p.skin);
+        hair.matrices.push(m); hair.tints.push(p.hair);
       }
-      return { torso, legs, heads };
+      return { torso, legs, heads, hair };
     },
     count() { return peds.length; },
   };
@@ -240,19 +248,45 @@ export function pedTorsoGeom() {
   for (const p of [body, armL, armR]) { g.pos.push(...p.pos); g.nrm.push(...p.nrm); g.col.push(...p.col); }
   return g;
 }
-// Legs (dark -> pants colour).
+// Legs: two separate legs (not one block) + dark shoes, tinted as pants.
 export function pedLegsGeom() {
   const g = emptyGeom();
-  const legs = plainBox(0.5, 0.6, 0.3, [1, 1, 1]);
-  for (let i = 0; i < legs.pos.length; i += 3) legs.pos[i + 1] += 0.3;
-  g.pos.push(...legs.pos); g.nrm.push(...legs.nrm); g.col.push(...legs.col);
+  for (const dx of [-0.14, 0.14]) {
+    const leg = plainBox(0.2, 0.6, 0.28, [1, 1, 1]);
+    for (let i = 0; i < leg.pos.length; i += 3) { leg.pos[i] += dx; leg.pos[i + 1] += 0.3; }
+    g.pos.push(...leg.pos); g.nrm.push(...leg.nrm); g.col.push(...leg.col);
+    const shoe = plainBox(0.22, 0.12, 0.36, [0.12, 0.12, 0.13]);
+    for (let i = 0; i < shoe.pos.length; i += 3) { shoe.pos[i] += dx; shoe.pos[i + 1] += 0.06; shoe.pos[i + 2] += 0.04; }
+    g.pos.push(...shoe.pos); g.nrm.push(...shoe.nrm); g.col.push(...shoe.col);
+  }
   return g;
 }
-// Head (skin tone). Same matrix as the body, so no per-part offset needed.
+// Head with a face: two eyes on the front + hands (skin) at the arm ends.
+// Same matrix as the body, so no per-part offset is needed.
 export function pedHeadGeom() {
   const g = emptyGeom();
   const head = plainBox(0.34, 0.34, 0.32, [1, 1, 1]);
   for (let i = 0; i < head.pos.length; i += 3) head.pos[i + 1] += 1.65;
   g.pos.push(...head.pos); g.nrm.push(...head.nrm); g.col.push(...head.col);
+  for (const dx of [-0.08, 0.08]) {
+    const eye = plainBox(0.06, 0.08, 0.04, [0.1, 0.1, 0.12]);
+    for (let i = 0; i < eye.pos.length; i += 3) { eye.pos[i] += dx; eye.pos[i + 1] += 1.68; eye.pos[i + 2] += 0.17; }
+    g.pos.push(...eye.pos); g.nrm.push(...eye.nrm); g.col.push(...eye.col);
+  }
+  for (const dx of [-0.36, 0.36]) {
+    const hand = plainBox(0.13, 0.14, 0.13, [1, 1, 1]);
+    for (let i = 0; i < hand.pos.length; i += 3) { hand.pos[i] += dx; hand.pos[i + 1] += 0.68; }
+    g.pos.push(...hand.pos); g.nrm.push(...hand.nrm); g.col.push(...hand.col);
+  }
+  return g;
+}
+// Hair: cap on top of the head + a back panel, tinted per NPC.
+export function pedHairGeom() {
+  const g = emptyGeom();
+  const cap = plainBox(0.36, 0.12, 0.34, [1, 1, 1]);
+  for (let i = 0; i < cap.pos.length; i += 3) cap.pos[i + 1] += 1.86;
+  const back = plainBox(0.36, 0.28, 0.08, [1, 1, 1]);
+  for (let i = 0; i < back.pos.length; i += 3) { back.pos[i + 1] += 1.7; back.pos[i + 2] -= 0.15; }
+  for (const p of [cap, back]) { g.pos.push(...p.pos); g.nrm.push(...p.nrm); g.col.push(...p.col); }
   return g;
 }

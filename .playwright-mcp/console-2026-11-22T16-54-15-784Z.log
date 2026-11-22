@@ -1,0 +1,4 @@
+[     559ms] ReferenceError: range is not defined
+    at buildWetGeoms (http://localhost:8081/src/weather.js:105:19)
+    at createRenderer (http://localhost:8081/src/render.js:39:15)
+    at http://localhost:8081/src/main.js:299:20

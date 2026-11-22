@@ -63,17 +63,25 @@ export function createPlayer(city, startX, startZ) {
     return { eye, center };
   }
 
-  // Player figure: shirt body + head, one merged geometry with vertex colours.
+  // Player figure: shirt body + head with a face (eyes + hair) + legs,
+  // one merged geometry with vertex colours.
   function figureGeom() {
     const body = plainBox(0.55, 0.85, 0.32, [0.85, 0.3, 0.25]);
     for (let i = 0; i < body.pos.length; i += 3) body.pos[i + 1] += 1.05;
     const head = plainBox(0.34, 0.34, 0.32, [0.85, 0.65, 0.5]);
     for (let i = 0; i < head.pos.length; i += 3) head.pos[i + 1] += 1.65;
+    const hair = plainBox(0.36, 0.12, 0.34, [0.15, 0.12, 0.1]);
+    for (let i = 0; i < hair.pos.length; i += 3) hair.pos[i + 1] += 1.86;
     const legs = plainBox(0.5, 0.6, 0.3, [0.2, 0.25, 0.35]);
     for (let i = 0; i < legs.pos.length; i += 3) legs.pos[i + 1] += 0.3;
     const g = { pos: [], nrm: [], col: [] };
-    for (const p of [body, head, legs]) {
+    for (const p of [body, head, hair, legs]) {
       g.pos.push(...p.pos); g.nrm.push(...p.nrm); g.col.push(...p.col);
+    }
+    for (const dx of [-0.08, 0.08]) {
+      const eye = plainBox(0.06, 0.08, 0.04, [0.1, 0.1, 0.12]);
+      for (let i = 0; i < eye.pos.length; i += 3) { eye.pos[i] += dx; eye.pos[i + 1] += 1.68; eye.pos[i + 2] += 0.17; }
+      g.pos.push(...eye.pos); g.nrm.push(...eye.nrm); g.col.push(...eye.col);
     }
     return g;
   }

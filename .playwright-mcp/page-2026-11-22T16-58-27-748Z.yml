@@ -1,0 +1,11 @@
+- generic [active] [ref=f4e1]:
+  - 'generic "Teluk Rimba: a tropical port city you can explore on foot" [ref=f4e2]'
+  - generic:
+    - generic:
+      - generic: $0
+      - generic: 21:30
+      - generic: ★★☆
+    - generic: WANTED — lose the police! Lay low to cool off
+    - generic: Rimba Central
+    - generic: 0 km/h
+  - status [ref=f4e3]

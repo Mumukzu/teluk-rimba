@@ -1,0 +1,11 @@
+- generic [active] [ref=f2e1]:
+  - 'generic "Teluk Rimba: a tropical port city you can explore on foot" [ref=f2e2]'
+  - generic:
+    - generic:
+      - generic: $0
+      - generic: 12:00
+      - generic: ☆☆☆
+    - generic: Driving the motorbike — E to get out
+    - generic: Rimba Central
+    - generic: 0 km/h
+  - status [ref=f2e3]

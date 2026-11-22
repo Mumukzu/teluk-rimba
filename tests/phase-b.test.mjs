@@ -67,8 +67,9 @@ check('peds wear varied clothes', (() => {
   const shirts = new Set(peds.peds.map((p) => p.shirt.join(',')));
   const pants = new Set(peds.peds.map((p) => p.pants.join(',')));
   const skins = new Set(peds.peds.map((p) => p.skin.join(',')));
-  return shirts.size >= 8 && pants.size >= 4 && skins.size >= 3;
-})(), `shirts/pants/skins vary`);
+  const hairs = new Set(peds.peds.map((p) => p.hair.join(',')));
+  return shirts.size >= 8 && pants.size >= 4 && skins.size >= 3 && hairs.size >= 3;
+})(), `shirts/pants/skins/hair vary`);
 check('peds flee a gunshot', (() => {
   const before = peds.peds.filter((p) => Math.hypot(p.x, p.z) < 40).length;
   const fled = peds.triggerFlee(0, 0, 40);

@@ -1,0 +1,17 @@
+- generic [active] [ref=e1]:
+  - 'generic "Teluk Rimba: a tropical port city you can explore on foot" [ref=e2]'
+  - generic:
+    - generic:
+      - generic: $0
+      - generic: 10:00
+      - generic: ☆☆☆
+    - generic: Explore Teluk Rimba
+    - generic: Rimba Central
+    - generic: 0 km/h
+  - generic [ref=e3] [cursor=pointer]:
+    - heading "TELUK RIMBA" [level=1] [ref=e4]
+    - paragraph [ref=e5]: A tropical port city · volcano behind, blue sea ahead
+    - paragraph [ref=e6]: 1,000 buildings · traffic · police · 6 missions · market shops
+    - paragraph [ref=e7]: WASD walk · Shift run · drag mouse for camera
+    - generic [ref=e8]: CLICK TO START
+  - status [ref=e9]

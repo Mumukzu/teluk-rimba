@@ -329,6 +329,7 @@ if (params.sim) {
     dyn.ped_torso = ped.torso;
     dyn.ped_legs = ped.legs;
     dyn.ped_heads = ped.heads;
+    dyn.ped_hair = ped.hair;
     // Headlights at night: two dots at the front of each moving vehicle.
     const isNight = game.timeHours < 6 || game.timeHours >= 18;
     if (isNight) {

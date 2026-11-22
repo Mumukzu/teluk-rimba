@@ -12,7 +12,7 @@ import { buildBeachPropMeshes } from './beach.js';
 import { buildLandmarks } from './landmarks.js';
 import { buildMoonGeom, buildStarsSpec } from './sky.js';
 import { buildVehicleGeoms, headlightGeom } from './vehicles.js';
-import { pedTorsoGeom, pedLegsGeom, pedHeadGeom } from './peds.js';
+import { pedTorsoGeom, pedLegsGeom, pedHeadGeom, pedHairGeom } from './peds.js';
 import { buildWetGeoms } from './weather.js';
 import { DAY_LENGTH } from './config.js';
 
@@ -110,6 +110,7 @@ export function createRenderer(canvas, city) {
   addDyn(progs.litInst, pedTorsoGeom(), 340, 'ped_torso');
   addDyn(progs.litInst, pedLegsGeom(), 340, 'ped_legs');
   addDyn(progs.litInst, pedHeadGeom(), 340, 'ped_heads');
+  addDyn(progs.litInst, pedHairGeom(), 340, 'ped_hair');
   addDyn(progs.litInst, plainBox(0.06, 1.2, 0.06, [1, 1, 1]), 260, 'rain');
   addDyn(progs.unlitInst, headlightGeom(), 160, 'headlights');
   addDyn(progs.transpInst, landmarks.beamGeom, 1, 'beam');

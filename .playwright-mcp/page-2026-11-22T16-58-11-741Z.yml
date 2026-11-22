@@ -1,0 +1,11 @@
+- generic [active] [ref=f3e1]:
+  - 'generic "Teluk Rimba: a tropical port city you can explore on foot" [ref=f3e2]'
+  - generic:
+    - generic:
+      - generic: $0
+      - generic: 12:00
+      - generic: ☆☆☆
+    - generic: Explore Teluk Rimba — WASD to walk, drag mouse for camera
+    - generic: Rimba Central
+    - generic: 0 km/h
+  - status [ref=f3e3]
