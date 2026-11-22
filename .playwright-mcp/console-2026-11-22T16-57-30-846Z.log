@@ -1,1 +1,0 @@
-[    1060ms] [LOG] [sim] {"steps":1200,"blocked":0,"player":{"x":0,"z":-60},"timeHours":11,"connected":true,"buildings":1000,"traffic":{"moving":76,"parked":24,"boats":9,"total":109},"peds":302,"wanted":0,"police":0,"weather":"clear"} @ http://localhost:8081/src/main.js:297

@@ -1,5 +1,0 @@
-[     356ms] ReferenceError: range is not defined
-    at buildWetGeoms (http://localhost:8081/src/weather.js:105:19)
-    at createRenderer (http://localhost:8081/src/render.js:39:15)
-    at http://localhost:8081/src/main.js:299:20
-[     360ms] [WARNING] [.WebGL-0x1d40034a200]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels @ http://localhost:8081/?shot=day&spawn=0,120:1

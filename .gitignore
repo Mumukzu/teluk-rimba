@@ -1,0 +1,2 @@
+# Playwright client artifacts (logs/screenshots from local QA runs) — never part of the entry.
+.playwright-mcp/
