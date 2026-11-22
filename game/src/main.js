@@ -11,7 +11,7 @@
 //   &weather=rain|wet|clear  force the weather
 import { STEP, DAY_LENGTH, START_TIME, START_POS, VEHICLES, CULL_DIST } from './config.js';
 import { generateCity, isConnected, placeNameAt, buildingAABBs, terrainHeight, riverDistance, RIVER_POINTS } from './city.js';
-import { createInput, ACTION_CONFIRM, ACTION_ENTER } from './input.js';
+import { createInput, ACTION_CONFIRM, ACTION_ENTER, ACTION_HORN } from './input.js';
 import { createPlayer } from './player.js';
 import { createHud } from './hud.js';
 import { createRenderer } from './render.js';
@@ -23,6 +23,7 @@ import { createWeather } from './weather.js';
 import { createMissions } from './missions.js';
 import { createAutopilot } from './autopilot.js';
 import { createAircraft } from './air.js';
+import { createAudio, createSettingsUI } from './audio.js';
 import { saveGame, loadGame, clearSave } from './save.js';
 import { mat4TRS } from './gl.js';
 
@@ -34,6 +35,15 @@ const testMode = !!(params.shot || params.cam || params.mission || params.autopi
 const canvas = document.getElementById('game');
 const city = generateCity(params.seed);
 const start = params.spawn || START_POS;
+
+// Audio: one AudioContext for the whole game, unlocked on the first click
+// (see startGame); the settings panel + debug surface live on window.
+const audio = createAudio(city);
+window.__AUDIO__ = audio;
+createSettingsUI(audio);
+// First gesture anywhere also unlocks the AudioContext (the start screen
+// click is the normal path; this covers clicks that land elsewhere first).
+window.addEventListener('pointerdown', () => audio.unlock(), { once: true });
 
 // Public test surface (read by the Playwright checks and the sim runner).
 window.__CITY_STATS__ = {
@@ -74,7 +84,7 @@ const aircraft = createAircraft(city);
 // Missions + autopilot (tests only) + save/load.
 let missions;
 const doSave = () => saveGame({ money: game.money, done: missions.doneIds(), active: missions.saveState() });
-missions = createMissions({ city, game, player, traffic, peds, wanted, hud, onSave: doSave });
+missions = createMissions({ city, game, player, traffic, peds, wanted, hud, audio, onSave: doSave });
 const autopilot = params.autopilot ? createAutopilot(city) : null;
 // Restore a previous session (money + missions), unless a test mission
 // was requested — test runs start fresh from the mission's start point.
@@ -90,19 +100,16 @@ if (params.mission) {
 const aabbs = buildingAABBs(city);
 if (!params.hud) document.getElementById('hud').style.display = 'none';
 
-// Start screen: click to start (also resumes the AudioContext; sounds land
-// in the audio phase — for now the context is just unlocked, no sound yet).
+// Start screen: click to start (also unlocks the AudioContext; the audio
+// phase wires every sound in from here).
 const overlay = document.getElementById('start-screen');
-let audioCtx = null;
 function startGame(skipAudio) {
   if (game.started) return;
   game.started = true;
   overlay.style.display = 'none';
   if (skipAudio) return; // screenshot/test mode: no user gesture, no audio yet
-  try {
-    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-  } catch { /* audio is optional in Phase A */ }
+  audio.unlock();
+  audio.uiClick();
   hud.showHint('WASD walk • Shift run • drag mouse for camera • M map (later)');
 }
 overlay.addEventListener('click', startGame);
@@ -152,6 +159,16 @@ function driveStep(v, dt, inp) {
   const nx = v.x + Math.sin(v.heading) * v.speed * dt;
   const nz = v.z + Math.cos(v.heading) * v.speed * dt;
   const radius = Math.max(1.0, tune.len / 2 - 0.4);
+  // Audio: brake squeal, tyre screech, collision thuds (all throttled
+  // inside the audio module, so calling every frame is safe).
+  if (isBoat) {
+    if (Math.abs(v.speed) > 3) audio.boatSplash();
+  } else {
+    if (fwd < 0 && v.speed > 6) audio.brake();
+    if (steer !== 0 && Math.abs(v.speed) > 12) audio.screech();
+    const blocked = collideVehicle(nx, v.z, radius) || collideVehicle(v.x, nz, radius);
+    if (blocked && Math.abs(v.speed) > 4) audio.collision(Math.abs(v.speed) * 3.6);
+  }
   if (isBoat) {
     // Boats stay on water: sea (east) or the river.
     const onWater = (x, z) => x > 605 || riverDistance(x, z) < 9;
@@ -188,6 +205,8 @@ function enterExitVehicle() {
     const v = game.driving;
     traffic.exit(v);
     game.driving = null;
+    audio.doorThud();
+    audio.uiClick();
     // Step out beside the vehicle.
     player.state.x = v.x + Math.cos(v.heading) * 2.2;
     player.state.z = v.z - Math.sin(v.heading) * 2.2;
@@ -200,17 +219,25 @@ function enterExitVehicle() {
   const wasParked = v.parked;
   traffic.enter(v);
   game.driving = v;
+  audio.engineStart();
+  audio.uiClick();
   if (wasParked) wanted.addHeat(0.5); // taking a parked vehicle is theft
   hud.showHint(v.type === 'boat' || v.type === 'fishingboat' || v.type === 'sailboat'
     ? 'Sailing — W speed up, S slow down, A/D steer, E to get off'
     : 'Driving — W accelerate, S brake, A/D steer, E to get out');
 }
 
+// Bus-stop chime, only when the player is close enough to hear it.
+traffic.onBusStop = (v) => {
+  if (Math.hypot(v.x - player.state.x, v.z - player.state.z) < 60) audio.busStop();
+};
+
 // Test hooks for the Playwright checks (tests only).
 window.__GAME__ = {
   traffic, peds, wanted, weather, game, player, missions, aircraft, autopilot,
   crime() { wanted.addHeat(1); return wanted.state.wanted; },
   gunshot(x, z) {
+    audio.gunshot();
     wanted.addHeat(1);
     return peds.triggerFlee(x == null ? player.state.x : x, z == null ? player.state.z : z, 40);
   },
@@ -231,6 +258,7 @@ function stepWorld(dt) {
     const effInput = (autopilot && autopilot.enabled) ? autopilot.input : input;
     const actions = effInput.takeActions();
     if (actions & ACTION_ENTER) enterExitVehicle();
+    if (actions & ACTION_HORN && game.driving) audio.horn(game.driving.type);
     const px = player.state.x, pz = player.state.z;
     if (game.driving) {
       driveStep(game.driving, dt, effInput);
@@ -247,12 +275,31 @@ function stepWorld(dt) {
     if (wanted.state.busted) {
       const fine = Math.min(game.money, 100);
       game.money -= fine;
+      audio.busted();
       hud.showHint('Busted! The police fined you $' + fine + '. Wanted level cleared.');
       game.objective = 'Explore Teluk Rimba — WASD to walk, drag mouse for camera';
       if (missions.active) missions.fail('Busted by the police');
     }
     // Missions, autopilot and aircraft tick with the player.
     missions.step(dt);
+    // Audio: one update per step with the full world state (area ambience,
+    // engine, siren, helicopter, rain, footsteps, random street life).
+    audio.update(dt, {
+      x: player.state.x, z: player.state.z,
+      timeHours: game.timeHours,
+      rain: weather.state.rain,
+      driving: game.driving,
+      vehicleType: game.driving ? game.driving.type : null,
+      speedKmh: game.speedKmh,
+      moving: game.driving ? Math.abs(game.driving.speed) > 0.5 : player.state.moving,
+      onFoot: !game.driving,
+      run: effInput.run,
+      inWater: player.state.x > 640 || riverDistance(player.state.x, player.state.z) < 8,
+      wanted: game.wanted,
+      policeDist: wanted.state.distToPlayer,
+      heliX: aircraft.state.heliX, heliZ: aircraft.state.heliZ,
+      planeActive: aircraft.state.plane.active,
+    });
     if (autopilot && autopilot.enabled) {
       autopilot.update(dt, { player, driving: game.driving, traffic, missions });
     }
@@ -500,6 +547,16 @@ if (params.sim) {
     });
     frames++;
     fpsTime += dt;
+    if (audioDebugEl) {
+      audioDebugT += dt;
+      if (audioDebugT > 0.25) {
+        audioDebugT = 0;
+        const d = audio.debugStats();
+        audioDebugEl.textContent = 'AUDIO ctx=' + d.ctxState + ' active=' + d.active
+          + ' dropped=' + d.dropped + ' area=' + d.area + ' ' + d.mode + '\n'
+          + JSON.stringify(d.counts);
+      }
+    }
     if (fpsTime >= 0.5) {
       fps = frames / fpsTime;
       frames = 0; fpsTime = 0;
@@ -520,5 +577,16 @@ if (params.sim) {
     }
   }
   window.__PERF__ = { fps: 0, calls: 0, tris: 0, timeHours: game.timeHours };
+  // Test-only sound counter (?audiodebug=1): which sounds fired + how many
+  // voices are live. Audio cannot be heard headless, so the counter is the
+  // check. Never shown in normal play.
+  let audioDebugEl = null;
+  let audioDebugT = 0;
+  if (params.audiodebug) {
+    audioDebugEl = document.createElement('div');
+    audioDebugEl.id = 'audio-debug';
+    audioDebugEl.style.cssText = 'position:fixed;left:12px;top:120px;z-index:25;background:rgba(0,0,0,.65);color:#8f8;font:11px monospace;padding:8px 10px;border-radius:6px;white-space:pre;pointer-events:none;';
+    document.body.appendChild(audioDebugEl);
+  }
   requestAnimationFrame(frame);
 }

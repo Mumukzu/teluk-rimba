@@ -88,6 +88,7 @@ export function missionById(id) {
 
 export function createMissions(ctx) {
   const { city, game, player, traffic, wanted, hud } = ctx;
+  const audio = ctx.audio || null; // Phase D: mission sounds (optional in tests)
   const onSave = ctx.onSave || (() => {});
   const aabbs = buildingAABBs(city);
 
@@ -220,6 +221,7 @@ export function createMissions(ctx) {
     state.failReason = '';
     applyStepHeat(def.steps[state.stepIdx]);
     hud.showHint('Mission started: ' + def.name + ' — ' + def.intro, 8);
+    if (audio) audio.missionStart();
     onSave();
     return true;
   }
@@ -232,9 +234,11 @@ export function createMissions(ctx) {
       doneIds.push(def.id);
       state.lastResult = { id: def.id, result: 'done', reason: '' };
       hud.showHint('Mission complete: ' + def.name + ' — earned $' + def.reward + '!', 8);
+      if (audio) audio.missionComplete();
     } else {
       state.lastResult = { id: def.id, result: 'failed', reason };
       hud.showHint('Mission failed: ' + def.name + ' — ' + reason, 8);
+      if (audio) audio.missionFail();
     }
     removeChaseJeep();
     state.status = result;
@@ -261,6 +265,7 @@ export function createMissions(ctx) {
     }
     applyStepHeat(def.steps[state.stepIdx]);
     hud.showHint(def.steps[state.stepIdx].label, 5);
+    if (audio) audio.uiClick();
     onSave();
   }
 
@@ -296,6 +301,7 @@ export function createMissions(ctx) {
     }
     if (s.type === 'board') {
       if (driving && (driving.type === 'boat' || driving.type === 'fishingboat' || driving.type === 'sailboat')) {
+        if (audio) audio.shipHorn();
         advanceStep();
       }
       return;

@@ -47,6 +47,7 @@ export function parseShotParams() {
     weather: p.get('weather'), // test-only: 'rain' | 'wet' | 'clear'
     mission: Math.max(0, Math.min(6, Number(p.get('mission')) || 0)), // test-only: start mission N
     autopilot: p.get('autopilot') === '1', // test-only: autopilot to the objective
+    audiodebug: p.get('audiodebug') === '1', // test-only: on-screen sound counter
   };
 }
 

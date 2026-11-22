@@ -3,6 +3,7 @@
 export const ACTION_CONFIRM = 1;
 export const ACTION_PAUSE = 2;
 export const ACTION_ENTER = 4;
+export const ACTION_HORN = 8;
 
 const FORWARD = new Set(['KeyW', 'ArrowUp']);
 const BACK = new Set(['KeyS', 'ArrowDown']);
@@ -12,6 +13,7 @@ const RUN = new Set(['ShiftLeft', 'ShiftRight']);
 const CONFIRM = new Set(['Space', 'Enter']);
 const PAUSE = new Set(['KeyP', 'Escape']);
 const ENTER = new Set(['KeyE']);
+const HORN = new Set(['KeyH']);
 
 export function createInput(canvas) {
   const keys = new Set();
@@ -22,6 +24,7 @@ export function createInput(canvas) {
     if (CONFIRM.has(e.code)) { if (!e.repeat) actions |= ACTION_CONFIRM; }
     else if (PAUSE.has(e.code)) { if (!e.repeat) actions |= ACTION_PAUSE; }
     else if (ENTER.has(e.code)) { if (!e.repeat) actions |= ACTION_ENTER; }
+    else if (HORN.has(e.code)) { if (!e.repeat) actions |= ACTION_HORN; }
     else if (FORWARD.has(e.code) || BACK.has(e.code) || LEFT.has(e.code) || RIGHT.has(e.code) || RUN.has(e.code)) {
       keys.add(e.code);
     } else return;
