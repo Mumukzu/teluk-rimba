@@ -163,9 +163,13 @@ export function createAudio(city) {
       return false;
     }
     if (sfxVoices.size >= MAX_SFX_VOICES) {
-      // Make room: stop the oldest low-priority voice.
+      // Make room: stop the oldest low-priority voices until under the cap.
+      // (A single sound adds 1-4 nodes, so evicting one is not enough.)
       for (const v of sfxVoices) {
-        if ((v._prio || 2) < 2) { try { v.stop(); } catch { /* ignore */ } break; }
+        if (sfxVoices.size < MAX_SFX_VOICES) break;
+        // Remove synchronously: onended fires async, so without this the
+        // loop would stop every low-priority voice in one call.
+        if ((v._prio || 2) < 2) { try { v.stop(); } catch { /* ignore */ } sfxVoices.delete(v); }
       }
     }
     try { fn(); } catch { /* a failed voice must never break the game */ }
