@@ -91,13 +91,33 @@ const ZONE_SIZE = {
   forest: { w: [8, 12], d: [8, 12], h: [4, 6] },
 };
 
+// Mu: WARNA-WARNI tapi SOFT / pastel lembut — jangan gonjreng mencolok.
+// Variasi per zona, tetap rapi. (Tint = warna dinding; kaca jendela tetap gelap.)
 const ZONE_COLORS = {
-  downtown: [[0.62, 0.72, 0.82], [0.55, 0.65, 0.78], [0.7, 0.75, 0.8], [0.5, 0.6, 0.72]],
-  commercial: [[0.85, 0.78, 0.66], [0.8, 0.8, 0.78], [0.75, 0.68, 0.58], [0.88, 0.82, 0.72]],
-  residential: [[0.92, 0.85, 0.72], [0.9, 0.75, 0.65], [0.7, 0.82, 0.85], [0.75, 0.88, 0.72], [0.88, 0.88, 0.8], [0.85, 0.7, 0.72]],
-  beach: [[0.95, 0.93, 0.86], [0.88, 0.9, 0.88], [0.72, 0.85, 0.88], [0.93, 0.88, 0.78]],
-  port: [[0.6, 0.58, 0.55], [0.65, 0.5, 0.42], [0.55, 0.6, 0.62], [0.7, 0.62, 0.5]],
-  forest: [[0.55, 0.45, 0.32], [0.5, 0.52, 0.38], [0.62, 0.5, 0.38]],
+  downtown: [ // menara kaca pastel: biru langit, teal lembut, lavendel, sage, peach
+    [0.62, 0.74, 0.84], [0.58, 0.76, 0.74], [0.68, 0.66, 0.82],
+    [0.62, 0.78, 0.68], [0.84, 0.72, 0.62], [0.72, 0.7, 0.78],
+  ],
+  commercial: [ // toko pastel: koral lembut, kuning mentega, mint, turquoise, lilac, peach
+    [0.88, 0.66, 0.6], [0.92, 0.84, 0.6], [0.64, 0.84, 0.7],
+    [0.6, 0.82, 0.8], [0.78, 0.7, 0.86], [0.9, 0.74, 0.58],
+  ],
+  residential: [ // rumah pastel: biru bubuk, pink, mint, krem, lavendel, peach
+    [0.68, 0.78, 0.88], [0.9, 0.72, 0.74], [0.7, 0.86, 0.72],
+    [0.92, 0.88, 0.68], [0.8, 0.74, 0.88], [0.9, 0.78, 0.64],
+  ],
+  beach: [ // putih/krem + aksen pastel laut
+    [0.95, 0.92, 0.86], [0.82, 0.9, 0.9], [0.94, 0.86, 0.78],
+    [0.88, 0.92, 0.84], [0.93, 0.84, 0.82], [0.86, 0.88, 0.94],
+  ],
+  port: [ // industrial pastel kalem: biru dusty, sage, terakota lembut, pasir
+    [0.62, 0.7, 0.78], [0.68, 0.76, 0.64], [0.82, 0.64, 0.54],
+    [0.8, 0.74, 0.6], [0.66, 0.72, 0.7], [0.76, 0.66, 0.6],
+  ],
+  forest: [ // kabin kayu hangat, kalem
+    [0.72, 0.62, 0.5], [0.66, 0.58, 0.46], [0.76, 0.68, 0.56],
+    [0.62, 0.6, 0.5], [0.7, 0.6, 0.52], [0.78, 0.7, 0.58],
+  ],
 };
 
 function placeInBlock(rand, block, count, zone) {

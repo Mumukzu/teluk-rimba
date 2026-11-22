@@ -180,12 +180,11 @@ function pushQuad(g, a, b, c, d, n, col) {
 
 // Box with subdivided faces; front/back faces carry a window grid pattern
 // (dark glass cells), roof is dark, sides are plain wall with slight variation.
-export function subdividedBox(w, h, d, segFront = 4, segRows = 8) {
+export function subdividedBox(w, h, d, segFront = 6, segRows = 10) {
   const g = emptyGeom();
   const hw = w / 2, hh = h / 2, hd = d / 2;
   const wall = [1, 1, 1];
-  const wallDim = [0.88, 0.88, 0.88];
-  const glass = [0.2, 0.26, 0.34];
+  const glass = [0.42, 0.48, 0.56]; // soft dark glass, not a black checkerboard
   const roof = [0.42, 0.42, 0.46];
   const face = (corners, normal, nx, ny, colorFn) => {
     const [o, u, v] = corners;
@@ -199,15 +198,17 @@ export function subdividedBox(w, h, d, segFront = 4, segRows = 8) {
       }
     }
   };
-  const winFn = (i, j) => (j > 0 && j < segRows - 1 && (i + j) % 2 === 0 ? glass : wall);
-  const sideFn = (i, j) => ((i * 7 + j * 3) % 5 === 0 ? wallDim : wall);
+  // Windows: small soft-glass cells on every other column/row, never on the
+  // ground floor (shop fronts stay plain) — tidy, not a checkerboard.
+  const winFn = (i, j) => (j > 0 && j < segRows - 1 && i % 2 === 0 && j % 2 === 0 ? glass : wall);
+  const sideFn = () => wall;
   // +z front, -z back, +x right, -x left, +y roof, -y floor
   face([[-hw, -hh, hd], [w, 0, 0], [0, h, 0]], [0, 0, 1], segFront, segRows, winFn);
   face([[hw, -hh, -hd], [-w, 0, 0], [0, h, 0]], [0, 0, -1], segFront, segRows, winFn);
-  face([[hw, -hh, -hd], [0, 0, d], [0, h, 0]], [1, 0, 0], 2, segRows, sideFn);
-  face([[-hw, -hh, hd], [0, 0, -d], [0, h, 0]], [-1, 0, 0], 2, segRows, sideFn);
-  face([[-hw, hh, -hd], [w, 0, 0], [0, 0, d]], [0, 1, 0], 1, 1, () => roof);
-  face([[-hw, -hh, hd], [w, 0, 0], [0, 0, -d]], [0, -1, 0], 1, 1, () => [0.3, 0.3, 0.3]);
+  face([[hw, -hh, hd], [0, 0, -d], [0, h, 0]], [1, 0, 0], 2, segRows, sideFn);
+  face([[-hw, -hh, -hd], [0, 0, d], [0, h, 0]], [-1, 0, 0], 2, segRows, sideFn);
+  face([[-hw, hh, hd], [w, 0, 0], [0, 0, -d]], [0, 1, 0], 1, 1, () => roof);
+  face([[-hw, -hh, -hd], [w, 0, 0], [0, 0, d]], [0, -1, 0], 1, 1, () => [0.3, 0.3, 0.3]);
   return g;
 }
 
@@ -220,8 +221,8 @@ export function plainBox(w, h, d, color, topColor = null) {
   pushQuad(g, [hw, -hh, -hd], [-hw, -hh, -hd], [-hw, hh, -hd], [hw, hh, -hd], [0, 0, -1], color);
   pushQuad(g, [hw, -hh, -hd], [hw, -hh, hd], [hw, hh, hd], [hw, hh, -hd], [1, 0, 0], color);
   pushQuad(g, [-hw, -hh, hd], [-hw, -hh, -hd], [-hw, hh, -hd], [-hw, hh, hd], [-1, 0, 0], color);
-  pushQuad(g, [-hw, hh, -hd], [hw, hh, -hd], [hw, hh, hd], [-hw, hh, hd], [0, 1, 0], top);
-  pushQuad(g, [-hw, -hh, hd], [hw, -hh, hd], [hw, -hh, -hd], [-hw, -hh, -hd], [0, -1, 0], color);
+  pushQuad(g, [-hw, hh, hd], [hw, hh, hd], [hw, hh, -hd], [-hw, hh, -hd], [0, 1, 0], top);
+  pushQuad(g, [-hw, -hh, -hd], [hw, -hh, -hd], [hw, -hh, hd], [-hw, -hh, hd], [0, -1, 0], color);
   return g;
 }
 
@@ -245,6 +246,7 @@ export function createMesh(gl, prog, geom) {
   const vao = gl.createVertexArray();
   gl.bindVertexArray(vao);
   const bind = (loc, data, size) => {
+    if (loc < 0) return; // e.g. aNormal is absent from the unlit shader
     const buf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);

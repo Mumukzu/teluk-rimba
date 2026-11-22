@@ -11,9 +11,11 @@ const DASH_MINOR = [0.88, 0.88, 0.86]; // thin white dashes on small roads
 const ZEBRA = [0.92, 0.92, 0.9];
 
 function quad(g, a, b, c, d, y, col) {
+  // Winding a->c->b faces +y (up); the naive a->b->c order faces down and
+  // gets culled, leaving the streets invisible.
   const n = [0, 1, 0];
   const P = (p) => [p[0], y, p[1]];
-  g.pos.push(...P(a), ...P(b), ...P(c), ...P(a), ...P(c), ...P(d));
+  g.pos.push(...P(a), ...P(c), ...P(b), ...P(a), ...P(d), ...P(c));
   for (let k = 0; k < 6; k++) g.nrm.push(...n);
   for (let k = 0; k < 6; k++) g.col.push(...col);
 }

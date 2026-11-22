@@ -19,4 +19,4 @@ export const WORLD = {
 };
 export const MONEY_START = 0;
 export const START_TIME = 10; // 10:00, morning
-export const START_POS = { x: 30, z: 120 }; // near downtown, on a main road
+export const START_POS = { x: 0, z: 120 }; // on main road x=0, facing downtown

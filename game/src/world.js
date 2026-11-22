@@ -36,9 +36,9 @@ export function buildTerrain() {
     return { p: [x, H[j][i], z], n: normalAt(i, j), c: groundColor(x, z, H[j][i]) };
   };
   const tri = (a, b, c) => {
-    g.pos.push(...a.p, ...b.p, ...c.p);
-    g.nrm.push(...a.n, ...b.n, ...c.n);
-    g.col.push(...a.c, ...b.c, ...c.c);
+    g.pos.push(...a.p, ...c.p, ...b.p);
+    g.nrm.push(...a.n, ...c.n, ...b.n);
+    g.col.push(...a.c, ...c.c, ...b.c);
   };
   for (let j = 0; j < N; j++) {
     for (let i = 0; i < N; i++) {
@@ -56,7 +56,7 @@ export function buildSea() {
   const deep = [0.08, 0.32, 0.52];
   const quad = (x0, z0, x1, z1, col) => {
     const y = SEA_LEVEL;
-    g.pos.push(x0, y, z0, x1, y, z0, x1, y, z1, x0, y, z0, x1, y, z1, x0, y, z1);
+    g.pos.push(x0, y, z0, x1, y, z1, x1, y, z0, x0, y, z0, x0, y, z1, x1, y, z1);
     for (let k = 0; k < 6; k++) g.nrm.push(0, 1, 0);
     for (let k = 0; k < 6; k++) g.col.push(...col);
   };

@@ -90,7 +90,7 @@ export function createRenderer(canvas, city) {
     const common = {
       uProj: proj, uView: view,
       uSunDir: light.sun, uSunColor: light.sunColor, uAmbient: light.ambient,
-      uFogColor: light.sky, uFogNear: 350, uFogFar: 1600,
+      uFogColor: light.sky, uFogNear: 500, uFogFar: 2600,
     };
     calls = 0; tris = 0;
     for (const entry of meshes) {
