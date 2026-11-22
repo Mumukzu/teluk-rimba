@@ -58,11 +58,17 @@ export function createPeds(city, opts = {}) {
       hair: HAIRS[Math.floor(rand() * HAIRS.length)],
       state: 'walk', // walk | cross | flee | board | stand
       stateT: 0,
+      crossCd: 0, // cooldown after a crossing, so NPCs don't ping-pong
       target: null,
       fleeX: 0, fleeZ: 0,
       line: spot.line, horiz: spot.horiz, side: spot.side,
       walkPhase: rand() * Math.PI * 2,
     };
+    // Behaviour variety (Mu): ~15% jog or run, the rest walk; every NPC
+    // pauses now and then to wait, chat with a neighbour, or look around.
+    p.pace = rand() < 0.15 ? 'run' : 'walk';
+    if (p.pace === 'run') p.speed = range(rand, 2.6, 3.4);
+    p.idleIn = range(rand, 8, 40); // seconds of walking before an idle pause
     peds.push(p);
     return p;
   }
@@ -77,6 +83,13 @@ export function createPeds(city, opts = {}) {
 
   function stepPed(p, dt) {
     if (p.state === 'stand') return;
+    if (p.state === 'idle_wait' || p.state === 'idle_chat' || p.state === 'idle_look') {
+      // Random street life: pause, chat with a neighbour, or look around.
+      p.stateT -= dt;
+      if (p.state === 'idle_look') p.heading += 0.35 * dt; // slowly look around
+      if (p.stateT <= 0) { p.state = 'walk'; p.idleIn = range(rand, 15, 60); }
+      return;
+    }
     if (p.state === 'flee') {
       p.stateT -= dt;
       const dx = p.x - p.fleeX, dz = p.z - p.fleeZ;
@@ -113,7 +126,7 @@ export function createPeds(city, opts = {}) {
       const d = Math.hypot(dx, dz);
       p.stateT -= dt;
       if (d < 1 || p.stateT <= 0) {
-        p.state = 'walk'; p.side *= -1; p.target = null;
+        p.state = 'walk'; p.side *= -1; p.target = null; p.crossCd = 25;
         return;
       }
       p.heading = Math.atan2(dx / d, dz / d);
@@ -135,7 +148,7 @@ export function createPeds(city, opts = {}) {
       }
       if (nearNode) break;
     }
-    if (nearNode && rand() < 0.02) {
+    if (nearNode && p.crossCd <= 0 && rand() < 0.02) {
       p.state = 'cross';
       // Cross to the opposite sidewalk: target across the road.
       const acrossX = p.horiz ? nearNode.x : (p.side > 0 ? nearNode.x - ASPHALT_HALF(nearNode.x) - 2.6 : nearNode.x + ASPHALT_HALF(nearNode.x) + 2.6);
@@ -151,6 +164,25 @@ export function createPeds(city, opts = {}) {
     }
     p.x = nx; p.z = nz;
     p.y = Math.max(0, terrainHeight(p.x, p.z));
+    if (p.crossCd > 0) p.crossCd -= dt;
+    // After a while on the move, sometimes pause: wait, chat, or look around.
+    p.idleIn -= dt;
+    if (p.idleIn <= 0 && p.kind !== 'officer') {
+      const roll = rand();
+      p.state = roll < 0.4 ? 'idle_chat' : roll < 0.7 ? 'idle_wait' : 'idle_look';
+      p.stateT = range(rand, 5, 15);
+      if (p.state === 'idle_chat') {
+        // Face the nearest NPC, like striking up a chat.
+        let best = null, bestD = 5;
+        for (const q of peds) {
+          if (q === p) continue;
+          const d = Math.hypot(q.x - p.x, q.z - p.z);
+          if (d < bestD) { best = q; bestD = d; }
+        }
+        if (best) p.heading = Math.atan2(best.x - p.x, best.z - p.z);
+        else p.heading = range(rand, 0, Math.PI * 2);
+      }
+    }
   }
 
   const api = {

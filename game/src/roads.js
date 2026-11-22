@@ -47,53 +47,96 @@ function zebra(g, cx, cz, alongX, roadHalf) {
 export function buildRoadMesh(city) {
   const g = emptyGeom();
   const N = ROAD_LINES.length;
-  // Asphalt + sidewalks + dashes, segment by segment.
-  for (let j = 0; j < N; j++) {
-    for (let i = 0; i < N - 1; i++) {
-      const x0 = ROAD_LINES[i], x1 = ROAD_LINES[i + 1], z = ROAD_LINES[j];
-      const main = IS_MAIN(z);
-      const ah = ASPHALT_HALF(z), ch = CORRIDOR_HALF(z);
-      quad(g, [x0, z - ah], [x1, z - ah], [x1, z + ah], [x0, z + ah], 0.03, ASPHALT);
-      quad(g, [x0, z - ch], [x1, z - ch], [x1, z - ah], [x0, z - ah], 0.1, SIDEWALK);
-      quad(g, [x0, z + ah], [x1, z + ah], [x1, z + ch], [x0, z + ch], 0.1, SIDEWALK);
-      const dashCol = main ? DASH_MAIN : DASH_MINOR;
-      const dashW = main ? 0.28 : 0.2;
-      for (let s = x0 + 4; s < x1 - 4; s += 7) {
-        quad(g, [s, z - dashW / 2], [s + 3.2, z - dashW / 2], [s + 3.2, z + dashW / 2], [s, z + dashW / 2], 0.06, dashCol);
-      }
-      // Main roads are 4 lanes (2 per direction): thin white lane dividers
-      // at +/-3 m split each direction into two lanes.
-      if (main) {
-        for (let s = x0 + 4; s < x1 - 4; s += 7) {
-          for (const off of [-3, 3]) {
-            quad(g, [s, z + off - 0.1], [s + 3.2, z + off - 0.1], [s + 3.2, z + off + 0.1], [s, z + off + 0.1], 0.06, DASH_MINOR);
-          }
+  // Bridge segments from the road graph (only 4 cross the river).
+  const nodeById = new Map(city.nodes.map((n) => [n.id, n]));
+  const bridgeSegs = new Set();
+  for (const e of city.edges) {
+    if (!e.bridge) continue;
+    const a = nodeById.get(e.a), b = nodeById.get(e.b);
+    bridgeSegs.add(`${a.x},${a.z}|${b.x},${b.z}`);
+    bridgeSegs.add(`${b.x},${b.z}|${a.x},${a.z}`);
+  }
+  // One straight run of road (asphalt + sidewalks + dashes) for the range
+  // [from, to] along a segment. horiz: the run goes along x at fixed z.
+  const drawRun = (horiz, fixed, from, to, main) => {
+    if (to - from < 2) return;
+    const ah = ASPHALT_HALF(fixed), ch = CORRIDOR_HALF(fixed);
+    if (horiz) {
+      quad(g, [from, fixed - ah], [to, fixed - ah], [to, fixed + ah], [from, fixed + ah], 0.03, ASPHALT);
+      quad(g, [from, fixed - ch], [to, fixed - ch], [to, fixed - ah], [from, fixed - ah], 0.1, SIDEWALK);
+      quad(g, [from, fixed + ah], [to, fixed + ah], [to, fixed + ch], [from, fixed + ch], 0.1, SIDEWALK);
+    } else {
+      quad(g, [fixed - ah, from], [fixed + ah, from], [fixed + ah, to], [fixed - ah, to], 0.03, ASPHALT);
+      quad(g, [fixed - ch, from], [fixed - ah, from], [fixed - ah, to], [fixed - ch, to], 0.1, SIDEWALK);
+      quad(g, [fixed + ah, from], [fixed + ch, from], [fixed + ch, to], [fixed + ah, to], 0.1, SIDEWALK);
+    }
+    const dashCol = main ? DASH_MAIN : DASH_MINOR;
+    const dashW = main ? 0.28 : 0.2;
+    for (let s = from + 4; s < to - 4; s += 7) {
+      if (horiz) quad(g, [s, fixed - dashW / 2], [s + 3.2, fixed - dashW / 2], [s + 3.2, fixed + dashW / 2], [s, fixed + dashW / 2], 0.06, dashCol);
+      else quad(g, [fixed - dashW / 2, s], [fixed + dashW / 2, s], [fixed + dashW / 2, s + 3.2], [fixed - dashW / 2, s + 3.2], 0.06, dashCol);
+    }
+    // Main roads are 4 lanes (2 per direction): thin white lane dividers
+    // at +/-3 m split each direction into two lanes.
+    if (main) {
+      for (let s = from + 4; s < to - 4; s += 7) {
+        for (const off of [-3, 3]) {
+          if (horiz) quad(g, [s, fixed + off - 0.1], [s + 3.2, fixed + off - 0.1], [s + 3.2, fixed + off + 0.1], [s, fixed + off + 0.1], 0.06, DASH_MINOR);
+          else quad(g, [fixed + off - 0.1, s], [fixed + off + 0.1, s], [fixed + off + 0.1, s + 3.2], [fixed + off - 0.1, s + 3.2], 0.06, DASH_MINOR);
         }
       }
+    }
+  };
+  // Bridge rails + support pillars over the water span of a bridge segment.
+  const RAIL = [0.85, 0.85, 0.8];
+  const addBridgeDressing = (horiz, fixed, w0, w1) => {
+    const ah = ASPHALT_HALF(fixed);
+    const mid = (w0 + w1) / 2, len = Math.max(2, w1 - w0);
+    const addBox = (box, x, y, z) => {
+      for (let i = 0; i < box.pos.length; i += 3) { box.pos[i] += x; box.pos[i + 1] += y; box.pos[i + 2] += z; }
+      g.pos.push(...box.pos); g.nrm.push(...box.nrm); g.col.push(...box.col);
+    };
+    for (const side of [-1, 1]) {
+      const off = side * (ah + 0.5);
+      const rail = horiz ? plainBox(len, 0.9, 0.15, RAIL) : plainBox(0.15, 0.9, len, RAIL);
+      addBox(rail, horiz ? mid : fixed + off, 0.55, horiz ? fixed + off : mid);
+    }
+    for (const px of [w0 + 1.5, w1 - 1.5]) {
+      const pillar = plainBox(1.4, 3.4, 1.4, [0.55, 0.55, 0.52]);
+      addBox(pillar, horiz ? px : fixed, -1.6, horiz ? fixed : px);
+    }
+  };
+  // Where does this segment meet the river? [t0, t1] in segment coords,
+  // or null if it never comes within 14 m of the water.
+  const riverSpan = (horiz, fixed, from, to) => {
+    let t0 = null, t1 = null;
+    for (let s = from; s <= to; s += 2) {
+      const rd = horiz ? riverDistance(s, fixed) : riverDistance(fixed, s);
+      if (rd < 14) { if (t0 === null) t0 = s; t1 = s; }
+    }
+    return t0 === null ? null : [t0, t1];
+  };
+  const drawSegment = (horiz, fixed, from, to, main) => {
+    const key = horiz ? `${from},${fixed}|${to},${fixed}` : `${fixed},${from}|${fixed},${to}`;
+    const span = riverSpan(horiz, fixed, from, to);
+    if (!span) { drawRun(horiz, fixed, from, to, main); return; }
+    if (bridgeSegs.has(key)) {
+      drawRun(horiz, fixed, from, to, main);
+      addBridgeDressing(horiz, fixed, span[0], span[1]);
+      return;
+    }
+    // Road stops at the bank: draw up to 4 m before the water, both sides.
+    drawRun(horiz, fixed, from, Math.min(to, span[0] - 4), main);
+    drawRun(horiz, fixed, Math.max(from, span[1] + 4), to, main);
+  };
+  for (let j = 0; j < N; j++) {
+    for (let i = 0; i < N - 1; i++) {
+      drawSegment(true, ROAD_LINES[j], ROAD_LINES[i], ROAD_LINES[i + 1], IS_MAIN(ROAD_LINES[j]));
     }
   }
   for (let i = 0; i < N; i++) {
     for (let j = 0; j < N - 1; j++) {
-      const z0 = ROAD_LINES[j], z1 = ROAD_LINES[j + 1], x = ROAD_LINES[i];
-      const main = IS_MAIN(x);
-      const ah = ASPHALT_HALF(x), ch = CORRIDOR_HALF(x);
-      quad(g, [x - ah, z0], [x + ah, z0], [x + ah, z1], [x - ah, z1], 0.03, ASPHALT);
-      quad(g, [x - ch, z0], [x - ah, z0], [x - ah, z1], [x - ch, z1], 0.1, SIDEWALK);
-      quad(g, [x + ah, z0], [x + ch, z0], [x + ch, z1], [x + ah, z1], 0.1, SIDEWALK);
-      const dashCol = main ? DASH_MAIN : DASH_MINOR;
-      const dashW = main ? 0.28 : 0.2;
-      for (let s = z0 + 4; s < z1 - 4; s += 7) {
-        quad(g, [x - dashW / 2, s], [x + dashW / 2, s], [x + dashW / 2, s + 3.2], [x - dashW / 2, s + 3.2], 0.06, dashCol);
-      }
-      // Main roads are 4 lanes (2 per direction): thin white lane dividers
-      // at +/-3 m split each direction into two lanes.
-      if (main) {
-        for (let s = z0 + 4; s < z1 - 4; s += 7) {
-          for (const off of [-3, 3]) {
-            quad(g, [x + off - 0.1, s], [x + off + 0.1, s], [x + off + 0.1, s + 3.2], [x + off - 0.1, s + 3.2], 0.06, DASH_MINOR);
-          }
-        }
-      }
+      drawSegment(false, ROAD_LINES[i], ROAD_LINES[j], ROAD_LINES[j + 1], IS_MAIN(ROAD_LINES[i]));
     }
   }
   // Intersection squares (slightly above the segments) + one zebra per approach.

@@ -322,15 +322,51 @@ export function generateCity(seed = SEED) {
     buildings.push(cand);
   }
 
-  // --- road graph: nodes at intersections, edges between neighbours ---
-  const N = ROAD_LINES.length;
-  const nodes = [];
-  for (let j = 0; j < N; j++) {
-    for (let i = 0; i < N; i++) {
-      nodes.push({ id: j * N + i, i, j, x: ROAD_LINES[i], z: ROAD_LINES[j] });
+  // --- CBD iconic towers (Mu): the 10 tallest downtown buildings become
+  // taller, bigger, recognisable landmarks — tiered / spire / crown / glass.
+  // Separate rand stream, so the rest of the city is unchanged. Towers too
+  // close to the river are skipped: growing the footprint must not push a
+  // corner into the water (the connectivity test needs >13 m clearance).
+  {
+    const trand = mulberry32(20261130);
+    const shapes = ['tiered', 'spire', 'crown', 'glass'];
+    const cands = buildings
+      .filter((b) => b.zone === 'downtown')
+      .filter((b) => {
+        const pts = [[b.x, b.z],
+          [b.x - b.w / 2, b.z - b.d / 2], [b.x + b.w / 2, b.z - b.d / 2],
+          [b.x - b.w / 2, b.z + b.d / 2], [b.x + b.w / 2, b.z + b.d / 2]];
+        return pts.every(([x, z]) => riverDistance(x, z) > 20);
+      })
+      .sort((a, b) => b.h - a.h)
+      .slice(0, 10);
+    for (const b of cands) {
+      b.h = Math.round(range(trand, 78, 105));
+      b.w = Math.min(40, Math.round(b.w * 1.25));
+      b.d = Math.min(40, Math.round(b.d * 1.25));
+      b.floors = Math.max(1, Math.round(b.h / 3.2));
+      b.shape = shapes[Math.floor(trand() * shapes.length)];
+      if (b.shape === 'glass') b.color = [0.55, 0.72, 0.88]; // glass blue
     }
   }
-  const nodeAt = (i, j) => nodes[j * N + i];
+
+  // --- road graph: nodes at intersections, edges between neighbours ---
+  // Mu's rule: the river is crossed by ONLY 4 bridges. A node that sits in
+  // the river channel (water) is not an intersection at all, and every
+  // other road stops at the riverbank — only the 4 bridge edges cross.
+  const N = ROAD_LINES.length;
+  const nodes = [];
+  const nodeByIJ = new Map();
+  for (let j = 0; j < N; j++) {
+    for (let i = 0; i < N; i++) {
+      const x = ROAD_LINES[i], z = ROAD_LINES[j];
+      if (riverDistance(x, z) < RIVER_HALF_WIDTH) continue; // in the water
+      const n = { id: nodes.length, i, j, x, z };
+      nodes.push(n);
+      nodeByIJ.set(i + ',' + j, n);
+    }
+  }
+  const nodeAt = (i, j) => nodeByIJ.get(i + ',' + j) || null;
   const edges = [];
   const segmentIsBridge = (ax, az, bx, bz) => {
     for (let s = 0; s <= 4; s++) {
@@ -339,16 +375,31 @@ export function generateCity(seed = SEED) {
     }
     return false;
   };
+  // The ONLY four crossings, spread along the river so both banks stay
+  // connected (the grid also wraps around the river's two ends):
+  // (-300,-300)-(-200,-300), (-200,-200)-(-100,-200) [minor roads],
+  // (0,-100)-(0,0), (400,0)-(400,100) [main roads].
+  const BRIDGE_KEYS = new Set([
+    '-300,-300|-200,-300', '-200,-200|-100,-200', '0,-100|0,0', '400,0|400,100',
+  ]);
+  const isKeptBridge = (a, b) =>
+    BRIDGE_KEYS.has(`${a.x},${a.z}|${b.x},${b.z}`) || BRIDGE_KEYS.has(`${b.x},${b.z}|${a.x},${a.z}`);
   for (let j = 0; j < N; j++) {
     for (let i = 0; i < N - 1; i++) {
       const a = nodeAt(i, j), b = nodeAt(i + 1, j);
-      edges.push({ a: a.id, b: b.id, main: IS_MAIN(a.z), bridge: segmentIsBridge(a.x, a.z, b.x, b.z) });
+      if (!a || !b) continue;
+      const isBridge = segmentIsBridge(a.x, a.z, b.x, b.z);
+      if (isBridge && !isKeptBridge(a, b)) continue; // road stops at the bank
+      edges.push({ a: a.id, b: b.id, main: IS_MAIN(a.z), bridge: isBridge });
     }
   }
   for (let i = 0; i < N; i++) {
     for (let j = 0; j < N - 1; j++) {
       const a = nodeAt(i, j), b = nodeAt(i, j + 1);
-      edges.push({ a: a.id, b: b.id, main: IS_MAIN(a.x), bridge: segmentIsBridge(a.x, a.z, b.x, b.z) });
+      if (!a || !b) continue;
+      const isBridge = segmentIsBridge(a.x, a.z, b.x, b.z);
+      if (isBridge && !isKeptBridge(a, b)) continue; // road stops at the bank
+      edges.push({ a: a.id, b: b.id, main: IS_MAIN(a.x), bridge: isBridge });
     }
   }
 
@@ -441,12 +492,13 @@ export function generateCity(seed = SEED) {
   // On the sand near the shoreline (x 612-645, damp sand above the water),
   // in small clusters, never on a road or in the river mouth. Appended at
   // the END of generateCity so the rand stream above (and the whole city)
-  // is unchanged. Colours are soft pastels, in step with the city palette.
+  // is unchanged. Colours are VIVID (Mu: props must be visible on the sand),
+  // and the umbrellas are big.
   const beachProps = [];
   const PROP_TINTS = [
-    [0.9, 0.72, 0.74], [0.64, 0.84, 0.7], [0.92, 0.84, 0.6],
-    [0.68, 0.78, 0.88], [0.78, 0.7, 0.86], [0.9, 0.74, 0.58],
-    [0.6, 0.82, 0.8],
+    [0.95, 0.25, 0.3], [0.98, 0.75, 0.15], [0.15, 0.75, 0.9],
+    [0.95, 0.45, 0.75], [0.35, 0.85, 0.35], [0.98, 0.55, 0.15],
+    [0.65, 0.4, 0.95],
   ];
   let clusterTries = 0;
   while (beachProps.filter((p) => p.kind === 'umbrella').length < 36 && clusterTries++ < 800) {
@@ -454,16 +506,31 @@ export function generateCity(seed = SEED) {
     const cz = range(rand, -480, 280);
     if (riverDistance(cx, cz) < 30) continue;
     const rot = range(rand, 0, Math.PI * 2);
-    beachProps.push({ kind: 'umbrella', x: cx, z: cz, rot, s: range(rand, 0.9, 1.15), color: PROP_TINTS[Math.floor(rand() * PROP_TINTS.length)] });
+    beachProps.push({ kind: 'umbrella', x: cx, z: cz, rot, s: range(rand, 1.25, 1.6), color: PROP_TINTS[Math.floor(rand() * PROP_TINTS.length)] });
     const nLounge = rangeInt(rand, 1, 2);
     for (let k = 0; k < nLounge; k++) {
-      beachProps.push({ kind: 'lounger', x: cx + range(rand, -2.6, 2.6), z: cz + range(rand, -2.2, 2.2), rot: rot + range(rand, -0.4, 0.4), s: range(rand, 0.95, 1.1), color: PROP_TINTS[Math.floor(rand() * PROP_TINTS.length)] });
+      beachProps.push({ kind: 'lounger', x: cx + range(rand, -2.6, 2.6), z: cz + range(rand, -2.2, 2.2), rot: rot + range(rand, -0.4, 0.4), s: range(rand, 1.2, 1.5), color: PROP_TINTS[Math.floor(rand() * PROP_TINTS.length)] });
     }
     if (rand() < 0.55) {
-      beachProps.push({ kind: 'ring', x: cx + range(rand, -3.5, 3.5), z: cz + range(rand, -3, 3), rot: range(rand, 0, Math.PI * 2), s: range(rand, 0.9, 1.1), color: PROP_TINTS[Math.floor(rand() * PROP_TINTS.length)] });
+      beachProps.push({ kind: 'ring', x: cx + range(rand, -3.5, 3.5), z: cz + range(rand, -3, 3), rot: range(rand, 0, Math.PI * 2), s: range(rand, 1.2, 1.5), color: PROP_TINTS[Math.floor(rand() * PROP_TINTS.length)] });
     }
     if (rand() < 0.4) {
-      beachProps.push({ kind: 'ball', x: cx + range(rand, -4, 4), z: cz + range(rand, -3.5, 3.5), rot: 0, s: range(rand, 0.9, 1.1), color: PROP_TINTS[Math.floor(rand() * PROP_TINTS.length)] });
+      beachProps.push({ kind: 'ball', x: cx + range(rand, -4, 4), z: cz + range(rand, -3.5, 3.5), rot: 0, s: range(rand, 1.2, 1.5), color: PROP_TINTS[Math.floor(rand() * PROP_TINTS.length)] });
+    }
+  }
+  // Dense beach cluster by the pier (Mu: props must be VISIBLE) — a row of
+  // big vivid umbrellas + loungers right where the pier meets the sand.
+  // Separate rand stream, so nothing above moves.
+  {
+    const prand = mulberry32(20261129);
+    for (let k = 0; k < 12; k++) {
+      const cx = range(prand, 618, 642);
+      const cz = range(prand, -215, -85);
+      const rot = range(prand, 0, Math.PI * 2);
+      beachProps.push({ kind: 'umbrella', x: cx, z: cz, rot, s: range(prand, 1.3, 1.7), color: PROP_TINTS[Math.floor(prand() * PROP_TINTS.length)] });
+      beachProps.push({ kind: 'lounger', x: cx + range(prand, -2.5, 2.5), z: cz + range(prand, -2, 2), rot: rot + range(prand, -0.4, 0.4), s: range(prand, 1.2, 1.5), color: PROP_TINTS[Math.floor(prand() * PROP_TINTS.length)] });
+      if (prand() < 0.7) beachProps.push({ kind: 'ring', x: cx + range(prand, -3, 3), z: cz + range(prand, -2.5, 2.5), rot: range(prand, 0, Math.PI * 2), s: range(prand, 1.2, 1.5), color: PROP_TINTS[Math.floor(prand() * PROP_TINTS.length)] });
+      if (prand() < 0.6) beachProps.push({ kind: 'ball', x: cx + range(prand, -3.5, 3.5), z: cz + range(prand, -3, 3), rot: 0, s: range(prand, 1.2, 1.5), color: PROP_TINTS[Math.floor(prand() * PROP_TINTS.length)] });
     }
   }
 

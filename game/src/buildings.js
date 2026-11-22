@@ -9,17 +9,47 @@ export function buildBuildingMeshes(gl, progs, city) {
   const tints = [];
   const roofMatrices = [];
   const roofTints = [];
+  // Iconic CBD towers (b.shape): stepped tiers, a spire, or a crown on top,
+  // so the skyline reads as landmarks, not identical boxes.
+  const tierMatrices = [], tierTints = [];
+  const spireMatrices = [], spireTints = [];
+  const crownMatrices = [], crownTints = [];
+  const darken = (c, f) => [c[0] * f, c[1] * f, c[2] * f];
+  const lighten = (c, f) => [Math.min(1, c[0] * f), Math.min(1, c[1] * f), Math.min(1, c[2] * f)];
   for (const b of city.buildings) {
     // Base box is centred; lift so its bottom sits on the ground.
     matrices.push(mat4TRS(b.x, b.h / 2, b.z, b.rot, b.w, b.h, b.d));
     tints.push(b.color);
     roofMatrices.push(mat4TRS(b.x, b.h + 0.25, b.z, b.rot, b.w + 0.7, 0.5, b.d + 0.7));
     roofTints.push([0.32, 0.32, 0.34]);
+    if (!b.shape) continue;
+    if (b.shape === 'tiered' || b.shape === 'glass') {
+      tierMatrices.push(mat4TRS(b.x, b.h + b.h * 0.11, b.z, b.rot, b.w * 0.68, b.h * 0.22, b.d * 0.68));
+      tierTints.push(darken(b.color, 0.85));
+      tierMatrices.push(mat4TRS(b.x, b.h + b.h * 0.28, b.z, b.rot, b.w * 0.42, b.h * 0.12, b.d * 0.42));
+      tierTints.push(darken(b.color, 0.72));
+    }
+    if (b.shape === 'spire') {
+      spireMatrices.push(mat4TRS(b.x, b.h + 9, b.z, b.rot, 2.6, 18, 2.6));
+      spireTints.push([0.25, 0.28, 0.35]);
+      spireMatrices.push(mat4TRS(b.x, b.h + 19, b.z, b.rot, 0.9, 5, 0.9));
+      spireTints.push([0.9, 0.75, 0.4]);
+    }
+    if (b.shape === 'crown') {
+      crownMatrices.push(mat4TRS(b.x, b.h + b.h * 0.05, b.z, b.rot + Math.PI / 4, b.w * 0.55, b.h * 0.1, b.d * 0.55));
+      crownTints.push(lighten(b.color, 1.15));
+      crownMatrices.push(mat4TRS(b.x, b.h + 6, b.z, b.rot, 1.6, 12, 1.6));
+      crownTints.push([0.3, 0.32, 0.38]);
+    }
   }
   const roofBase = plainBox(1, 1, 1, [1, 1, 1]);
+  const part = (matrices, tints) => ({ geom: roofBase, matrices, tints, prog: progs.litInst });
   return {
     buildings: { geom: base, matrices, tints, prog: progs.litInst },
     roofs: { geom: roofBase, matrices: roofMatrices, tints: roofTints, prog: progs.litInst },
+    tiers: part(tierMatrices, tierTints),
+    spires: part(spireMatrices, spireTints),
+    crowns: part(crownMatrices, crownTints),
   };
 }
 

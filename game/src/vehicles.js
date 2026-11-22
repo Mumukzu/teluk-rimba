@@ -46,11 +46,14 @@ function bfsDist(adj, startId) {
   return dist;
 }
 
-// Bus route: a loop of main-road nodes (rectangle around downtown).
+// Bus route: a loop of main-road nodes (rectangle around downtown). The
+// south-west corner jogs via (-400,-300): (-400,-400) sits in the river
+// channel (the river is crossed by only 4 bridges), so the bus detours
+// across the bridge at (-300,-300)-(-200,-300) instead.
 function busRouteNodes(city) {
   const at = (x, z) => city.nodes.find((n) => n.x === x && n.z === z);
   const pts = [
-    [-400, -400], [-200, -400], [0, -400], [200, -400], [400, -400],
+    [-400, -300], [-200, -400], [0, -400], [200, -400], [400, -400],
     [400, -200], [400, 0], [400, 200], [400, 400],
     [200, 400], [0, 400], [-200, 400], [-400, 400],
     [-400, 200], [-400, 0], [-400, -200],

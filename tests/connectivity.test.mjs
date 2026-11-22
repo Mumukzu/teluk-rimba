@@ -33,7 +33,8 @@ check('no building sits on a road or in the river', city.buildings.every((b) => 
   const pts = [[b.x, b.z], [b.x - b.w / 2, b.z - b.d / 2], [b.x + b.w / 2, b.z - b.d / 2], [b.x - b.w / 2, b.z + b.d / 2], [b.x + b.w / 2, b.z + b.d / 2]];
   return pts.every(([x, z]) => riverDistance(x, z) > 13);
 }));
-check('river is bridged where roads cross it', s.bridges > 0, `${s.bridges} bridge edges`);
+check('river is crossed by exactly 4 bridges (Mu: 3-4 only)', s.bridges === 4, `${s.bridges} bridge edges`);
+check('no road node sits in the river channel', city.nodes.every((n) => riverDistance(n.x, n.z) >= 11), `${s.nodes} nodes`);
 check('street trees are off the asphalt', city.streetTrees.every((t) => {
   for (const L of ROAD_LINES) {
     if (Math.abs(t.x - L) < 3.5 && Math.abs(t.z - L) < 3.5) return false;

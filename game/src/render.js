@@ -15,6 +15,7 @@ import { buildVehicleGeoms, headlightGeom } from './vehicles.js';
 import { pedTorsoGeom, pedLegsGeom, pedHeadGeom, pedHairGeom } from './peds.js';
 import { buildWetGeoms } from './weather.js';
 import { buildNightLightGeoms } from './nightlights.js';
+import { buildPlotDressing } from './plots.js';
 import { DAY_LENGTH } from './config.js';
 
 const MOON_POS = [-420, 380, -720];
@@ -39,6 +40,7 @@ export function createRenderer(canvas, city) {
   const stars = buildStarsSpec();
   const wet = buildWetGeoms();
   const nightPools = buildNightLightGeoms(city, landmarks);
+  const plotDressing = buildPlotDressing(city);
   const vehicleGeoms = buildVehicleGeoms();
 
   const meshes = [];
@@ -66,6 +68,13 @@ export function createRenderer(canvas, city) {
   addStatic(progs.lit, buildRoadMesh(city), mat4Identity());
   addInst(progs.litInst, buildingMeshes.buildings);
   addInst(progs.litInst, buildingMeshes.roofs);
+  addInst(progs.litInst, buildingMeshes.tiers);
+  addInst(progs.litInst, buildingMeshes.spires);
+  addInst(progs.litInst, buildingMeshes.crowns);
+  // Plot dressing: light-grey paving + parked cars, fences, flowers,
+  // benches in dense and residential blocks (Mu: no plain green yards).
+  addStatic(progs.lit, plotDressing.paving, mat4Identity());
+  addStatic(progs.lit, plotDressing.props, mat4Identity());
   addInst(progs.litInst, treeMesh);
   addInst(progs.litInst, palmMesh);
   addInst(progs.litInst, lampMeshes.poles);
@@ -119,6 +128,16 @@ export function createRenderer(canvas, city) {
   addDyn(progs.litInst, plainBox(0.06, 1.2, 0.06, [1, 1, 1]), 260, 'rain');
   addDyn(progs.unlitInst, headlightGeom(), 160, 'headlights');
   addDyn(progs.transpInst, landmarks.beamGeom, 1, 'beam');
+  // Flat 1x1 ground quad (up-facing) for headlight beams + water flow.
+  const flatQuadGeom = (() => {
+    const g = { pos: [], nrm: [], col: [] };
+    const n = [0, 1, 0], white = [1, 1, 1];
+    g.pos.push(-0.5, 0, -0.5, 0.5, 0, 0.5, 0.5, 0, -0.5, -0.5, 0, -0.5, -0.5, 0, 0.5, 0.5, 0, 0.5);
+    for (let k = 0; k < 6; k++) { g.nrm.push(...n); g.col.push(...white); }
+    return g;
+  })();
+  addDyn(progs.transpInst, flatQuadGeom, 220, 'headbeams');
+  addDyn(progs.transpInst, flatQuadGeom, 48, 'flow');
 
   let calls = 0, tris = 0;
 
@@ -140,8 +159,8 @@ export function createRenderer(canvas, city) {
       ? [0.42 + 0.18 * elev, 0.42 + 0.18 * elev, 0.45 + 0.15 * elev]
       : [0.33, 0.35, 0.43]; // night ambient: trees, people and cars stay visible, sky stays dark
     let sky = isDay
-      ? [0.45 + 0.25 * elev - 0.25 * warm, 0.62 + 0.15 * elev - 0.2 * warm, 0.82 - 0.25 * warm]
-      : [0.03, 0.05, 0.1];
+      ? [0.3 + 0.1 * elev + 0.25 * warm, 0.55 + 0.12 * elev - 0.1 * warm, 0.92 - 0.35 * warm]
+      : [0.03, 0.05, 0.1]; // day sky: clear fresh blue (Mu), not pale
     if (rainAmt > 0) {
       const k = rainAmt * 0.4;
       sunColor = sunColor.map((c) => c * (1 - k));
@@ -199,13 +218,15 @@ export function createRenderer(canvas, city) {
       if (!spec || !spec.matrices || spec.matrices.length === 0) continue;
       if (name === 'beam' && light.isDay) continue;
       if (name === 'headlights' && light.isDay) continue;
+      if (name === 'headbeams' && light.isDay) continue;
       if (name === 'rain' && rainAmt < 0.05) continue;
       updateDynamicInstancedMesh(gl, entry.mesh, spec.matrices, spec.tints);
       const uniforms = { ...common, uModel: mat4Identity() };
-      if (name === 'beam') {
+      const blendAlpha = { beam: 0.12, headbeams: 0.14, flow: 0.3 }[name];
+      if (blendAlpha !== undefined) {
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-        uniforms.uAlpha = 0.12;
+        uniforms.uAlpha = blendAlpha;
         tris += drawMesh(gl, entry.prog, entry.mesh, uniforms);
         gl.disable(gl.BLEND);
       } else {

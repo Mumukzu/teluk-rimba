@@ -1,0 +1,165 @@
+// Teluk Rimba — plot dressing. In dense zones (downtown, commercial) and
+// residential blocks, empty yard space is NOT plain green: the plot is paved
+// light grey, with parked cars, fences, flower beds, benches and planters.
+// All code-made, all derived from the shared city dataset, deterministic.
+// Pure geometry (no WebGL, no DOM) — the renderer draws it as static meshes.
+import { mulberry32, range, rangeInt } from './rng.js';
+import { riverDistance } from './city.js';
+import { emptyGeom, plainBox } from './gl.js';
+import { PASTEL } from './vehicles.js';
+
+const PAVE = [0.78, 0.78, 0.76]; // light grey paving
+const FENCE_COL = [0.85, 0.82, 0.72];
+const BENCH_COL = [0.55, 0.42, 0.28];
+const FLOWERS = [
+  [0.95, 0.45, 0.55], [0.95, 0.8, 0.25], [0.9, 0.35, 0.3],
+  [0.95, 0.95, 0.9], [0.65, 0.45, 0.9], [0.95, 0.6, 0.3],
+];
+
+function quadUp(g, x0, z0, x1, z1, y, col) {
+  // Up-facing winding (a,c,b / a,d,c) — the renderer culls back faces.
+  const n = [0, 1, 0];
+  const P = (x, z) => [x, y, z];
+  g.pos.push(
+    ...P(x0, z0), ...P(x1, z1), ...P(x1, z0),
+    ...P(x0, z0), ...P(x0, z1), ...P(x1, z1),
+  );
+  for (let k = 0; k < 6; k++) g.nrm.push(...n);
+  for (let k = 0; k < 6; k++) g.col.push(...col);
+}
+
+function footprint(b) {
+  const w = b.rot ? b.d : b.w, d = b.rot ? b.w : b.d;
+  return { x0: b.x - w / 2, x1: b.x + w / 2, z0: b.z - d / 2, z1: b.z + d / 2 };
+}
+
+function clearOfBuildings(buildings, x, z, hw, hd, margin) {
+  for (const b of buildings) {
+    const f = footprint(b);
+    if (x + hw + margin > f.x0 && x - hw - margin < f.x1 &&
+        z + hd + margin > f.z0 && z - hd - margin < f.z1) return false;
+  }
+  return true;
+}
+
+function addPart(g, part, x, y, z, rot) {
+  const c = Math.cos(rot), s = Math.sin(rot);
+  for (let i = 0; i < part.pos.length; i += 3) {
+    const px = part.pos[i], py = part.pos[i + 1], pz = part.pos[i + 2];
+    part.pos[i] = x + px * c + pz * s;
+    part.pos[i + 1] = py + y;
+    part.pos[i + 2] = z - px * s + pz * c;
+  }
+  // Rotate the normals the same way (yaw only).
+  for (let i = 0; i < part.nrm.length; i += 3) {
+    const nx = part.nrm[i], nz = part.nrm[i + 2];
+    part.nrm[i] = nx * c + nz * s;
+    part.nrm[i + 2] = -nx * s + nz * c;
+  }
+  g.pos.push(...part.pos); g.nrm.push(...part.nrm); g.col.push(...part.col);
+}
+
+// Small decorative car: body in a bright colour + dark cabin + wheels.
+function carGeom(color) {
+  const g = emptyGeom();
+  const body = plainBox(3.6, 0.55, 1.7, color);
+  for (let i = 0; i < body.pos.length; i += 3) body.pos[i + 1] += 0.55;
+  const cabin = plainBox(1.8, 0.5, 1.4, [0.22, 0.28, 0.36]);
+  for (let i = 0; i < cabin.pos.length; i += 3) { cabin.pos[i] -= 0.2; cabin.pos[i + 1] += 1.05; }
+  const parts = [body, cabin];
+  for (const [wx, wz] of [[1.2, 0.8], [1.2, -0.8], [-1.2, 0.8], [-1.2, -0.8]]) {
+    const wheel = plainBox(0.5, 0.5, 0.25, [0.1, 0.1, 0.11]);
+    for (let i = 0; i < wheel.pos.length; i += 3) { wheel.pos[i] += wx; wheel.pos[i + 1] += 0.25; wheel.pos[i + 2] += wz; }
+    parts.push(wheel);
+  }
+  for (const p of parts) { g.pos.push(...p.pos); g.nrm.push(...p.nrm); g.col.push(...p.col); }
+  return g;
+}
+
+export function buildPlotDressing(city) {
+  const rand = mulberry32(20261128);
+  const paving = emptyGeom();
+  const props = emptyGeom();
+  const dressed = [];
+  let cars = 0, fences = 0, flowers = 0, benches = 0;
+
+  const blocks = city.blocks.filter((b) =>
+    (b.zone === 'downtown' || b.zone === 'commercial' || b.zone === 'residential'));
+  for (const b of blocks) {
+    // Riverside blocks stay natural — the river cuts through them.
+    const corners = [[b.x0, b.z0], [b.x1, b.z0], [b.x0, b.z1], [b.x1, b.z1], [b.cx, b.cz]];
+    if (corners.some(([x, z]) => riverDistance(x, z) < 25)) continue;
+    dressed.push(b);
+
+    // Paving: 2x2 light-grey slabs with a slight shade variation.
+    const mx = (b.x0 + b.x1) / 2, mz = (b.z0 + b.z1) / 2;
+    for (const [x0, z0, x1, z1] of [[b.x0, b.z0, mx, mz], [mx, b.z0, b.x1, mz], [b.x0, mz, mx, b.z1], [mx, mz, b.x1, b.z1]]) {
+      const v = range(rand, -0.03, 0.03);
+      quadUp(paving, x0, z0, x1, z1, 0.06, [PAVE[0] + v, PAVE[1] + v, PAVE[2] + v]);
+    }
+
+    const inBlock = (x, z, m = 3) => x > b.x0 + m && x < b.x1 - m && z > b.z0 + m && z < b.z1 - m;
+    const spot = (hw, hd, tries = 12) => {
+      for (let k = 0; k < tries; k++) {
+        const x = range(rand, b.x0 + 4, b.x1 - 4);
+        const z = range(rand, b.z0 + 4, b.z1 - 4);
+        if (!inBlock(x, z)) continue;
+        if (riverDistance(x, z) < 25) continue;
+        if (!clearOfBuildings(city.buildings, x, z, hw, hd, 2)) continue;
+        return { x, z };
+      }
+      return null;
+    };
+
+    // Parked cars: 1-2 downtown, 2-3 commercial, 2 residential.
+    const nCars = b.zone === 'commercial' ? rangeInt(rand, 2, 3) : 2;
+    for (let k = 0; k < nCars; k++) {
+      const s = spot(2.2, 1.2);
+      if (!s) continue;
+      addPart(props, carGeom(PASTEL[Math.floor(rand() * PASTEL.length)]), s.x, 0.06, s.z, range(rand, 0, Math.PI * 2));
+      cars++;
+    }
+    // Fences: low runs along two inner edges of the block.
+    for (const [fx, fz, len, rot] of [
+      [b.cx, b.z0 + 2, (b.x1 - b.x0) * 0.45, 0],
+      [b.x0 + 2, b.cz, (b.z1 - b.z0) * 0.45, Math.PI / 2],
+    ]) {
+      if (riverDistance(fx, fz) < 25) continue;
+      if (!clearOfBuildings(city.buildings, fx, fz, rot === 0 ? len / 2 : 0.5, rot === 0 ? 0.5 : len / 2, 1)) continue;
+      const fence = plainBox(len, 0.9, 0.12, FENCE_COL);
+      for (let i = 0; i < fence.pos.length; i += 3) fence.pos[i + 1] += 0.51;
+      addPart(props, fence, fx, 0.06, fz, rot);
+      fences++;
+    }
+    // Flower beds: 2-3 clusters of tiny bright blooms.
+    for (let k = 0; k < rangeInt(rand, 2, 3); k++) {
+      const s = spot(1.2, 1.2);
+      if (!s) continue;
+      for (let f = 0; f < 4; f++) {
+        const bloom = plainBox(0.35, 0.3, 0.35, FLOWERS[Math.floor(rand() * FLOWERS.length)]);
+        for (let i = 0; i < bloom.pos.length; i += 3) bloom.pos[i + 1] += 0.2;
+        addPart(props, bloom, s.x + range(rand, -0.8, 0.8), 0.06, s.z + range(rand, -0.8, 0.8), 0);
+      }
+      flowers++;
+    }
+    // Benches in commercial / residential blocks.
+    if (b.zone !== 'downtown' && rand() < 0.7) {
+      const s = spot(1.4, 0.5);
+      if (s) {
+        const brot = range(rand, 0, Math.PI * 2);
+        const seat = plainBox(2.4, 0.12, 0.7, BENCH_COL);
+        for (let i = 0; i < seat.pos.length; i += 3) seat.pos[i + 1] += 0.5;
+        const back = plainBox(2.4, 0.6, 0.1, BENCH_COL);
+        for (let i = 0; i < back.pos.length; i += 3) { back.pos[i + 1] += 0.85; back.pos[i + 2] -= 0.32; }
+        addPart(props, seat, s.x, 0.06, s.z, brot);
+        addPart(props, back, s.x, 0.06, s.z, brot);
+        benches++;
+      }
+    }
+  }
+
+  return {
+    paving, props,
+    counts: { blocks: dressed.length, cars, fences, flowerBeds: flowers, benches },
+  };
+}

@@ -10,7 +10,7 @@
 //   &wanted=N         start with wanted level N (0-3)
 //   &weather=rain|wet|clear  force the weather
 import { STEP, DAY_LENGTH, START_TIME, START_POS, VEHICLES, CULL_DIST } from './config.js';
-import { generateCity, isConnected, placeNameAt, buildingAABBs, terrainHeight, riverDistance } from './city.js';
+import { generateCity, isConnected, placeNameAt, buildingAABBs, terrainHeight, riverDistance, RIVER_POINTS } from './city.js';
 import { createInput, ACTION_CONFIRM, ACTION_ENTER } from './input.js';
 import { createPlayer } from './player.js';
 import { createHud } from './hud.js';
@@ -304,6 +304,27 @@ if (params.sim) {
   let frames = 0, fpsTime = 0, fps = 0;
   let shotReady = false;
 
+  // River polyline arc lengths (for the flow streaks): point at arc length s.
+  const riverSegs = [];
+  let riverTotal = 0;
+  for (let k = 0; k < RIVER_POINTS.length - 1; k++) {
+    const [x0, z0] = RIVER_POINTS[k], [x1, z1] = RIVER_POINTS[k + 1];
+    const len = Math.hypot(x1 - x0, z1 - z0);
+    riverSegs.push({ x0, z0, dx: (x1 - x0) / len, dz: (z1 - z0) / len, len, start: riverTotal });
+    riverTotal += len;
+  }
+  const riverPointAt = (s) => {
+    s = ((s % riverTotal) + riverTotal) % riverTotal;
+    for (const seg of riverSegs) {
+      if (s <= seg.start + seg.len) {
+        const t = s - seg.start;
+        return { x: seg.x0 + seg.dx * t, z: seg.z0 + seg.dz * t, dx: seg.dx, dz: seg.dz };
+      }
+    }
+    const lastSeg = riverSegs[riverSegs.length - 1];
+    return { x: lastSeg.x0 + lastSeg.dx * lastSeg.len, z: lastSeg.z0 + lastSeg.dz * lastSeg.len, dx: lastSeg.dx, dz: lastSeg.dz };
+  };
+
   function cameraForFrame() {
     if (params.camPos) {
       return { eye: params.camPos, center: params.camLook || [0, 0, 0] };
@@ -333,10 +354,12 @@ if (params.sim) {
     dyn.ped_legs = ped.legs;
     dyn.ped_heads = ped.heads;
     dyn.ped_hair = ped.hair;
-    // Headlights at night: two dots at the front of each moving vehicle.
+    // Headlights at night: two dots at the front of each moving vehicle,
+    // plus a soft beam pool on the road ahead (Mu: all vehicle lights on).
     const isNight = game.timeHours < 6 || game.timeHours >= 18;
     if (isNight) {
       const hl = { matrices: [], tints: [] };
+      const hb = { matrices: [], tints: [] };
       for (const v of traffic.vehicles) {
         if (v.parked || v.speed < 0.5) continue;
         if (v.type === 'boat' || v.type === 'fishingboat' || v.type === 'sailboat') continue;
@@ -351,14 +374,39 @@ if (params.sim) {
           hl.matrices.push(mat4TRS(hx, v.y + 0.6, hz, v.heading, 1, 1, 1));
           hl.tints.push([1, 1, 1]);
         }
+        const isBike = v.type === 'motorbike' || v.type === 'scooter' || v.type === 'bajaj';
+        const beamLen = isBike ? 7 : 10, beamW = isBike ? 1.3 : 2.4;
+        hb.matrices.push(mat4TRS(
+          v.x + fx * (tune.len / 2 + beamLen / 2), 0.13, v.z + fz * (tune.len / 2 + beamLen / 2),
+          v.heading, beamW, 1, beamLen));
+        hb.tints.push([1, 0.93, 0.75]);
       }
       dyn.headlights = hl;
+      dyn.headbeams = hb;
       // Lighthouse beam sweeps the sea at night.
       const beamAngle = game.elapsed * 0.5;
       dyn.beam = {
         matrices: [mat4TRS(landmarks.lighthouse.x, landmarks.lighthouse.lampY, landmarks.lighthouse.z, beamAngle, 1, 1, 1)],
         tints: [[1, 0.95, 0.75]],
       };
+    }
+    // River flow streaks + beach wave lines (light animation, always on).
+    {
+      const fl = { matrices: [], tints: [] };
+      for (let k = 0; k < 36; k++) {
+        const base = (k * 53.7) % riverTotal;
+        const drift = (game.elapsed * 2.5 + k * 17.3) % 120;
+        const pt = riverPointAt(base + drift);
+        if (Math.hypot(pt.x - camX, pt.z - camZ) > CULL_DIST + 60) continue;
+        fl.matrices.push(mat4TRS(pt.x, -0.7, pt.z, Math.atan2(pt.dx, pt.dz), 0.5, 1, 3.2));
+        fl.tints.push([0.9, 0.97, 1]);
+      }
+      for (let k = 0; k < 4; k++) {
+        const wx = 632 + k * 8 + 5 * Math.sin(game.elapsed * 0.35 + k * 1.7);
+        fl.matrices.push(mat4TRS(wx, -0.7, 0, 0, 2.5, 1, 1400));
+        fl.tints.push([0.95, 0.98, 1]);
+      }
+      dyn.flow = fl;
     }
     // Rain streaks around the camera.
     if (weather.state.rain > 0.05) {
