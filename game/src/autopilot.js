@@ -149,12 +149,12 @@ export function createAutopilot(city) {
         if (dist < 25) { ap.wantEnter = true; return; } // get out
         // Still far: keep driving toward it first.
       } else {
-        // Board step (the mission boat): get in when close enough.
-        // (Game enter radius is 5 m — only press E inside 4 m.)
-        if (t.board) {
-          const v = traffic.nearestEnterable(px, pz, 4);
-          if (v) { ap.wantEnter = true; return; }
-        }
+        // Board step (the mission boat): walk right up to the boat, then
+        // get in. Do NOT grab the nearest vehicle here — that would be the
+        // car we just got out of, 2 m away. The boat sits exactly at the
+        // target coords, so distance to the target IS the distance to it.
+        // (The game's enter key reaches 5 m; press E inside 4 m.)
+        if (t.board && dist < 4) { ap.wantEnter = true; return; }
         // Walk: point the camera at the target and walk forward.
         player.state.camYaw = Math.atan2(-(t.x - px), -(t.z - pz));
         ap.walk.forward = true;

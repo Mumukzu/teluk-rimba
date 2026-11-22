@@ -208,7 +208,7 @@ function enterExitVehicle() {
 
 // Test hooks for the Playwright checks (tests only).
 window.__GAME__ = {
-  traffic, peds, wanted, weather, game, player, missions, aircraft,
+  traffic, peds, wanted, weather, game, player, missions, aircraft, autopilot,
   crime() { wanted.addHeat(1); return wanted.state.wanted; },
   gunshot(x, z) {
     wanted.addHeat(1);

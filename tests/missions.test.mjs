@@ -255,6 +255,21 @@ check('mission 5 boat escape target is in the sea', missionById(5).steps[2].x > 
     check('autopilot walks the road graph when no vehicle is near',
       ap3.walk.forward === true && ap3.route.length > 2);
   }
+  // Board step: the car we just left is 2 m away, the boat is at the
+  // target — walk to the boat, never re-enter the car.
+  {
+    const ap4 = createAutopilot(city);
+    const player4 = { state: { x: 641, z: 413, y: 0, camYaw: 0, camPitch: 0.32, camDist: 7.5, facing: 0 } };
+    const car4 = { type: 'car', x: 640, z: 415, heading: 0, speed: 0, parked: true, driven: false };
+    const traffic4 = { nearestEnterable: () => car4, vehicles: [car4], boats: [] };
+    const board = { currentTarget: () => ({ x: 660, z: 430, radius: 6, onFoot: true, board: true }) };
+    ap4.update(1 / 60, { player: player4, driving: null, traffic: traffic4, missions: board });
+    check('board step walks to the boat, does not re-enter the car',
+      ap4.wantEnter === false && ap4.walk.forward === true);
+    player4.state.x = 658; player4.state.z = 428; // 2.8 m from the boat
+    ap4.update(1 / 60, { player: player4, driving: null, traffic: traffic4, missions: board });
+    check('board step presses E once right next to the boat', ap4.wantEnter === true);
+  }
   // On-foot target: walks (camera yaw points at the target).
   const mockMissions2 = { currentTarget: () => ({ x: 50, z: -50, radius: 4, onFoot: true }) };
   ap.update(1 / 60, { player, driving: null, traffic, missions: mockMissions2 });
