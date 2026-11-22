@@ -240,11 +240,11 @@ check('mission 5 boat escape target is in the sea', missionById(5).steps[2].x > 
     check('autopilot walks to the car it got out of', ap2.walk.forward === true && !ap2.wantEnter);
     check('autopilot walks toward the car, not the far target',
       Math.abs(player2.state.camYaw - Math.atan2(-(88 - 70), -(-62 + 70))) < 0.01);
-    player2.state.x = 86; player2.state.z = -63; // now within 6 m of the car
+    player2.state.x = 82.5; player2.state.z = -62; // 5.5 m from the car
     ap2.update(1 / 60, { player: player2, driving: null, traffic: traffic2, missions: far });
     check('autopilot keeps walking at 5.5 m (game enter radius is 5 m)',
       ap2.wantEnter === false && ap2.walk.forward === true);
-    player2.state.x = 87; player2.state.z = -62.5; // now within 4 m of the car
+    player2.state.x = 85; player2.state.z = -62; // 3 m from the car
     ap2.update(1 / 60, { player: player2, driving: null, traffic: traffic2, missions: far });
     check('autopilot gets back in the car when close', ap2.wantEnter === true);
     // No vehicle anywhere near: walk the road graph (never straight into
