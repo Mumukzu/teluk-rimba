@@ -11,11 +11,13 @@ const WARM = [1.0, 0.76, 0.42]; // sodium-lamp warm
 const WARM_CORE = [1.0, 0.85, 0.6]; // bright core under the lamp
 
 function quad(g, cx, cz, w, d, y, col) {
+  // Triangle order a,c,b / a,d,c so the face points UP (+y) — the renderer
+  // culls back faces, and the wet-overlay quads use the same order.
   const n = [0, 1, 0];
   const P = (x, z) => [x, y, z];
   g.pos.push(
-    ...P(cx - w / 2, cz - d / 2), ...P(cx + w / 2, cz - d / 2), ...P(cx + w / 2, cz + d / 2),
-    ...P(cx - w / 2, cz - d / 2), ...P(cx + w / 2, cz + d / 2), ...P(cx - w / 2, cz + d / 2),
+    ...P(cx - w / 2, cz - d / 2), ...P(cx + w / 2, cz + d / 2), ...P(cx + w / 2, cz - d / 2),
+    ...P(cx - w / 2, cz - d / 2), ...P(cx - w / 2, cz + d / 2), ...P(cx + w / 2, cz + d / 2),
   );
   for (let k = 0; k < 6; k++) g.nrm.push(...n);
   for (let k = 0; k < 6; k++) g.col.push(...col);
