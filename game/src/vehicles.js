@@ -13,12 +13,14 @@ import { emptyGeom, plainBox, mat4TRS } from './gl.js';
 
 const SEED = 20261123;
 
-// Soft pastel civilian palette (Mu: colourful but soft, never garish).
+// Bright, clearly varied colours per vehicle (Mu: colourful, not all
+// grey/white) — saturated enough to read at a glance, still pleasant,
+// never neon. Emergency vehicles keep their real colours below.
 export const PASTEL = [
-  [0.88, 0.66, 0.6], [0.92, 0.84, 0.6], [0.64, 0.84, 0.7],
-  [0.6, 0.82, 0.8], [0.78, 0.7, 0.86], [0.9, 0.74, 0.58],
-  [0.68, 0.78, 0.88], [0.9, 0.72, 0.74], [0.7, 0.86, 0.72],
-  [0.92, 0.88, 0.68], [0.8, 0.74, 0.88], [0.86, 0.88, 0.94],
+  [0.85, 0.35, 0.3], [0.95, 0.55, 0.2], [0.95, 0.8, 0.2],
+  [0.35, 0.75, 0.35], [0.2, 0.7, 0.65], [0.25, 0.5, 0.9],
+  [0.55, 0.4, 0.85], [0.9, 0.4, 0.6], [0.6, 0.85, 0.25],
+  [0.85, 0.65, 0.25], [0.9, 0.45, 0.45], [0.4, 0.75, 0.9],
 ];
 
 function adjacency(city) {

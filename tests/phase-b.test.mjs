@@ -9,6 +9,7 @@ import { createWanted } from '../game/src/police.js';
 import { createWeather } from '../game/src/weather.js';
 import { buildLandmarks } from '../game/src/landmarks.js';
 import { VEHICLES } from '../game/src/config.js';
+import { PASTEL } from '../game/src/vehicles.js';
 
 let failures = 0;
 function check(name, ok, detail = '') {
@@ -25,6 +26,7 @@ const weather = createWeather({});
 // --- traffic ---
 const c = traffic.counts();
 check('traffic has 124 moving + 24 parked + 9 boats', c.moving === 124 && c.parked === 24 && c.boats === 9, JSON.stringify(c));
+check('every vehicle colour is visibly coloured (not grey/white)', PASTEL.every((c) => Math.max(...c) - Math.min(...c) > 0.2), `${PASTEL.length} colours`);
 check('traffic is dense on main roads (most moving vehicles on a main edge)', (() => {
   const main = new Set(city.edges.filter((e) => e.main).map((e) => e.a + '-' + e.b));
   let onMain = 0;

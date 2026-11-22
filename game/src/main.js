@@ -305,6 +305,9 @@ if (params.sim) {
   let shotReady = false;
 
   function cameraForFrame() {
+    if (params.camPos) {
+      return { eye: params.camPos, center: params.camLook || [0, 0, 0] };
+    }
     if (params.cam === 'aerial') {
       return { eye: [0, 680, 430], center: [0, 0, -20] };
     }
