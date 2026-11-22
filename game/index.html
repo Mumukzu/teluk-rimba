@@ -1,18 +1,46 @@
 <!doctype html>
-<html lang="en">
+<html lang="id">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
+<title>Teluk Rimba — kota pelabuhan tropis</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0a1226; font-family: system-ui, sans-serif; }
   #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
+  #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+  #hud-top { position: absolute; top: 12px; left: 14px; font-size: 20px; font-weight: 700; line-height: 1.5; }
+  #hud-stars { letter-spacing: 2px; font-size: 22px; }
+  #hud-objective { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); font-size: 15px; background: rgba(0,0,0,.45); padding: 6px 14px; border-radius: 6px; }
+  #minimap { position: absolute; top: 12px; right: 14px; width: 200px; height: 200px; border: 2px solid rgba(255,255,255,.6); border-radius: 8px; background: #1a2f22; }
+  #hud-speed { position: absolute; bottom: 14px; right: 16px; font-size: 18px; font-weight: 700; }
+  #hud-hint { position: absolute; bottom: 52px; left: 50%; transform: translateX(-50%); font-size: 14px; background: rgba(0,0,0,.55); padding: 8px 16px; border-radius: 6px; display: none; }
+  #start-screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(160deg, #0d3b4c 0%, #0a2a3a 55%, #123f2a 100%); color: #fff; cursor: pointer; text-align: center; z-index: 10; }
+  #start-screen h1 { font-size: 56px; margin: 0 0 8px; letter-spacing: 2px; }
+  #start-screen p { font-size: 17px; margin: 6px 0; opacity: .9; }
+  #start-screen .go { margin-top: 26px; font-size: 20px; font-weight: 700; background: #e8a13a; color: #201503; padding: 12px 28px; border-radius: 8px; }
   #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 </style>
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
+<canvas id="game" aria-label="Teluk Rimba: kota pelabuhan tropis yang bisa dijelajahi dengan berjalan kaki"></canvas>
+<div id="hud">
+  <div id="hud-top">
+    <div id="hud-money">$0</div>
+    <div id="hud-time">10:00</div>
+    <div id="hud-stars">☆☆☆</div>
+  </div>
+  <div id="hud-objective">Jelajahi Teluk Rimba</div>
+  <canvas id="minimap" width="200" height="200"></canvas>
+  <div id="hud-speed">0 km/h</div>
+  <div id="hud-hint"></div>
+</div>
+<div id="start-screen" tabindex="0">
+  <h1>TELUK RIMBA</h1>
+  <p>Kota pelabuhan tropis &middot; gunung berapi di belakang, laut biru di depan</p>
+  <p>1.000 bangunan &middot; lalu lintas &middot; polisi &middot; 6 misi &middot; toko pasar</p>
+  <p>WASD jalan &middot; Shift lari &middot; seret mouse untuk kamera</p>
+  <div class="go">KLIK UNTUK MULAI</div>
+</div>
 <p id="status" role="status" aria-live="polite"></p>
 <script type="module" src="./src/main.js"></script>
 </body>

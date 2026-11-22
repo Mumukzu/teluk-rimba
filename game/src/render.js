@@ -1,141 +1,122 @@
-// Drawing only: the world's state and the current screen in, pixels out. The 1280x720 playfield
-// is scaled to fit the window and centred, the margin filled with the backdrop colour. Flat
-// rectangles and circles, canvas text for the HUD and the panels. Text that holds a number is
-// rebuilt only when the number changes, so a frame allocates nothing.
-import { FIELD, FONT, LIVES, PALETTE } from './config.js';
-import { KIND_COIN } from './world.js';
+// Teluk Rimba — renderer: owns the WebGL2 context, compiles the programs,
+// uploads every mesh once, and draws the frame with a day-night light rig.
+// Nothing here knows about missions or input; main.js drives it.
+import { createPrograms, createMesh, createInstancedMesh, drawMesh, mat4Identity, mat4Perspective, mat4LookAt } from './gl.js';
+import { buildWorldGeoms } from './world.js';
+import { buildBuildingMeshes, buildTreeMesh } from './buildings.js';
+import { buildRoadMesh, buildLampMeshes, buildTrafficLightMesh } from './roads.js';
+import { DAY_LENGTH } from './config.js';
 
-export const SCREEN_TITLE = 'title';
-export const SCREEN_PLAY = 'play';
-export const SCREEN_PAUSED = 'paused';
-export const SCREEN_OVER = 'over';
+export function createRenderer(canvas, city) {
+  const gl = canvas.getContext('webgl2', { antialias: true });
+  if (!gl) throw new Error('WebGL2 is not available in this browser');
+  gl.enable(gl.DEPTH_TEST);
+  gl.enable(gl.CULL_FACE);
+  gl.cullFace(gl.BACK);
 
-/** The panel's width; its height grows with its lines: room for the title, the lines and the prompt. */
-const PANEL = { width: 600, top: 134, line: 34, bottom: 70 };
-const LIFE_SIZE = 20;
-const LIFE_GAP = 8;
+  const progs = createPrograms(gl);
+  const world = buildWorldGeoms();
+  const buildingMeshes = buildBuildingMeshes(gl, progs, city);
+  const treeMesh = buildTreeMesh(gl, progs, city);
+  const lampMeshes = buildLampMeshes(city);
+  const trafficMesh = buildTrafficLightMesh(city);
 
-function cachedLabel(prefix) {
-  let value = -1;
-  let text = '';
-  return function label(next) {
-    if (next !== value) {
-      value = next;
-      text = prefix + next;
-    }
-    return text;
+  const meshes = [];
+  const addStatic = (prog, geom, model) => {
+    const m = createMesh(gl, prog, geom);
+    meshes.push({ mesh: m, prog, model });
+    return m;
   };
-}
+  const addInst = (prog, spec) => {
+    const m = createInstancedMesh(gl, prog, spec.geom, spec.matrices, spec.tints);
+    meshes.push({ mesh: m, prog, model: mat4Identity() });
+    return m;
+  };
 
-export function createRenderer(canvas) {
-  const context = canvas.getContext('2d');
-  const view = { scale: 1, x: 0, y: 0 };
-  const scoreLabel = cachedLabel('Score ');
-  const levelLabel = cachedLabel('Level ');
-  const finalLabel = cachedLabel('Score ');
-  const bestLabel = cachedLabel('Best ');
+  addStatic(progs.lit, world.terrain, mat4Identity());
+  addStatic(progs.lit, world.sea, mat4Identity());
+  addStatic(progs.lit, world.river, mat4Identity());
+  addStatic(progs.lit, world.volcano, mat4Identity());
+  addStatic(progs.lit, buildRoadMesh(city), mat4Identity());
+  addInst(progs.litInst, buildingMeshes.buildings);
+  addInst(progs.litInst, buildingMeshes.roofs);
+  addInst(progs.litInst, treeMesh);
+  addInst(progs.litInst, lampMeshes.poles);
+  addInst(progs.unlitInst, lampMeshes.heads);
+  addInst(progs.unlitInst, trafficMesh);
+  // Clouds drift: three separate static meshes sharing one geometry.
+  const cloudMesh = createMesh(gl, progs.lit, world.clouds);
+  const cloudModels = [
+    { x: -300, y: 190, z: -200, dx: 0.6 },
+    { x: 200, y: 210, z: 300, dx: 0.4 },
+    { x: -100, y: 175, z: 500, dx: 0.5 },
+  ];
 
-  function resize() {
-    const ratio = window.devicePixelRatio || 1;
-    const width = Math.round(window.innerWidth * ratio);
-    const height = Math.round(window.innerHeight * ratio);
-    canvas.width = width;
-    canvas.height = height;
-    view.scale = Math.min(width / FIELD.width, height / FIELD.height);
-    view.x = (width - FIELD.width * view.scale) / 2;
-    view.y = (height - FIELD.height * view.scale) / 2;
+  let calls = 0, tris = 0;
+
+  // Sun rig for a given time of day (hours 0-24). Returns sky/fog colours.
+  function lightFor(timeHours) {
+    const dayT = (timeHours - 6) / 12; // 0 at 06:00, 1 at 18:00
+    const elev = Math.sin(dayT * Math.PI); // 0 at dawn/dusk, 1 at noon
+    const isDay = timeHours >= 6 && timeHours < 18;
+    const sunDir = [-0.45, -(0.25 + 0.75 * Math.max(0, elev)), -0.55];
+    const l = Math.hypot(...sunDir);
+    const sun = [sunDir[0] / l, sunDir[1] / l, sunDir[2] / l];
+    const warm = 1 - Math.max(0, elev); // low sun = warm
+    const sunColor = isDay
+      ? [0.9 + 0.1 * warm, 0.85, 0.75 + 0.15 * elev]
+      : [0.12, 0.16, 0.28];
+    const ambient = isDay
+      ? [0.42 + 0.18 * elev, 0.42 + 0.18 * elev, 0.45 + 0.15 * elev]
+      : [0.14, 0.16, 0.22];
+    const sky = isDay
+      ? [0.45 + 0.25 * elev - 0.25 * warm, 0.62 + 0.15 * elev - 0.2 * warm, 0.82 - 0.25 * warm]
+      : [0.03, 0.05, 0.1];
+    return { sun, sunColor, ambient, sky, isDay };
   }
 
-  const fonts = new Map();
-  function text(value, x, y, size, color, align) {
-    if (!fonts.has(size)) fonts.set(size, `${size}px ${FONT}`);
-    context.font = fonts.get(size);
-    context.fillStyle = color;
-    context.textAlign = align;
-    context.fillText(value, x, y);
-  }
-
-  function drawField(state) {
-    context.fillStyle = PALETTE.sky;
-    context.fillRect(0, 0, FIELD.width, FIELD.height);
-    context.fillStyle = PALETTE.ground;
-    context.fillRect(0, FIELD.groundY, FIELD.width, FIELD.height - FIELD.groundY);
-
-    const items = state.items;
-    for (let index = 0; index < items.length; index += 1) {
-      const item = items[index];
-      if (!item.active) continue;
-      if (item.kind === KIND_COIN) {
-        context.fillStyle = PALETTE.coin;
-        context.beginPath();
-        context.arc(item.x + item.width / 2, item.y + item.height / 2, item.width / 2, 0, Math.PI * 2);
-        context.fill();
-      } else {
-        context.fillStyle = PALETTE.block;
-        context.fillRect(item.x, item.y, item.width, item.height);
-      }
+  function render(state) {
+    const { eye, center, timeHours, playerMesh, elapsed } = state;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w; canvas.height = h;
     }
-
-    const player = state.player;
-    // Blink while invulnerable after a hit: hidden on every other tenth of a second.
-    if (player.invulnerable === 0 || Math.floor(player.invulnerable * 10) % 2 === 1) {
-      context.fillStyle = PALETTE.player;
-      context.fillRect(player.x, player.y, player.width, player.height);
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    const light = lightFor(timeHours);
+    gl.clearColor(light.sky[0], light.sky[1], light.sky[2], 1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    const proj = mat4Perspective((55 * Math.PI) / 180, canvas.width / canvas.height, 0.5, 4000);
+    const view = mat4LookAt(eye, center, [0, 1, 0]);
+    const common = {
+      uProj: proj, uView: view,
+      uSunDir: light.sun, uSunColor: light.sunColor, uAmbient: light.ambient,
+      uFogColor: light.sky, uFogNear: 350, uFogFar: 1600,
+    };
+    calls = 0; tris = 0;
+    for (const entry of meshes) {
+      tris += drawMesh(gl, entry.prog, entry.mesh, { ...common, uModel: entry.model });
+      calls++;
     }
-  }
-
-  function drawHud(state) {
-    context.textBaseline = 'top';
-    text(scoreLabel(state.score), 24, 20, 28, PALETTE.text, 'left');
-    text(levelLabel(state.level), FIELD.width / 2, 20, 28, PALETTE.text, 'center');
-    const firstLife = FIELD.width - 24 - LIVES * (LIFE_SIZE + LIFE_GAP) + LIFE_GAP;
-    text('Lives', firstLife - 12, 20, 28, PALETTE.text, 'right');
-    for (let life = 0; life < LIVES; life += 1) {
-      context.fillStyle = life < state.lives ? PALETTE.player : PALETTE.ground;
-      context.fillRect(firstLife + life * (LIFE_SIZE + LIFE_GAP), 24, LIFE_SIZE, LIFE_SIZE);
+    // Player figure.
+    if (playerMesh) {
+      tris += drawMesh(gl, progs.lit, playerMesh, { ...common, uModel: state.playerModel });
+      calls++;
     }
-  }
-
-  function drawPanel(title, lines, prompt) {
-    const height = PANEL.top + lines.length * PANEL.line + PANEL.bottom;
-    const x = (FIELD.width - PANEL.width) / 2;
-    const y = (FIELD.height - height) / 2;
-    context.fillStyle = PALETTE.panel;
-    context.fillRect(x, y, PANEL.width, height);
-    context.textBaseline = 'alphabetic';
-    text(title, FIELD.width / 2, y + 78, 48, PALETTE.text, 'center');
-    for (let index = 0; index < lines.length; index += 1) {
-      text(lines[index], FIELD.width / 2, y + PANEL.top + index * PANEL.line, 22, PALETTE.muted, 'center');
-    }
-    text(prompt, FIELD.width / 2, y + height - 40, 24, PALETTE.coin, 'center');
-  }
-
-  const TITLE_LINES = ['Dodge the red blocks. Catch the gold coins.', 'Move with ← → or A D.  Pause with P.', ''];
-  const PAUSED_LINES = ['The blocks will wait for you.'];
-  const OVER_LINES = ['', ''];
-
-  /** Paint one frame: the field, then the HUD or a panel for the screen the game is on. */
-  function draw(state, screen, best) {
-    context.setTransform(1, 0, 0, 1, 0, 0);
-    context.fillStyle = PALETTE.backdrop;
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.setTransform(view.scale, 0, 0, view.scale, view.x, view.y);
-    drawField(state);
-    if (screen === SCREEN_TITLE) {
-      TITLE_LINES[2] = bestLabel(best);
-      drawPanel('Block Dodger', TITLE_LINES, 'Press Space or click to start');
-      return;
-    }
-    drawHud(state);
-    if (screen === SCREEN_PAUSED) drawPanel('Paused', PAUSED_LINES, 'Press P to resume');
-    else if (screen === SCREEN_OVER) {
-      OVER_LINES[0] = finalLabel(state.score);
-      OVER_LINES[1] = bestLabel(best);
-      drawPanel('Game over', OVER_LINES, 'Press Space or click to play again');
+    // Clouds drift slowly with time.
+    for (const c of cloudModels) {
+      const model = mat4Identity();
+      model[12] = c.x + ((elapsed * c.dx) % 1400) - 700;
+      model[13] = c.y; model[14] = c.z;
+      tris += drawMesh(gl, progs.lit, cloudMesh, { ...common, uModel: model });
+      calls++;
     }
   }
 
-  resize();
-  window.addEventListener('resize', resize);
-  return { draw };
+  return {
+    gl, render, lightFor,
+    makePlayerMesh(geom) { return createMesh(gl, progs.lit, geom); },
+    get calls() { return calls; },
+    get tris() { return tris; },
+    dayLength: DAY_LENGTH,
+  };
 }

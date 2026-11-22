@@ -1,134 +1,186 @@
-// Boot and the one loop: input is read every frame, the world advances in fixed 1/60 s steps
-// (several in a slow frame, none in a fast one), and the renderer paints what is there. The game
-// moves between four screens: title, play, paused and game over.
+// Teluk Rimba — boot + the one loop. Fixed 1/60 s steps, a start screen that
+// also enables audio, day-night cycle, HUD + minimap, screenshot/test modes.
 //
-// ?seed=N fixes the falling pattern. ?shot=start|play|end (with &seed=N) stages that scene
-// instead of running the loop, paints it twice and sets window.__shotReady for a screenshot.
-import { BEST_KEY, LIVES, STEP } from './config.js';
-import { createRandom } from './random.js';
-import { createWorld, EVENT_HIT, EVENT_OVER } from './world.js';
-import { ACTION_CONFIRM, ACTION_PAUSE, createInput } from './input.js';
-import { createRenderer, SCREEN_OVER, SCREEN_PAUSED, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
-import { stageShot } from './shots.js';
+// Test hooks (tests only, off in normal play):
+//   ?sim=1            headless fast-sim: logic ticks, no rendering
+//   ?shot=day|night   fixed time of day      &hud=0 hide the HUD
+//   &cam=aerial|street  fixed camera         &spawn=x,z start position
+//   &timeScale=N      faster clock/timers
+import { STEP, DAY_LENGTH, START_TIME, START_POS } from './config.js';
+import { generateCity, isConnected } from './city.js';
+import { createInput, ACTION_CONFIRM } from './input.js';
+import { createPlayer } from './player.js';
+import { createHud } from './hud.js';
+import { createRenderer } from './render.js';
+import { parseShotParams, timeForShot } from './shots.js';
+import { mat4TRS } from './gl.js';
 
-/** The longest frame the loop catches up on; a longer stall (a hidden tab) is dropped, not replayed. */
-const MAX_FRAME = 0.25;
-
-const params = new URLSearchParams(window.location.search);
-const shot = params.get('shot');
-const seedParam = Number.parseInt(params.get('seed') ?? '', 10);
-const seed = Number.isInteger(seedParam) ? seedParam : Math.floor(Math.random() * 4294967296);
-
+const params = parseShotParams();
 const canvas = document.getElementById('game');
-const status = document.getElementById('status');
-const world = createWorld(createRandom(seed));
-const renderer = createRenderer(canvas);
+const city = generateCity(params.seed);
+const start = params.spawn || START_POS;
 
-function readBest() {
+// Public test surface (read by the Playwright checks and the sim runner).
+window.__CITY_STATS__ = {
+  buildings: city.stats.buildings,
+  nodes: city.stats.nodes,
+  edges: city.stats.edges,
+  bridges: city.stats.bridges,
+  connected: isConnected(city),
+  streetTrees: city.stats.streetTrees,
+  forestTrees: city.stats.forestTrees,
+  lamps: city.stats.lamps,
+  trafficLights: city.stats.trafficLights,
+  zones: city.stats.zones,
+};
+
+const game = {
+  money: 0,
+  timeHours: timeForShot(params.shot, START_TIME),
+  wanted: 0,
+  objective: 'Jelajahi Teluk Rimba — WASD jalan, seret mouse untuk kamera',
+  elapsed: 0,
+  started: false,
+  speedKmh: 0,
+};
+
+const hud = createHud(city);
+const player = createPlayer(city, start.x, start.z);
+const input = createInput(canvas);
+if (!params.hud) document.getElementById('hud').style.display = 'none';
+
+// Start screen: click to start (also resumes the AudioContext; sounds land
+// in the audio phase — for now the context is just unlocked, no sound yet).
+const overlay = document.getElementById('start-screen');
+let audioCtx = null;
+function startGame() {
+  if (game.started) return;
+  game.started = true;
+  overlay.style.display = 'none';
   try {
-    return Number.parseInt(window.localStorage.getItem(BEST_KEY) ?? '0', 10) || 0;
-  } catch {
-    return 0;
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch { /* audio is optional in Phase A */ }
+  hud.showHint('WASD jalan • Shift lari • seret mouse untuk kamera • M peta (nanti)');
+}
+overlay.addEventListener('click', startGame);
+overlay.addEventListener('keydown', (e) => { if (e.code === 'Enter' || e.code === 'Space') startGame(); });
+
+function stepWorld(dt) {
+  game.elapsed += dt;
+  game.timeHours = (game.timeHours + (dt * params.timeScale * 24) / DAY_LENGTH) % 24;
+  if (game.started) {
+    const px = player.state.x, pz = player.state.z;
+    player.step(input, dt);
+    const moved = Math.hypot(player.state.x - px, player.state.z - pz);
+    game.speedKmh = (moved / Math.max(dt, 1e-6)) * 3.6;
+  } else if (input.takeActions() & ACTION_CONFIRM) {
+    startGame();
   }
+  hud.update(dt, {
+    money: game.money,
+    timeHours: game.timeHours,
+    wanted: game.wanted,
+    speedKmh: game.speedKmh,
+    objective: game.objective,
+  });
+  hud.drawMinimap(player.state, game.timeHours);
 }
 
-function saveBest(value) {
-  try {
-    window.localStorage.setItem(BEST_KEY, String(value));
-  } catch {
-    // Storage can be off (private windows): the best score then lasts this visit only.
+// ---- headless fast-sim (tests only): no WebGL, fixed ticks, autopilot ----
+// The autopilot walks the player along a loop of road nodes, so the sim
+// proves movement + collision + the clock without drawing anything.
+function runSim() {
+  const loop = [[0, -400], [400, -400], [400, 400], [-400, 400], [-400, -400], [0, -400]];
+  let target = 0;
+  let steps = 0, blocked = 0;
+  const fakeInput = {
+    forward: false, back: false, left: false, right: false, run: true,
+    takeActions: () => 0, takeDrag: () => ({ dx: 0, dy: 0 }), takeWheel: () => 0,
+  };
+  game.started = true;
+  for (let t = 0; t < 1200; t++) {
+    const [tx, tz] = loop[target];
+    const dx = tx - player.state.x, dz = tz - player.state.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 6) { target = (target + 1) % loop.length; continue; }
+    // Steer the camera yaw so "forward" points at the target.
+    player.state.camYaw = Math.atan2(-dx, -dz);
+    fakeInput.forward = true;
+    const bx = player.state.x, bz = player.state.z;
+    player.step(fakeInput, STEP);
+    if (Math.hypot(player.state.x - bx, player.state.z - bz) < 0.001) blocked++;
+    game.elapsed += STEP;
+    game.timeHours = (game.timeHours + (STEP * 24) / DAY_LENGTH) % 24;
+    steps++;
   }
+  window.__SIM_DONE__ = {
+    steps, blocked,
+    player: { x: +player.state.x.toFixed(1), z: +player.state.z.toFixed(1) },
+    timeHours: +game.timeHours.toFixed(2),
+    connected: window.__CITY_STATS__.connected,
+    buildings: window.__CITY_STATS__.buildings,
+  };
+  document.title = 'SIM DONE steps=' + steps + ' blocked=' + blocked;
+  return window.__SIM_DONE__;
 }
 
-function runShot(name) {
-  const scene = stageShot(name, world);
-  let painted = 0;
-  function paint() {
-    renderer.draw(world.state, scene.screen, scene.best);
-    painted += 1;
-    if (painted < 2) requestAnimationFrame(paint);
-    else window.__shotReady = true;
-  }
-  requestAnimationFrame(paint);
-}
-
-function runGame() {
-  const input = createInput(canvas);
-  let screen = SCREEN_TITLE;
-  let best = readBest();
-  let accumulator = 0;
+if (params.sim) {
+  // No renderer at all: pure logic, fast.
+  const result = runSim();
+  console.log('[sim]', JSON.stringify(result));
+} else {
+  const renderer = createRenderer(canvas, city);
+  const playerMesh = renderer.makePlayerMesh(player.figureGeom());
   let last = performance.now();
+  let acc = 0;
+  let frames = 0, fpsTime = 0, fps = 0;
+  let shotReady = false;
 
-  // Screen readers (and anyone watching the page's text) hear the screen changes and each hit.
-  function announce(message) {
-    status.textContent = message;
-  }
-
-  function startGame() {
-    world.reset();
-    accumulator = 0;
-    screen = SCREEN_PLAY;
-    announce(`Playing. ${LIVES} lives.`);
-  }
-
-  function endGame() {
-    screen = SCREEN_OVER;
-    if (world.state.score > best) {
-      best = world.state.score;
-      saveBest(best);
+  function cameraForFrame() {
+    if (params.cam === 'aerial') {
+      return { eye: [0, 680, 430], center: [0, 0, -20] };
     }
-    announce(`Game over. Score ${world.state.score}. Best ${best}.`);
-  }
-
-  function handleActions() {
-    const actions = input.takeActions();
-    if (actions & ACTION_CONFIRM && (screen === SCREEN_TITLE || screen === SCREEN_OVER)) startGame();
-    else if (actions & ACTION_PAUSE && screen === SCREEN_PLAY) {
-      screen = SCREEN_PAUSED;
-      announce('Paused.');
-    } else if (actions & (ACTION_PAUSE | ACTION_CONFIRM) && screen === SCREEN_PAUSED) {
-      screen = SCREEN_PLAY;
-      announce('Playing.');
+    if (params.cam === 'street') {
+      const p = player.state;
+      return {
+        eye: [p.x + 6, p.y + 3.2, p.z + 8],
+        center: [p.x, p.y + 1.5, p.z],
+      };
     }
-  }
-
-  function step() {
-    if (screen === SCREEN_TITLE) {
-      world.step(STEP, 0, true);
-      return;
-    }
-    const events = world.step(STEP, input.direction(), false);
-    if (events & EVENT_OVER) endGame();
-    else if (events & EVENT_HIT) announce(world.state.lives === 1 ? 'Hit. 1 life left.' : `Hit. ${world.state.lives} lives left.`);
+    return player.camera();
   }
 
   function frame(now) {
     requestAnimationFrame(frame);
-    accumulator += Math.min((now - last) / 1000, MAX_FRAME);
+    let dt = Math.min(0.25, (now - last) / 1000);
     last = now;
-    handleActions();
-    if (screen === SCREEN_TITLE || screen === SCREEN_PLAY) {
-      while (accumulator >= STEP && (screen === SCREEN_TITLE || screen === SCREEN_PLAY)) {
-        step();
-        accumulator -= STEP;
-      }
-    } else {
-      accumulator = 0;
+    acc += dt;
+    while (acc >= STEP) { stepWorld(STEP); acc -= STEP; }
+    const cam = cameraForFrame();
+    const model = mat4TRS(player.state.x, player.state.y, player.state.z, player.state.facing, 1, 1, 1);
+    renderer.render({
+      eye: cam.eye, center: cam.center,
+      timeHours: game.timeHours, playerMesh, playerModel: model,
+      elapsed: game.elapsed,
+    });
+    frames++;
+    fpsTime += dt;
+    if (fpsTime >= 0.5) {
+      fps = frames / fpsTime;
+      frames = 0; fpsTime = 0;
+      window.__PERF__ = {
+        fps: Math.round(fps),
+        calls: renderer.calls,
+        tris: renderer.tris,
+        timeHours: +game.timeHours.toFixed(2),
+      };
     }
-    renderer.draw(world.state, screen, best);
+    if (!shotReady) {
+      shotReady = true;
+      setTimeout(() => { window.__shotReady = true; }, 400);
+    }
   }
-
-  // Leaving the tab pauses a running game rather than letting blocks fall unseen.
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden && screen === SCREEN_PLAY) {
-      screen = SCREEN_PAUSED;
-      announce('Paused.');
-    }
-  });
-
-  announce('Block Dodger. Press Space or click to start.');
+  window.__PERF__ = { fps: 0, calls: 0, tris: 0, timeHours: game.timeHours };
   requestAnimationFrame(frame);
 }
-
-if (shot) runShot(shot);
-else runGame();

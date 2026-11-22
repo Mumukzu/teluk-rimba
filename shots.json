@@ -1,5 +1,1 @@
-[
-  { "name": "1-start.jpg", "query": "?shot=start&seed=1" },
-  { "name": "2-play.jpg", "query": "?shot=play&seed=1" },
-  { "name": "3-end.jpg", "query": "?shot=end&seed=1" }
-]
+[{"name":"1-cover.jpg","notes":"Daytime cover: player on a main road, HUD + minimap visible, downtown behind","query":"?shot=day&cam=street&hud=1"},{"name":"2-city.jpg","notes":"Full city from the air: downtown, river, beach, sea, volcano","query":"?shot=day&cam=aerial&hud=0"},{"name":"3-night.jpg","notes":"Night action: street lamps on, wanted stars + minimap on the HUD","query":"?shot=night&cam=street&hud=1"},{"name":"4-feature.jpg","notes":"Feature frame: beachfront / port, HUD hidden","query":"?shot=day&cam=street&hud=0"}]
