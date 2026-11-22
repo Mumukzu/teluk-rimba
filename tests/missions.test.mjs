@@ -144,6 +144,8 @@ check('mission 5 boat escape target is in the sea', missionById(5).steps[2].x > 
     && missions.missionBoat.x === 660 && missions.missionBoat.z === 430,
     missions.missionBoat ? `(${missions.missionBoat.x},${missions.missionBoat.z})` : 'none');
   check('mission boat is parked (does not sail away)', missions.missionBoat.parked === true);
+  check('mission 5 opens the east bound to 665 (wade to the boat)', missions.worldBound().max === 665);
+  check('mission 5 sea limit is 665', missions.seaLimit() === 665);
   game.driving = { type: 'car' };
   stepTo(missions, player, 620, 380);
   check('mission 5 reached the harbor', missions.state.stepIdx === 1);

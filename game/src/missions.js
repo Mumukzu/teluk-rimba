@@ -341,8 +341,13 @@ export function createMissions(ctx) {
 
   // Mission 6 opens the mountain (clamp -800); mission 5 lets the player
   // wade to the boat (sea limit 650). Otherwise the normal city bounds.
+  // Mission 6 opens the mountain road (x/z down to -800); mission 5 lets
+  // the player wade east to the boat at x=660 (the normal +650 world bound
+  // would stop the player at the shoreline — the sea limit alone is not
+  // enough, the world bound clamps first).
   function worldBound() {
     if (state.status === 'active' && state.id === 6) return { min: -800, max: 650 };
+    if (state.status === 'active' && state.id === 5) return { min: -650, max: 665 };
     return { min: -650, max: 650 };
   }
   function seaLimit() {
