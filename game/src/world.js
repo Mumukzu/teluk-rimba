@@ -10,7 +10,7 @@ function groundColor(x, z, h) {
   if (h > 60) return [0.42, 0.4, 0.38]; // volcano rock
   if (h > 25) return [0.32, 0.48, 0.26]; // forested slope
   if (x > 590) return [0.78, 0.72, 0.56]; // beach
-  return [0.3, 0.52, 0.26]; // tropical grass
+  return [0.33, 0.5, 0.29]; // tropical grass, slightly desaturated (was 0.30, 0.52, 0.26)
 }
 
 export function buildTerrain() {
