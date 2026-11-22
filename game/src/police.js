@@ -148,5 +148,16 @@ export function createWanted(city, traffic, peds, opts = {}) {
     }
   }
 
-  return { state, step, addHeat, syncPolice };
+  // Lose heat (a medkit from the shop patches the player up): drops the
+  // wanted level by whole stars and pulls the police cars off.
+  function reduceHeat(n) {
+    state.heat = Math.max(0, state.heat - n);
+    const newWanted = Math.min(3, Math.ceil(state.heat));
+    if (newWanted !== state.wanted) {
+      state.wanted = newWanted;
+      syncPolice();
+    }
+  }
+
+  return { state, step, addHeat, reduceHeat, syncPolice };
 }

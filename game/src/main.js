@@ -11,7 +11,7 @@
 //   &weather=rain|wet|clear  force the weather
 import { STEP, DAY_LENGTH, START_TIME, START_POS, VEHICLES, CULL_DIST } from './config.js';
 import { generateCity, isConnected, placeNameAt, buildingAABBs, terrainHeight, riverDistance, RIVER_POINTS } from './city.js';
-import { createInput, ACTION_CONFIRM, ACTION_ENTER, ACTION_HORN } from './input.js';
+import { createInput, ACTION_CONFIRM, ACTION_ENTER, ACTION_HORN, ACTION_FIRE, ACTION_MEDKIT, ACTION_DRINK, ACTION_MAP } from './input.js';
 import { createPlayer } from './player.js';
 import { createHud } from './hud.js';
 import { createRenderer } from './render.js';
@@ -24,6 +24,7 @@ import { createMissions } from './missions.js';
 import { createAutopilot } from './autopilot.js';
 import { createAircraft } from './air.js';
 import { createAudio, createSettingsUI } from './audio.js';
+import { createShop, createCoins, createStunts, createCouriers, createShopUI, SHOP_POS, COIN_SPOTS } from './extras.js';
 import { saveGame, loadGame, clearSave } from './save.js';
 import { mat4TRS } from './gl.js';
 
@@ -40,7 +41,7 @@ const start = params.spawn || START_POS;
 // (see startGame); the settings panel + debug surface live on window.
 const audio = createAudio(city);
 window.__AUDIO__ = audio;
-createSettingsUI(audio);
+const settings = createSettingsUI(audio); // full settings menu (Phase E2)
 // First gesture anywhere also unlocks the AudioContext (the start screen
 // click is the normal path; this covers clicks that land elsewhere first).
 window.addEventListener('pointerdown', () => audio.unlock(), { once: true });
@@ -81,15 +82,32 @@ const peds = createPeds(city);
 const wanted = createWanted(city, traffic, peds);
 const weather = createWeather({ override: params.weather || null });
 const aircraft = createAircraft(city);
-// Missions + autopilot (tests only) + save/load.
-let missions;
-const doSave = () => saveGame({ money: game.money, done: missions.doneIds(), active: missions.saveState() });
-missions = createMissions({ city, game, player, traffic, peds, wanted, hud, audio, onSave: doSave });
+// Missions + autopilot (tests only) + save/load + shop/extras (Phase E2).
+let missions, shop, coins, stunts, couriers;
+const doSave = () => saveGame({
+  money: game.money, done: missions.doneIds(), active: missions.saveState(),
+  shop: shop.saveState(), coins: coins.saveState(), stunts: stunts.saveState(),
+  courier: couriers.saveState(),
+});
+couriers = createCouriers({ game, player, hud, audio, onSave: doSave });
+missions = createMissions({ city, game, player, traffic, peds, wanted, hud, audio, onSave: doSave, couriers });
+shop = createShop({ game, wanted, hud, audio, onSave: doSave, rank: () => missions.doneIds().length });
+coins = createCoins({ game, player, hud, audio, onSave: doSave });
+stunts = createStunts({ game, hud, audio, onSave: doSave });
+const shopUI = createShopUI(shop, game);
+player.setRampFn((x, z) => stunts.rampHeightAt(x, z));
 const autopilot = params.autopilot ? createAutopilot(city) : null;
-// Restore a previous session (money + missions), unless a test mission
-// was requested — test runs start fresh from the mission's start point.
+// Restore a previous session (money + missions + shop + coins + stunts +
+// couriers), unless a test mission was requested — test runs start fresh
+// from the mission's start point.
 const saved = loadGame();
-if (saved && !params.mission) missions.restore(saved);
+if (saved && !params.mission) {
+  missions.restore(saved);
+  shop.restore(saved.shop);
+  coins.restore(saved.coins);
+  stunts.restore(saved.stunts);
+  couriers.restore(saved.courier);
+}
 if (params.mission) {
   clearSave();
   const sp = missions.startPos(params.mission);
@@ -110,7 +128,7 @@ function startGame(skipAudio) {
   if (skipAudio) return; // screenshot/test mode: no user gesture, no audio yet
   audio.unlock();
   audio.uiClick();
-  hud.showHint('WASD walk • Shift run • drag mouse for camera • M map (later)');
+  hud.showHint('WASD walk • Shift run • drag mouse for camera • M map');
 }
 overlay.addEventListener('click', startGame);
 overlay.addEventListener('keydown', (e) => { if (e.code === 'Enter' || e.code === 'Space') startGame(); });
@@ -147,10 +165,17 @@ function collideVehicle(nx, nz, radius) {
 function driveStep(v, dt, inp) {
   const tune = VEHICLES[v.type];
   const isBoat = v.type === 'boat' || v.type === 'fishingboat' || v.type === 'sailboat';
+  // Vehicle condition (Phase E2): collisions wear the car down; below 30
+  // the top speed halves until repaired at Rimba Market. Energy-drink
+  // boost adds acceleration (and a little top speed).
+  const cond = v.condition ?? 100;
+  const boosted = shop.isBoosted(game.elapsed);
+  const topSpeed = tune.maxSpeed * (cond < 30 ? 0.5 : 1) * (boosted ? 1.1 : 1);
+  const accel = tune.accel * (boosted ? 1.25 : 1);
   const fwd = (inp.forward ? 1 : 0) - (inp.back ? 1 : 0);
   const steer = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
-  if (fwd > 0) v.speed = Math.min(tune.maxSpeed, v.speed + tune.accel * dt);
-  else if (fwd < 0) v.speed = Math.max(-tune.maxSpeed * 0.4, v.speed - tune.accel * 1.4 * dt);
+  if (fwd > 0) v.speed = Math.min(topSpeed, v.speed + accel * dt);
+  else if (fwd < 0) v.speed = Math.max(-topSpeed * 0.4, v.speed - accel * 1.4 * dt);
   else v.speed = Math.abs(v.speed) < 0.5 ? 0 : v.speed - Math.sign(v.speed) * 6 * dt;
   const spd = Math.abs(v.speed);
   if (spd > 0.1 && steer !== 0) {
@@ -167,7 +192,15 @@ function driveStep(v, dt, inp) {
     if (fwd < 0 && v.speed > 6) audio.brake();
     if (steer !== 0 && Math.abs(v.speed) > 12) audio.screech();
     const blocked = collideVehicle(nx, v.z, radius) || collideVehicle(v.x, nz, radius);
-    if (blocked && Math.abs(v.speed) > 4) audio.collision(Math.abs(v.speed) * 3.6);
+    if (blocked && Math.abs(v.speed) > 4) {
+      audio.collision(Math.abs(v.speed) * 3.6);
+      // Hard hits wear the vehicle down (Phase E2 shop: repair).
+      v.condition = Math.max(0, (v.condition ?? 100) - Math.abs(v.speed) * 1.5);
+      if (v.condition < 30 && !v.warned) {
+        v.warned = true;
+        hud.showHint('Vehicle damaged — repair at Rimba Market ($100).');
+      }
+    }
   }
   if (isBoat) {
     // Boats stay on water: sea (east) or the river.
@@ -183,7 +216,10 @@ function driveStep(v, dt, inp) {
     v.x = Math.max(wb.min, Math.min(wb.max, v.x));
     v.z = Math.max(wb.min, Math.min(wb.max, v.z));
     if (v.x > 640) v.x = 640; // land vehicles stop at the sea
-    v.y = Math.max(0, terrainHeight(v.x, v.z));
+    // Stunt ramps (Phase E2): the wedge lifts the car, and a fast hit at
+    // the lip launches it into a ballistic arc (stunts.step returns the
+    // extra height; landing completes the stunt).
+    v.y = Math.max(0, terrainHeight(v.x, v.z)) + stunts.step(dt, v);
   }
   // Camera follows behind the vehicle (drag still lets the player look around).
   const drag = inp.takeDrag();
@@ -247,6 +283,28 @@ window.__GAME__ = {
 window.__MISSIONS__ = missions;
 window.__SAVE__ = { save: doSave, load: loadGame, clear: clearSave };
 window.__AIRCRAFT__ = aircraft;
+window.__SHOP__ = shop;
+window.__EXTRAS__ = { shop, coins, stunts, couriers };
+
+// Phase E2 helpers: the shop at Rimba Market, and firing the pistol.
+function nearShop() {
+  return Math.hypot(player.state.x - SHOP_POS.x, player.state.z - SHOP_POS.z) < 8;
+}
+function fireWeapon() {
+  const r = shop.fire();
+  if (r === 'fired') {
+    audio.gunshot();
+    wanted.addHeat(1);
+    peds.triggerFlee(player.state.x, player.state.z, 40);
+  }
+  // 'empty' (click + hint) and 'noweapon' (silent) are handled in shop.fire.
+}
+// Dead input while the shop menu is open: the world keeps running, but the
+// player cannot walk/drive until the panel is closed (Esc / Close button).
+const deadInput = {
+  forward: false, back: false, left: false, right: false, run: false,
+  takeActions: () => 0, takeDrag: () => ({ dx: 0, dy: 0 }), takeWheel: () => 0,
+};
 
 function stepWorld(dt) {
   game.elapsed += dt;
@@ -255,10 +313,26 @@ function stepWorld(dt) {
   weather.stepDrops(dt, player.state.x, player.state.z);
   if (game.started) {
     // Autopilot (tests only) steers the same input the player would use.
-    const effInput = (autopilot && autopilot.enabled) ? autopilot.input : input;
+    // While the shop menu is open the input is dead (see deadInput above).
+    const effInput = (shopUI && shopUI.isOpen) ? deadInput
+      : (autopilot && autopilot.enabled) ? autopilot.input : input;
     const actions = effInput.takeActions();
-    if (actions & ACTION_ENTER) enterExitVehicle();
+    if (actions & ACTION_ENTER) {
+      // E on foot at Rimba Market opens the shop — unless a vehicle is
+      // right there to enter (entering the car wins).
+      if (!game.driving && nearShop() && !traffic.nearestEnterable(player.state.x, player.state.z, 5)) {
+        if (shopUI) shopUI.open();
+      } else {
+        enterExitVehicle();
+      }
+    }
     if (actions & ACTION_HORN && game.driving) audio.horn(game.driving.type);
+    if (actions & ACTION_FIRE) fireWeapon();
+    if (actions & ACTION_MEDKIT) shop.useMedkit();
+    if (actions & ACTION_DRINK) shop.useDrink(game.elapsed);
+    if (actions & ACTION_MAP) {
+      hud.toggleMap(player.state, game.timeHours, mapMarkers());
+    }
     const px = player.state.x, pz = player.state.z;
     if (game.driving) {
       driveStep(game.driving, dt, effInput);
@@ -273,16 +347,23 @@ function stepWorld(dt) {
     wanted.step(dt, { x: player.state.x, z: player.state.z, speedKmh: game.speedKmh });
     game.wanted = wanted.state.wanted;
     if (wanted.state.busted) {
-      const fine = Math.min(game.money, 100);
+      // Body armor (shop) absorbs half the fine, once per armor.
+      const fine = shop.bustedFine(Math.min(game.money, 100));
       game.money -= fine;
       audio.busted();
       hud.showHint('Busted! The police fined you $' + fine + '. Wanted level cleared.');
       game.objective = 'Explore Teluk Rimba — WASD to walk, drag mouse for camera';
       if (missions.active) missions.fail('Busted by the police');
+      if (couriers.active) couriers.fail('Busted by the police');
     }
     // Missions, autopilot and aircraft tick with the player.
     // (actions go to the mission board: E on foot at the plaza takes a job.)
     missions.step(dt, actions);
+    // Phase E2 extras tick: coins (walk into them), courier jobs, and the
+    // energy-drink boost that also speeds up the player on foot.
+    coins.step();
+    couriers.step(dt);
+    player.setBoost(shop.isBoosted(game.elapsed) ? 1.4 : 1);
     // Audio: one update per step with the full world state (area ambience,
     // engine, siren, helicopter, rain, footsteps, random street life).
     audio.update(dt, {
@@ -313,10 +394,14 @@ function stepWorld(dt) {
     // Objective hints.
     if (missions.active) {
       game.objective = missions.objectiveText();
+    } else if (couriers.active) {
+      game.objective = couriers.objectiveText();
     } else if (game.driving) {
       game.objective = 'Driving the ' + game.driving.type + ' — E to get out';
     } else if (game.wanted > 0) {
       game.objective = 'WANTED — lose the police! Lay low to cool off';
+    } else if (nearShop()) {
+      game.objective = 'Rimba Market — press E to open the shop';
     } else {
       const near = traffic.nearestEnterable(player.state.x, player.state.z, 5);
       game.objective = near
@@ -329,13 +414,30 @@ function stepWorld(dt) {
   }
   hud.update(dt, {
     money: game.money,
+    coins: coins.count(),
     timeHours: game.timeHours,
     wanted: game.wanted,
     speedKmh: game.speedKmh,
     objective: game.objective,
     place: game.place,
   });
-  hud.drawMinimap(player.state, game.timeHours, missions.marker());
+  // Full-map markers (M key): mission/board target, the shop, coins found.
+  hud.setMapMarkers(mapMarkers());
+  hud.drawMinimap(player.state, game.timeHours, couriers.active ? couriers.marker() : missions.marker());
+}
+
+// Markers for the full-screen map (Phase E2): current objective, shop,
+// and every coin already found (unfound coins stay hidden).
+function mapMarkers() {
+  const markers = [];
+  const m = couriers.active ? couriers.marker() : missions.marker();
+  if (m) markers.push({ x: m.x, z: m.z, color: m.board ? '#4ade80' : '#ffd23f', shape: 'diamond' });
+  markers.push({ x: SHOP_POS.x, z: SHOP_POS.z, color: '#fb923c', shape: 'dollar' });
+  for (const id of coins.collected) {
+    const c = COIN_SPOTS.find((s) => s.id === id);
+    if (c) markers.push({ x: c.x, z: c.z, color: '#ffd23f', shape: 'dot' });
+  }
+  return markers;
 }
 
 // ---- headless fast-sim (tests only): no WebGL, fixed ticks, autopilot ----
@@ -440,15 +542,20 @@ if (params.sim) {
   function buildDynamics() {
     const dyn = {};
     const camX = player.state.x, camZ = player.state.z;
-    const veh = traffic.matricesFor(camX, camZ, CULL_DIST);
+    // Detail toggle (settings menu): Low halves the draw distance.
+    const cull = settings && settings.detail === 'low' ? 90 : CULL_DIST;
+    const veh = traffic.matricesFor(camX, camZ, cull);
     for (const [type, spec] of Object.entries(veh)) {
       dyn['veh_' + type] = spec;
     }
-    const ped = peds.matricesFor(camX, camZ, CULL_DIST);
+    const ped = peds.matricesFor(camX, camZ, cull);
     dyn.ped_torso = ped.torso;
     dyn.ped_legs = ped.legs;
     dyn.ped_heads = ped.heads;
     dyn.ped_hair = ped.hair;
+    // Phase E2: hidden coins (spinning gold discs) + stunt ramps (wedges).
+    dyn.coins = coins.matrices(game.elapsed);
+    dyn.ramps = stunts.matrices();
     // Headlights at night: two dots at the front of each moving vehicle,
     // plus a soft beam pool on the road ahead (Mu: all vehicle lights on).
     const isNight = game.timeHours < 6 || game.timeHours >= 18;
@@ -459,7 +566,7 @@ if (params.sim) {
         if (v.parked || v.speed < 0.5) continue;
         if (v.type === 'boat' || v.type === 'fishingboat' || v.type === 'sailboat') continue;
         const d = Math.hypot(v.x - camX, v.z - camZ);
-        if (d > CULL_DIST) continue;
+        if (d > cull) continue;
         const tune = VEHICLES[v.type];
         const fx = Math.sin(v.heading), fz = Math.cos(v.heading);
         const rx = Math.cos(v.heading), rz = -Math.sin(v.heading);
@@ -481,7 +588,7 @@ if (params.sim) {
       // nearly invisible).
       for (const b of traffic.boats) {
         const d = Math.hypot(b.x - camX, b.z - camZ);
-        if (d > CULL_DIST) continue;
+        if (d > cull) continue;
         hl.matrices.push(mat4TRS(b.x, b.y + 2.0, b.z, 0, 1, 1, 1));
         hl.tints.push([1, 0.85, 0.55]);
       }
@@ -501,7 +608,7 @@ if (params.sim) {
         const base = (k * 53.7) % riverTotal;
         const drift = (game.elapsed * 2.5 + k * 17.3) % 120;
         const pt = riverPointAt(base + drift);
-        if (Math.hypot(pt.x - camX, pt.z - camZ) > CULL_DIST + 60) continue;
+        if (Math.hypot(pt.x - camX, pt.z - camZ) > cull + 60) continue;
         fl.matrices.push(mat4TRS(pt.x, -0.7, pt.z, Math.atan2(pt.dx, pt.dz), 0.5, 1, 3.2));
         fl.tints.push([0.9, 0.97, 1]);
       }
@@ -526,8 +633,9 @@ if (params.sim) {
     }
     // Mission marker: a tall bright column at the current objective
     // (yellow) or at the mission board (green, no mission active).
+    // A courier job's target wins over the board marker while active.
     {
-      const m = missions.marker();
+      const m = couriers.active ? couriers.marker() : missions.marker();
       if (m) {
         const pulse = 1 + 0.08 * Math.sin(game.elapsed * 3);
         dyn.marker = {

@@ -4,6 +4,10 @@ export const ACTION_CONFIRM = 1;
 export const ACTION_PAUSE = 2;
 export const ACTION_ENTER = 4;
 export const ACTION_HORN = 8;
+export const ACTION_FIRE = 16; // F: fire the pistol (shop weapon)
+export const ACTION_MEDKIT = 32; // Q: use a medkit (lose 1 wanted star)
+export const ACTION_DRINK = 64; // R: drink an energy drink (30 s speed boost)
+export const ACTION_MAP = 128; // M: toggle the full-screen map
 
 const FORWARD = new Set(['KeyW', 'ArrowUp']);
 const BACK = new Set(['KeyS', 'ArrowDown']);
@@ -14,6 +18,10 @@ const CONFIRM = new Set(['Space', 'Enter']);
 const PAUSE = new Set(['KeyP', 'Escape']);
 const ENTER = new Set(['KeyE']);
 const HORN = new Set(['KeyH']);
+const FIRE = new Set(['KeyF']);
+const MEDKIT = new Set(['KeyQ']);
+const DRINK = new Set(['KeyR']);
+const MAP = new Set(['KeyM']);
 
 export function createInput(canvas) {
   const keys = new Set();
@@ -25,6 +33,10 @@ export function createInput(canvas) {
     else if (PAUSE.has(e.code)) { if (!e.repeat) actions |= ACTION_PAUSE; }
     else if (ENTER.has(e.code)) { if (!e.repeat) actions |= ACTION_ENTER; }
     else if (HORN.has(e.code)) { if (!e.repeat) actions |= ACTION_HORN; }
+    else if (FIRE.has(e.code)) { if (!e.repeat) actions |= ACTION_FIRE; }
+    else if (MEDKIT.has(e.code)) { if (!e.repeat) actions |= ACTION_MEDKIT; }
+    else if (DRINK.has(e.code)) { if (!e.repeat) actions |= ACTION_DRINK; }
+    else if (MAP.has(e.code)) { if (!e.repeat) actions |= ACTION_MAP; }
     else if (FORWARD.has(e.code) || BACK.has(e.code) || LEFT.has(e.code) || RIGHT.has(e.code) || RUN.has(e.code)) {
       keys.add(e.code);
     } else return;

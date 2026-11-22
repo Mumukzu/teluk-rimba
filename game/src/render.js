@@ -17,6 +17,7 @@ import { buildWetGeoms } from './weather.js';
 import { buildNightLightGeoms } from './nightlights.js';
 import { buildPlotDressing } from './plots.js';
 import { heliBodyGeom, heliRotorGeom, planeGeom, heliBeamConeGeom, markerGeom } from './air.js';
+import { wedgeGeom } from './extras.js';
 import { DAY_LENGTH } from './config.js';
 
 const MOON_POS = [-420, 380, -720];
@@ -137,6 +138,9 @@ export function createRenderer(canvas, city) {
   addDyn(progs.litInst, planeGeom(), 1, 'plane');
   addDyn(progs.transpInst, heliBeamConeGeom(), 1, 'heliBeam');
   addDyn(progs.unlitInst, markerGeom(), 1, 'marker');
+  // Phase E2: hidden coins (spinning gold discs) + stunt ramps (wedges).
+  addDyn(progs.unlitInst, plainBox(0.9, 0.9, 0.15, [1, 0.84, 0.2]), 12, 'coins');
+  addDyn(progs.litInst, wedgeGeom(), 4, 'ramps');
   // Flat 1x1 ground quad (up-facing) for headlight beams + water flow.
   const flatQuadGeom = (() => {
     const g = { pos: [], nrm: [], col: [] };

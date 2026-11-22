@@ -11,6 +11,7 @@ export function createPlayer(city, startX, startZ) {
     facing: 0, // radians, direction the player walks
     camYaw: Math.PI * 0.75, camPitch: 0.32, camDist: CAMERA.distance,
     moving: false,
+    boost: 1, // energy-drink multiplier (1 = normal, 1.4 while boosted)
     worldMin: -WORLD.bound, worldMax: WORLD.bound, // missions may widen these
     seaX: WORLD.seaX, // missions may let the player wade further out
   };
@@ -23,6 +24,12 @@ export function createPlayer(city, startX, startZ) {
     state.worldMax = bound.max;
   }
   function setSeaLimit(limit) { state.seaX = limit; }
+  // Energy-drink speed boost (shop phase): walk/run speed multiplier.
+  function setBoost(mult) { state.boost = mult; }
+  // Stunt ramps (shop phase): the player walks up the wedge instead of
+  // clipping through it. main.js installs the ramp height function.
+  let rampHeightAt = () => 0;
+  function setRampFn(fn) { rampHeightAt = fn || (() => 0); }
 
   function collide(nx, nz) {
     const r = PLAYER.radius;
@@ -43,7 +50,7 @@ export function createPlayer(city, startX, startZ) {
     state.camDist += input.takeWheel() * 0.01;
     state.camDist = Math.max(CAMERA.minDistance, Math.min(CAMERA.maxDistance, state.camDist));
     if (state.moving) {
-      const speed = input.run ? PLAYER.runSpeed : PLAYER.walkSpeed;
+      const speed = (input.run ? PLAYER.runSpeed : PLAYER.walkSpeed) * state.boost;
       const sin = Math.sin(state.camYaw), cos = Math.cos(state.camYaw);
       // Camera looks toward -Z rotated by yaw; forward is away from camera.
       let mx = (-sin * fwd + -cos * strafe);
@@ -59,7 +66,7 @@ export function createPlayer(city, startX, startZ) {
       state.x = Math.max(state.worldMin, Math.min(state.worldMax, state.x));
       state.z = Math.max(state.worldMin, Math.min(state.worldMax, state.z));
       if (state.x > state.seaX) state.x = state.seaX;
-      state.y = Math.max(0, terrainHeight(state.x, state.z));
+      state.y = Math.max(0, terrainHeight(state.x, state.z)) + rampHeightAt(state.x, state.z);
     }
   }
 
@@ -96,5 +103,5 @@ export function createPlayer(city, startX, startZ) {
     return g;
   }
 
-  return { state, step, camera, figureGeom, setWorldBound, setSeaLimit };
+  return { state, step, camera, figureGeom, setWorldBound, setSeaLimit, setBoost, setRampFn };
 }

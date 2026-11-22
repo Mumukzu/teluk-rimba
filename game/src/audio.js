@@ -816,22 +816,33 @@ export function createAudio(city) {
 }
 
 // --- settings UI (DOM only; no-op in Node) ---
-// A small Audio button bottom-left + a panel with the five volume sliders
-// and a saved mute toggle. All labels in English.
+// A small Settings button bottom-left + a panel with the five volume
+// sliders, a saved mute toggle, a controls list and a detail toggle
+// (Phase E2: the old Audio panel grew into the full settings menu).
+// All labels in English. Detail is saved in localStorage.
 export function createSettingsUI(audio) {
   if (typeof document === 'undefined') return null;
+  const DETAIL_KEY = 'teluk-rimba-settings-v1';
+  let detail = 'high';
+  try {
+    const saved = JSON.parse(localStorage.getItem(DETAIL_KEY) || 'null');
+    if (saved && (saved.detail === 'high' || saved.detail === 'low')) detail = saved.detail;
+  } catch { /* ignore */ }
+  const saveDetail = () => {
+    try { localStorage.setItem(DETAIL_KEY, JSON.stringify({ detail })); } catch { /* ignore */ }
+  };
   const btn = document.createElement('button');
   btn.id = 'audio-settings-btn';
-  btn.textContent = 'Audio';
+  btn.textContent = 'Settings';
   btn.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:30;background:rgba(0,0,0,.55);color:#fff;border:1px solid rgba(255,255,255,.5);border-radius:6px;padding:6px 12px;font:14px system-ui,sans-serif;cursor:pointer;';
   const panel = document.createElement('div');
   panel.id = 'audio-settings';
-  panel.style.cssText = 'position:fixed;left:12px;bottom:52px;z-index:30;background:rgba(10,16,26,.92);color:#fff;border:1px solid rgba(255,255,255,.35);border-radius:8px;padding:12px 14px;font:14px system-ui,sans-serif;display:none;width:230px;';
+  panel.style.cssText = 'position:fixed;left:12px;bottom:52px;z-index:30;background:rgba(10,16,26,.92);color:#fff;border:1px solid rgba(255,255,255,.35);border-radius:8px;padding:12px 14px;font:14px system-ui,sans-serif;display:none;width:250px;';
   const rows = [
     ['master', 'Master'], ['music', 'Music'], ['effects', 'Effects'],
     ['ambience', 'Ambience'], ['ui', 'Interface'],
   ];
-  let html = '<div style="font-weight:700;margin-bottom:8px;">Audio Settings</div>';
+  let html = '<div style="font-weight:700;margin-bottom:8px;">Settings</div>';
   for (const [key, label] of rows) {
     html += '<label style="display:flex;align-items:center;gap:8px;margin:6px 0;">'
       + '<span style="width:74px;">' + label + '</span>'
@@ -843,7 +854,20 @@ export function createSettingsUI(audio) {
   html += '<label style="display:flex;align-items:center;gap:8px;margin:10px 0 4px;">'
     + '<input type="checkbox" data-mute' + (audio.muted ? ' checked' : '') + '> Mute all'
     + '</label>'
-    + '<button data-close style="margin-top:8px;background:#e8a13a;color:#201503;border:0;border-radius:6px;padding:6px 14px;font-weight:700;cursor:pointer;">Close</button>';
+    + '<div style="border-top:1px solid rgba(255,255,255,.25);margin:10px 0 6px;padding-top:8px;font-weight:700;">Controls</div>'
+    + '<div style="font-size:13px;line-height:1.7;opacity:.92;">'
+    + 'WASD walk &middot; Shift run &middot; drag camera<br>'
+    + 'E enter vehicle / take job &middot; F fire pistol<br>'
+    + 'Q medkit &middot; R energy drink &middot; H horn<br>'
+    + 'M map &middot; P pause'
+    + '</div>'
+    + '<div style="border-top:1px solid rgba(255,255,255,.25);margin:10px 0 6px;padding-top:8px;font-weight:700;">Detail</div>'
+    + '<label style="display:flex;align-items:center;gap:8px;font-size:13px;">'
+    + '<span style="width:74px;">Draw distance</span>'
+    + '<button data-detail style="background:#e8a13a;color:#201503;border:0;border-radius:6px;padding:4px 12px;font-weight:700;cursor:pointer;">' + (detail === 'low' ? 'Low' : 'High') + '</button>'
+    + '<span style="opacity:.75;">Low = faster on weak PCs</span>'
+    + '</label>'
+    + '<button data-close style="margin-top:12px;background:#e8a13a;color:#201503;border:0;border-radius:6px;padding:6px 14px;font-weight:700;cursor:pointer;">Close</button>';
   panel.innerHTML = html;
   panel.querySelectorAll('[data-vol]').forEach((input) => {
     input.addEventListener('input', () => {
@@ -862,6 +886,15 @@ export function createSettingsUI(audio) {
   }
   const closeBtn = panel.querySelector('[data-close]');
   if (closeBtn) closeBtn.addEventListener('click', () => { panel.style.display = 'none'; });
+  const detailBtn = panel.querySelector('[data-detail]');
+  if (detailBtn) {
+    detailBtn.addEventListener('click', () => {
+      detail = detail === 'low' ? 'high' : 'low';
+      detailBtn.textContent = detail === 'low' ? 'Low' : 'High';
+      saveDetail();
+      audio.uiClick();
+    });
+  }
   btn.addEventListener('click', () => {
     // Re-sync the mute box on every open: mute can change through the API
     // or a saved setting, and the box was only set once at creation.
@@ -871,5 +904,5 @@ export function createSettingsUI(audio) {
   });
   document.body.appendChild(btn);
   document.body.appendChild(panel);
-  return { btn, panel };
+  return { btn, panel, get detail() { return detail; } };
 }

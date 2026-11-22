@@ -299,6 +299,15 @@ export function createMissions(ctx) {
           hud.showHint('Press E to take the next job: ' + next.name, 2);
           if (boardCooldown <= 0 && (actions & ACTION_ENTER)) start(next.id);
         }
+      } else if (ctx.couriers && game.started) {
+        // No story mission left: the board hands out repeatable courier
+        // jobs (Phase E2), round-robin, same E-on-foot interaction.
+        const d = Math.hypot(player.state.x - MISSION_BOARD.x, player.state.z - MISSION_BOARD.z);
+        if (d < 6 && !game.driving) {
+          const job = ctx.couriers.nextJob();
+          hud.showHint('Press E for a courier job: ' + job.name + ' ($' + job.reward + ')', 2);
+          if (boardCooldown <= 0 && (actions & ACTION_ENTER)) ctx.couriers.start(job.id);
+        }
       }
       return;
     }
