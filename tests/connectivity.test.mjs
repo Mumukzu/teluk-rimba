@@ -2,7 +2,7 @@
 // FAILS (exit 1) if any part of the city is disconnected from the road graph,
 // if the building count is not exactly 1000, or if a building breaks the rules.
 // Run: node tests/connectivity.test.mjs
-import { generateCity, isConnected, reachableNodes, riverDistance, ROAD_LINES, TARGET_BUILDINGS } from '../game/src/city.js';
+import { generateCity, isConnected, reachableNodes, riverDistance, ROAD_LINES, TARGET_BUILDINGS, ASPHALT_HALF, CORRIDOR_HALF, areaNameAt, placeNameAt } from '../game/src/city.js';
 
 let failures = 0;
 function check(name, ok, detail = '') {
@@ -25,7 +25,7 @@ check('downtown blocks hold 1-2 buildings each', city.blocks.filter((b) => b.zon
 }));
 check('no building sits on a road or in the river', city.buildings.every((b) => {
   for (const L of ROAD_LINES) {
-    const hw = L === -400 || L === -200 || L === 0 || L === 200 || L === 400 ? 9 : 6;
+    const hw = CORRIDOR_HALF(L);
     const inVertical = b.x + b.w / 2 > L - hw && b.x - b.w / 2 < L + hw;
     const inHorizontal = b.z + b.d / 2 > L - hw && b.z - b.d / 2 < L + hw;
     if (inVertical || inHorizontal) return false;
@@ -40,6 +40,21 @@ check('street trees are off the asphalt', city.streetTrees.every((t) => {
   }
   return true;
 }));
+check('palm trees are off the asphalt (kerb strip only)', city.palmTrees.every((t) => {
+  for (const L of ROAD_LINES) {
+    if (Math.abs(t.x - L) <= ASPHALT_HALF(L)) return false;
+    if (Math.abs(t.z - L) <= ASPHALT_HALF(L)) return false;
+  }
+  return true;
+}), `${s.palmTrees} palms`);
+check('beach props sit on sand, never on roads or in the river', city.beachProps.every((p) =>
+  p.x >= 610 && p.x <= 650 && riverDistance(p.x, p.z) >= 25), `${s.beachProps} props`);
+check('every block has a unique non-empty name', (() => {
+  const names = city.blocks.map((b) => b.name);
+  return names.every((n) => n && n.length > 0) && new Set(names).size === names.length;
+})(), `${city.blocks.length} blocks`);
+check('every area has a name', ['downtown', 'commercial', 'residential', 'beach', 'port', 'forest', 'river'].every((z) =>
+  areaNameAt(city, 0, 0).length > 0 && placeNameAt(city, 0, 0).length > 0));
 console.log(`zones: ${JSON.stringify(s.zones)}`);
 console.log(`nodes=${s.nodes} edges=${s.edges} bridges=${s.bridges} streetTrees=${s.streetTrees} forestTrees=${s.forestTrees} lamps=${s.lamps} trafficLights=${s.trafficLights}`);
 

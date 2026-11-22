@@ -61,6 +61,15 @@ export function buildRoadMesh(city) {
       for (let s = x0 + 4; s < x1 - 4; s += 7) {
         quad(g, [s, z - dashW / 2], [s + 3.2, z - dashW / 2], [s + 3.2, z + dashW / 2], [s, z + dashW / 2], 0.06, dashCol);
       }
+      // Main roads are 4 lanes (2 per direction): thin white lane dividers
+      // at +/-3 m split each direction into two lanes.
+      if (main) {
+        for (let s = x0 + 4; s < x1 - 4; s += 7) {
+          for (const off of [-3, 3]) {
+            quad(g, [s, z + off - 0.1], [s + 3.2, z + off - 0.1], [s + 3.2, z + off + 0.1], [s, z + off + 0.1], 0.06, DASH_MINOR);
+          }
+        }
+      }
     }
   }
   for (let i = 0; i < N; i++) {
@@ -75,6 +84,15 @@ export function buildRoadMesh(city) {
       const dashW = main ? 0.28 : 0.2;
       for (let s = z0 + 4; s < z1 - 4; s += 7) {
         quad(g, [x - dashW / 2, s], [x + dashW / 2, s], [x + dashW / 2, s + 3.2], [x - dashW / 2, s + 3.2], 0.06, dashCol);
+      }
+      // Main roads are 4 lanes (2 per direction): thin white lane dividers
+      // at +/-3 m split each direction into two lanes.
+      if (main) {
+        for (let s = z0 + 4; s < z1 - 4; s += 7) {
+          for (const off of [-3, 3]) {
+            quad(g, [x + off - 0.1, s], [x + off + 0.1, s], [x + off + 0.1, s + 3.2], [x + off - 0.1, s + 3.2], 0.06, DASH_MINOR);
+          }
+        }
       }
     }
   }

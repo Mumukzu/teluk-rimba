@@ -3,7 +3,7 @@
 // Nothing here knows about missions or input; main.js drives it.
 import { createPrograms, createMesh, createInstancedMesh, drawMesh, mat4Identity, mat4Perspective, mat4LookAt } from './gl.js';
 import { buildWorldGeoms } from './world.js';
-import { buildBuildingMeshes, buildTreeMesh } from './buildings.js';
+import { buildBuildingMeshes, buildTreeMesh, buildPalmMesh } from './buildings.js';
 import { buildRoadMesh, buildLampMeshes, buildTrafficLightMesh } from './roads.js';
 import { buildBeachPropMeshes } from './beach.js';
 import { DAY_LENGTH } from './config.js';
@@ -19,6 +19,7 @@ export function createRenderer(canvas, city) {
   const world = buildWorldGeoms();
   const buildingMeshes = buildBuildingMeshes(gl, progs, city);
   const treeMesh = buildTreeMesh(gl, progs, city);
+  const palmMesh = buildPalmMesh(city);
   const lampMeshes = buildLampMeshes(city);
   const trafficMesh = buildTrafficLightMesh(city);
   const beachMeshes = buildBeachPropMeshes(city);
@@ -43,6 +44,7 @@ export function createRenderer(canvas, city) {
   addInst(progs.litInst, buildingMeshes.buildings);
   addInst(progs.litInst, buildingMeshes.roofs);
   addInst(progs.litInst, treeMesh);
+  addInst(progs.litInst, palmMesh);
   addInst(progs.litInst, lampMeshes.poles);
   addInst(progs.unlitInst, lampMeshes.heads);
   addInst(progs.unlitInst, trafficMesh);

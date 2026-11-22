@@ -11,8 +11,8 @@ export const TARGET_BUILDINGS = 1000;
 // Road grid: 13 lines per axis, 100 m apart. Mains every other line.
 export const ROAD_LINES = [-600, -500, -400, -300, -200, -100, 0, 100, 200, 300, 400, 500, 600];
 export const MAIN_LINES = new Set([-400, -200, 0, 200, 400]);
-export const CORRIDOR_HALF = (line) => (MAIN_LINES.has(line) ? 9 : 6); // road + sidewalks
-export const ASPHALT_HALF = (line) => (MAIN_LINES.has(line) ? 6 : 3.5);
+export const CORRIDOR_HALF = (line) => (MAIN_LINES.has(line) ? 9 : 7); // road + sidewalks
+export const ASPHALT_HALF = (line) => (MAIN_LINES.has(line) ? 6 : 4); // main: 12 m asphalt (4 lanes); minor: 8 m asphalt (2 lanes) + 3 m sidewalk each side
 export const IS_MAIN = (line) => MAIN_LINES.has(line);
 
 // River: from the volcano (NW) through the city centre to the sea (E).
@@ -467,6 +467,28 @@ export function generateCity(seed = SEED) {
     }
   }
 
+  // --- palm trees: decoration along MAIN roads, in the kerb-side strip ---
+  // (sidewalk, offset 7.5 m from the centre line — never on asphalt),
+  // alternating sides, clear of intersections and the river. Appended at
+  // the end so the rand stream above (and the whole city) is unchanged.
+  const palmTrees = [];
+  for (const L of ROAD_LINES) {
+    if (!IS_MAIN(L)) continue;
+    let side = 1;
+    for (let s = -580; s <= 580; s += 52) {
+      const off = ASPHALT_HALF(L) + 1.5;
+      const px = L + side * off, pz = s + range(rand, -3, 3);
+      if (!nearIntersection(px, pz) && riverDistance(px, pz) >= 20) {
+        palmTrees.push({ x: px, z: pz, s: range(rand, 0.9, 1.25), rot: range(rand, 0, Math.PI * 2) });
+      }
+      const px2 = s + range(rand, -3, 3), pz2 = L + side * off;
+      if (!nearIntersection(px2, pz2) && riverDistance(px2, pz2) >= 20) {
+        palmTrees.push({ x: px2, z: pz2, s: range(rand, 0.9, 1.25), rot: range(rand, 0, Math.PI * 2) });
+      }
+      side *= -1;
+    }
+  }
+
   const zoneCounts = {};
   for (const b of buildings) zoneCounts[b.zone] = (zoneCounts[b.zone] || 0) + 1;
 
@@ -481,6 +503,7 @@ export function generateCity(seed = SEED) {
     lamps,
     trafficLights,
     beachProps,
+    palmTrees,
     stats: {
       buildings: buildings.length,
       nodes: nodes.length,
@@ -491,6 +514,7 @@ export function generateCity(seed = SEED) {
       lamps: lamps.length,
       trafficLights: trafficLights.length,
       beachProps: beachProps.length,
+      palmTrees: palmTrees.length,
       zones: zoneCounts,
     },
   };
