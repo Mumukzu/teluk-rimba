@@ -42,7 +42,7 @@ export const VEHICLES = {
   fishingboat: { maxSpeed: 9, accel: 5, turn: 1.0, len: 7.0, w: 2.6 },
   sailboat: { maxSpeed: 7, accel: 4, turn: 0.9, len: 4.5, w: 1.8 },
 };
-export const TRAFFIC_COUNT = 76; // moving road vehicles
+export const TRAFFIC_COUNT = 124; // moving road vehicles (dense on main roads)
 export const PARKED_COUNT = 24;
 export const PED_COUNT = 300;
 export const CULL_DIST = 160; // hide far peds/vehicles (rendered only)

@@ -14,6 +14,7 @@ import { buildMoonGeom, buildStarsSpec } from './sky.js';
 import { buildVehicleGeoms, headlightGeom } from './vehicles.js';
 import { pedTorsoGeom, pedLegsGeom, pedHeadGeom, pedHairGeom } from './peds.js';
 import { buildWetGeoms } from './weather.js';
+import { buildNightLightGeoms } from './nightlights.js';
 import { DAY_LENGTH } from './config.js';
 
 const MOON_POS = [-420, 380, -720];
@@ -37,6 +38,7 @@ export function createRenderer(canvas, city) {
   const landmarks = buildLandmarks(city);
   const stars = buildStarsSpec();
   const wet = buildWetGeoms();
+  const nightPools = buildNightLightGeoms(city, landmarks);
   const vehicleGeoms = buildVehicleGeoms();
 
   const meshes = [];
@@ -95,6 +97,9 @@ export function createRenderer(canvas, city) {
   // Wet roads (transparent, only while wet) + puddles.
   addStatic(progs.transp, wet.overlay, mat4Identity(), { transparent: true, alpha: 0.35, wetOnly: true });
   addStatic(progs.transp, wet.puddles, mat4Identity(), { transparent: true, alpha: 0.3, wetOnly: true });
+  // Night light pools (transparent, only at night): warm glow on the
+  // streets around lamps, market, plaza, pier and shopfronts.
+  addStatic(progs.transp, nightPools.pools, mat4Identity(), { transparent: true, alpha: 0.38, nightOnly: true });
   // Clouds drift: three separate static meshes sharing one geometry.
   const cloudMesh = createMesh(gl, progs.lit, world.clouds);
   const cloudModels = [
@@ -130,10 +135,10 @@ export function createRenderer(canvas, city) {
     const warm = 1 - Math.max(0, elev); // low sun = warm
     let sunColor = isDay
       ? [0.9 + 0.1 * warm, 0.85, 0.75 + 0.15 * elev]
-      : [0.2, 0.24, 0.38]; // moonlight, cool blue
+      : [0.42, 0.48, 0.62]; // moonlight, cool blue — strong enough to read the streets
     let ambient = isDay
       ? [0.42 + 0.18 * elev, 0.42 + 0.18 * elev, 0.45 + 0.15 * elev]
-      : [0.17, 0.19, 0.26];
+      : [0.33, 0.35, 0.43]; // night ambient: trees, people and cars stay visible, sky stays dark
     let sky = isDay
       ? [0.45 + 0.25 * elev - 0.25 * warm, 0.62 + 0.15 * elev - 0.2 * warm, 0.82 - 0.25 * warm]
       : [0.03, 0.05, 0.1];

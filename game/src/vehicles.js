@@ -148,17 +148,23 @@ export function createTraffic(city, opts = {}) {
   }
 
   // --- spawn moving traffic ---
+  // Dense on MAIN roads (Mu: intersections must look busy, not empty):
+  // ~70% of vehicles spawn on a main-road edge, the rest anywhere.
+  const mainEdges = city.edges.filter((e) => e.main);
+  const pickEdge = () => (rand() < 0.7 && mainEdges.length
+    ? mainEdges[Math.floor(rand() * mainEdges.length)]
+    : city.edges[Math.floor(rand() * city.edges.length)]);
   const MOVING = [
-    ['motorbike', 22], ['scooter', 10], ['car', 8], ['sedan', 6],
-    ['mpv', 4], ['jeep', 3], ['angkot', 6], ['bajaj', 6],
-    ['truck', 4], ['bus', 3], ['firetruck', 1], ['ambulance', 1], ['supercar', 2],
+    ['motorbike', 34], ['scooter', 16], ['car', 12], ['sedan', 10],
+    ['mpv', 8], ['jeep', 6], ['angkot', 10], ['bajaj', 10],
+    ['truck', 6], ['bus', 5], ['firetruck', 1], ['ambulance', 2], ['supercar', 4],
   ];
   const route = busRouteNodes(city);
   route.forEach((id, k) => { if (k % 3 === 0) BUS_STOPS.add(id); });
   let moving = 0;
   for (const [type, count] of MOVING) {
     for (let k = 0; k < count && moving < TRAFFIC_COUNT; k++) {
-      const edge = city.edges[Math.floor(rand() * city.edges.length)];
+      const edge = pickEdge();
       const main = edge.main;
       const lane = main ? (rand() < 0.6 ? 1.5 : 4.5) : 2.0;
       const dir = rand() < 0.5 ? 1 : -1;

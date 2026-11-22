@@ -378,6 +378,8 @@ export function buildLandmarks(city) {
     busStopGeom,
     busStops,
     stationGeom,
+    gasSpot,
+    shopSpot,
     billboards: { geom: billboardGeom, matrices: billboardMatrices, tints: billboardTints },
     billboardPoles,
     pierGeom,
