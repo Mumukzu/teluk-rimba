@@ -1,7 +1,8 @@
 // Teluk Rimba — keyboard + pointer input. Held keys steer; one-shot presses
-// (start, pause) are queued as flags and taken once by the loop.
+// (start, pause, enter/exit vehicle) are queued as flags and taken once.
 export const ACTION_CONFIRM = 1;
 export const ACTION_PAUSE = 2;
+export const ACTION_ENTER = 4;
 
 const FORWARD = new Set(['KeyW', 'ArrowUp']);
 const BACK = new Set(['KeyS', 'ArrowDown']);
@@ -10,6 +11,7 @@ const RIGHT = new Set(['KeyD', 'ArrowRight']);
 const RUN = new Set(['ShiftLeft', 'ShiftRight']);
 const CONFIRM = new Set(['Space', 'Enter']);
 const PAUSE = new Set(['KeyP', 'Escape']);
+const ENTER = new Set(['KeyE']);
 
 export function createInput(canvas) {
   const keys = new Set();
@@ -19,6 +21,7 @@ export function createInput(canvas) {
   window.addEventListener('keydown', (e) => {
     if (CONFIRM.has(e.code)) { if (!e.repeat) actions |= ACTION_CONFIRM; }
     else if (PAUSE.has(e.code)) { if (!e.repeat) actions |= ACTION_PAUSE; }
+    else if (ENTER.has(e.code)) { if (!e.repeat) actions |= ACTION_ENTER; }
     else if (FORWARD.has(e.code) || BACK.has(e.code) || LEFT.has(e.code) || RIGHT.has(e.code) || RUN.has(e.code)) {
       keys.add(e.code);
     } else return;

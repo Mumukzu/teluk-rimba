@@ -70,6 +70,43 @@ export function buildPalmMesh(city) {
   return { geom, matrices, tints, prog: null };
 }
 
+export function buildLitWindows(city) {
+  // Warm lit windows: small bright quads on building facades, drawn with
+  // the unlit program ONLY at night, so the city glitters after dark while
+  // the sky and horizon stay dark. One instanced draw call.
+  const quad = (() => {
+    const g = { pos: [], nrm: [], col: [] };
+    const white = [1, 1, 1];
+    const n = [0, 0, 1];
+    // CCW from +z: the front face points out of the building facade.
+    g.pos.push(-0.9, -0.65, 0, 0.9, -0.65, 0, 0.9, 0.65, 0, -0.9, -0.65, 0, 0.9, 0.65, 0, -0.9, 0.65, 0);
+    for (let k = 0; k < 6; k++) g.nrm.push(...n);
+    for (let k = 0; k < 6; k++) g.col.push(...white);
+    return g;
+  })();
+  const matrices = [], tints = [];
+  const WARM = [[1, 0.85, 0.55], [1, 0.78, 0.45], [0.95, 0.9, 0.65]];
+  const COOL = [[0.7, 0.85, 1], [0.8, 0.9, 1]];
+  const perZone = { downtown: 8, commercial: 5, residential: 2, beach: 4, port: 2, forest: 1 };
+  for (const b of city.buildings) {
+    const n = perZone[b.zone] || 2;
+    for (let k = 0; k < n; k++) {
+      const h = (k * 2654435761) % 1000 / 1000;
+      const face = k % 2 === 0 ? 1 : -1;
+      const along = ((k * 40503) % 100) / 100 - 0.5;
+      const y = 2.5 + h * Math.max(2, b.h - 5);
+      const fx = b.x + Math.sin(b.rot) * (b.d / 2 + 0.08) * face + Math.cos(b.rot) * along * b.w * 0.7;
+      const fz = b.z + Math.cos(b.rot) * (b.d / 2 + 0.08) * face - Math.sin(b.rot) * along * b.w * 0.7;
+      const rotY = b.rot + (face > 0 ? 0 : Math.PI);
+      matrices.push(mat4TRS(fx, y, fz, rotY, 1, 1, 1));
+      const warm = ((k * 7 + b.x) % 10) < 7;
+      const pal = warm ? WARM : COOL;
+      tints.push(pal[(k + Math.floor(Math.abs(b.x))) % pal.length]);
+    }
+  }
+  return { geom: quad, matrices, tints };
+}
+
 export function buildTreeMesh(gl, progs, city) {
   // One tree geometry (trunk + two canopy boxes), instanced for street + forest.
   const trunk = plainBox(0.34, 1.4, 0.34, [0.4, 0.28, 0.16]);

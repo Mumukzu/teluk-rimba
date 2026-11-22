@@ -1,12 +1,22 @@
 // Teluk Rimba — renderer: owns the WebGL2 context, compiles the programs,
 // uploads every mesh once, and draws the frame with a day-night light rig.
-// Nothing here knows about missions or input; main.js drives it.
-import { createPrograms, createMesh, createInstancedMesh, drawMesh, mat4Identity, mat4Perspective, mat4LookAt } from './gl.js';
+// Static meshes draw once; vehicles, peds, rain, headlights and the
+// lighthouse beam are dynamic instanced meshes refilled every frame.
+// Night-only meshes (lit windows, moon, stars, headlights) are skipped in
+// daylight. Nothing here knows about missions or input; main.js drives it.
+import { createPrograms, createMesh, createInstancedMesh, createDynamicInstancedMesh, updateDynamicInstancedMesh, drawMesh, mat4Identity, mat4Perspective, mat4LookAt, mat4TRS, plainBox } from './gl.js';
 import { buildWorldGeoms } from './world.js';
-import { buildBuildingMeshes, buildTreeMesh, buildPalmMesh } from './buildings.js';
+import { buildBuildingMeshes, buildTreeMesh, buildPalmMesh, buildLitWindows } from './buildings.js';
 import { buildRoadMesh, buildLampMeshes, buildTrafficLightMesh } from './roads.js';
 import { buildBeachPropMeshes } from './beach.js';
+import { buildLandmarks } from './landmarks.js';
+import { buildMoonGeom, buildStarsSpec } from './sky.js';
+import { buildVehicleGeoms, headlightGeom } from './vehicles.js';
+import { pedTorsoGeom, pedLegsGeom, pedHeadGeom } from './peds.js';
+import { buildWetGeoms } from './weather.js';
 import { DAY_LENGTH } from './config.js';
+
+const MOON_POS = [-420, 380, -720];
 
 export function createRenderer(canvas, city) {
   const gl = canvas.getContext('webgl2', { antialias: true });
@@ -20,19 +30,30 @@ export function createRenderer(canvas, city) {
   const buildingMeshes = buildBuildingMeshes(gl, progs, city);
   const treeMesh = buildTreeMesh(gl, progs, city);
   const palmMesh = buildPalmMesh(city);
+  const litWindows = buildLitWindows(city);
   const lampMeshes = buildLampMeshes(city);
   const trafficMesh = buildTrafficLightMesh(city);
   const beachMeshes = buildBeachPropMeshes(city);
+  const landmarks = buildLandmarks(city);
+  const stars = buildStarsSpec();
+  const wet = buildWetGeoms();
+  const vehicleGeoms = buildVehicleGeoms();
 
   const meshes = [];
-  const addStatic = (prog, geom, model) => {
+  const addStatic = (prog, geom, model, extra = {}) => {
     const m = createMesh(gl, prog, geom);
-    meshes.push({ mesh: m, prog, model });
+    meshes.push({ mesh: m, prog, model, ...extra });
     return m;
   };
-  const addInst = (prog, spec) => {
+  const addInst = (prog, spec, extra = {}) => {
     const m = createInstancedMesh(gl, prog, spec.geom, spec.matrices, spec.tints);
-    meshes.push({ mesh: m, prog, model: mat4Identity() });
+    meshes.push({ mesh: m, prog, model: mat4Identity(), ...extra });
+    return m;
+  };
+  const dynamicMeshes = {};
+  const addDyn = (prog, geom, capacity, name) => {
+    const m = createDynamicInstancedMesh(gl, prog, geom, capacity);
+    dynamicMeshes[name] = { mesh: m, prog };
     return m;
   };
 
@@ -53,6 +74,27 @@ export function createRenderer(canvas, city) {
   addInst(progs.litInst, beachMeshes.lounger);
   addInst(progs.litInst, beachMeshes.ring);
   addInst(progs.litInst, beachMeshes.ball);
+  // Landmarks: night market, vendors, plaza, bus stops, SPBU+bengkel, pier,
+  // lighthouse tower, billboard poles.
+  addInst(progs.litInst, landmarks.stalls);
+  addStatic(progs.lit, landmarks.marketPoles, mat4Identity());
+  addInst(progs.unlitInst, landmarks.lightDots);
+  addStatic(progs.lit, landmarks.vendorGeom, mat4Identity());
+  addStatic(progs.lit, landmarks.plazaGeom, mat4Identity());
+  addStatic(progs.lit, landmarks.busStopGeom, mat4Identity());
+  addStatic(progs.lit, landmarks.stationGeom, mat4Identity());
+  addStatic(progs.lit, landmarks.billboardPoles, mat4Identity());
+  addInst(progs.unlitInst, landmarks.billboards);
+  addStatic(progs.lit, landmarks.pierGeom, mat4Identity());
+  addStatic(progs.lit, landmarks.lighthouseGeom, mat4Identity());
+  addInst(progs.unlitInst, landmarks.glow);
+  // Night sky: lit windows + moon + stars, drawn only at night.
+  addInst(progs.unlitInst, litWindows, { nightOnly: true });
+  addInst(progs.unlitInst, { geom: buildMoonGeom(), matrices: [mat4TRS(MOON_POS[0], MOON_POS[1], MOON_POS[2], 0, 1, 1, 1)], tints: [[1, 1, 1]] }, { nightOnly: true });
+  addInst(progs.unlitInst, stars, { nightOnly: true });
+  // Wet roads (transparent, only while wet) + puddles.
+  addStatic(progs.transp, wet.overlay, mat4Identity(), { transparent: true, alpha: 0.35, wetOnly: true });
+  addStatic(progs.transp, wet.puddles, mat4Identity(), { transparent: true, alpha: 0.3, wetOnly: true });
   // Clouds drift: three separate static meshes sharing one geometry.
   const cloudMesh = createMesh(gl, progs.lit, world.clouds);
   const cloudModels = [
@@ -60,11 +102,24 @@ export function createRenderer(canvas, city) {
     { x: 200, y: 210, z: 300, dx: 0.4 },
     { x: -100, y: 175, z: 500, dx: 0.5 },
   ];
+  // Dynamic instanced meshes: one per vehicle type + peds (3 parts) +
+  // rain streaks + headlights + the lighthouse beam.
+  for (const [type, geom] of Object.entries(vehicleGeoms)) {
+    addDyn(progs.litInst, geom, type === 'motorbike' ? 60 : type === 'scooter' ? 30 : type === 'car' ? 30 : 20, 'veh_' + type);
+  }
+  addDyn(progs.litInst, pedTorsoGeom(), 340, 'ped_torso');
+  addDyn(progs.litInst, pedLegsGeom(), 340, 'ped_legs');
+  addDyn(progs.litInst, pedHeadGeom(), 340, 'ped_heads');
+  addDyn(progs.litInst, plainBox(0.06, 1.2, 0.06, [1, 1, 1]), 260, 'rain');
+  addDyn(progs.unlitInst, headlightGeom(), 160, 'headlights');
+  addDyn(progs.transpInst, landmarks.beamGeom, 1, 'beam');
 
   let calls = 0, tris = 0;
 
   // Sun rig for a given time of day (hours 0-24). Returns sky/fog colours.
-  function lightFor(timeHours) {
+  // Night is dark (horizon stays dark) but alive: moonlight lifts the
+  // ambient a touch, and the lit windows / lamps / neon carry the glitter.
+  function lightFor(timeHours, rainAmt = 0) {
     const dayT = (timeHours - 6) / 12; // 0 at 06:00, 1 at 18:00
     const elev = Math.sin(dayT * Math.PI); // 0 at dawn/dusk, 1 at noon
     const isDay = timeHours >= 6 && timeHours < 18;
@@ -72,15 +127,21 @@ export function createRenderer(canvas, city) {
     const l = Math.hypot(...sunDir);
     const sun = [sunDir[0] / l, sunDir[1] / l, sunDir[2] / l];
     const warm = 1 - Math.max(0, elev); // low sun = warm
-    const sunColor = isDay
+    let sunColor = isDay
       ? [0.9 + 0.1 * warm, 0.85, 0.75 + 0.15 * elev]
-      : [0.12, 0.16, 0.28];
-    const ambient = isDay
+      : [0.2, 0.24, 0.38]; // moonlight, cool blue
+    let ambient = isDay
       ? [0.42 + 0.18 * elev, 0.42 + 0.18 * elev, 0.45 + 0.15 * elev]
-      : [0.14, 0.16, 0.22];
-    const sky = isDay
+      : [0.17, 0.19, 0.26];
+    let sky = isDay
       ? [0.45 + 0.25 * elev - 0.25 * warm, 0.62 + 0.15 * elev - 0.2 * warm, 0.82 - 0.25 * warm]
       : [0.03, 0.05, 0.1];
+    if (rainAmt > 0) {
+      const k = rainAmt * 0.4;
+      sunColor = sunColor.map((c) => c * (1 - k));
+      ambient = ambient.map((c) => c * (1 - k * 0.5));
+      sky = [sky[0] * (1 - k) + 0.45 * k, sky[1] * (1 - k) + 0.48 * k, sky[2] * (1 - k) + 0.52 * k];
+    }
     return { sun, sunColor, ambient, sky, isDay };
   }
 
@@ -91,7 +152,9 @@ export function createRenderer(canvas, city) {
       canvas.width = w; canvas.height = h;
     }
     gl.viewport(0, 0, canvas.width, canvas.height);
-    const light = lightFor(timeHours);
+    const rainAmt = state.weather ? state.weather.rain : 0;
+    const wetAmt = state.weather ? state.weather.wet : 0;
+    const light = lightFor(timeHours, rainAmt);
     gl.clearColor(light.sky[0], light.sky[1], light.sky[2], 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     const proj = mat4Perspective((55 * Math.PI) / 180, canvas.width / canvas.height, 0.5, 4000);
@@ -102,13 +165,46 @@ export function createRenderer(canvas, city) {
       uFogColor: light.sky, uFogNear: 500, uFogFar: 2600,
     };
     calls = 0; tris = 0;
-    for (const entry of meshes) {
-      tris += drawMesh(gl, entry.prog, entry.mesh, { ...common, uModel: entry.model });
+    const drawEntry = (entry) => {
+      if (entry.nightOnly && light.isDay) return;
+      if (entry.wetOnly && wetAmt < 0.05) return;
+      const uniforms = { ...common, uModel: entry.model };
+      if (entry.transparent) {
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        uniforms.uAlpha = entry.alpha * (entry.wetOnly ? wetAmt : 1);
+        tris += drawMesh(gl, entry.prog, entry.mesh, uniforms);
+        gl.disable(gl.BLEND);
+      } else {
+        tris += drawMesh(gl, entry.prog, entry.mesh, uniforms);
+      }
       calls++;
-    }
+    };
+    for (const entry of meshes) drawEntry(entry);
     // Player figure.
     if (playerMesh) {
       tris += drawMesh(gl, progs.lit, playerMesh, { ...common, uModel: state.playerModel });
+      calls++;
+    }
+    // Dynamic instanced meshes, refilled from state.dynamics.
+    const dyn = state.dynamics || {};
+    for (const [name, entry] of Object.entries(dynamicMeshes)) {
+      const spec = dyn[name];
+      if (!spec || !spec.matrices || spec.matrices.length === 0) continue;
+      if (name === 'beam' && light.isDay) continue;
+      if (name === 'headlights' && light.isDay) continue;
+      if (name === 'rain' && rainAmt < 0.05) continue;
+      updateDynamicInstancedMesh(gl, entry.mesh, spec.matrices, spec.tints);
+      const uniforms = { ...common, uModel: mat4Identity() };
+      if (name === 'beam') {
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        uniforms.uAlpha = 0.12;
+        tris += drawMesh(gl, entry.prog, entry.mesh, uniforms);
+        gl.disable(gl.BLEND);
+      } else {
+        tris += drawMesh(gl, entry.prog, entry.mesh, uniforms);
+      }
       calls++;
     }
     // Clouds drift slowly with time.
@@ -127,5 +223,6 @@ export function createRenderer(canvas, city) {
     get calls() { return calls; },
     get tris() { return tris; },
     dayLength: DAY_LENGTH,
+    landmarks,
   };
 }

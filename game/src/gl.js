@@ -159,8 +159,46 @@ export function createPrograms(gl) {
     lit: compileProgram(gl, LIT_VS, LIT_FS),
     litInst: compileProgram(gl, LIT_INST_VS, LIT_FS),
     unlitInst: compileProgram(gl, UNLIT_INST_VS, UNLIT_FS),
+    transp: compileProgram(gl, TRANSP_VS, TRANSP_FS),
+    transpInst: compileProgram(gl, TRANSP_INST_VS, TRANSP_FS),
   };
 }
+
+const TRANSP_VS = `
+  attribute vec3 aPos; attribute vec3 aColor;
+  uniform mat4 uProj; uniform mat4 uView; uniform mat4 uModel;
+  varying vec3 vColor; varying float vDist;
+  void main() {
+    vec4 wp = uModel * vec4(aPos, 1.0);
+    vColor = aColor;
+    vec4 vp = uView * wp;
+    vDist = -vp.z;
+    gl_Position = uProj * vp;
+  }
+`;
+
+const TRANSP_INST_VS = `
+  attribute vec3 aPos; attribute vec3 aColor;
+  attribute vec4 aMat0; attribute vec4 aMat1; attribute vec4 aMat2; attribute vec4 aMat3;
+  attribute vec3 aTint;
+  uniform mat4 uProj; uniform mat4 uView;
+  varying vec3 vColor; varying float vDist;
+  void main() {
+    mat4 m = mat4(aMat0, aMat1, aMat2, aMat3);
+    vec4 wp = m * vec4(aPos, 1.0);
+    vColor = aColor * aTint;
+    vec4 vp = uView * wp;
+    vDist = -vp.z;
+    gl_Position = uProj * vp;
+  }
+`;
+
+const TRANSP_FS = FOG_FS + `
+  uniform float uAlpha;
+  void main() {
+    gl_FragColor = vec4(applyFog(vColor), uAlpha);
+  }
+`;
 
 // Geometry: plain arrays {pos:[], nrm:[], col:[], idx?} (non-indexed unless idx given).
 export function emptyGeom() {
@@ -270,23 +308,68 @@ export function createInstancedMesh(gl, prog, geom, matrices, tints) {
   const matBuf = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, matBuf);
   gl.bufferData(gl.ARRAY_BUFFER, matData, gl.STATIC_DRAW);
+  const tintBuf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, tintBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(tints.flat()), gl.STATIC_DRAW);
+  bindInstanceAttribs(gl, prog, matBuf, tintBuf);
+  gl.bindVertexArray(null);
+  mesh.instanced = true;
+  mesh.instances = matrices.length;
+  return mesh;
+}
+
+function bindInstanceAttribs(gl, prog, matBuf, tintBuf) {
+  gl.bindBuffer(gl.ARRAY_BUFFER, matBuf);
   for (let k = 0; k < 4; k++) {
     const loc = gl.getAttribLocation(prog, 'aMat' + k);
     gl.enableVertexAttribArray(loc);
     gl.vertexAttribPointer(loc, 4, gl.FLOAT, false, 64, k * 16);
     gl.vertexAttribDivisor(loc, 1);
   }
-  const tintBuf = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, tintBuf);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(tints.flat()), gl.STATIC_DRAW);
   const tintLoc = gl.getAttribLocation(prog, 'aTint');
   gl.enableVertexAttribArray(tintLoc);
   gl.vertexAttribPointer(tintLoc, 3, gl.FLOAT, false, 0, 0);
   gl.vertexAttribDivisor(tintLoc, 1);
+}
+
+// Dynamic instanced mesh: matrices/tints re-uploaded every frame (vehicles,
+// peds, rain). Capacity is preallocated; update sets the visible count.
+export function createDynamicInstancedMesh(gl, prog, geom, capacity) {
+  const mesh = createMesh(gl, prog, geom);
+  const vao = mesh.vao;
+  gl.bindVertexArray(vao);
+  const matBuf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, matBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, capacity * 64, gl.DYNAMIC_DRAW);
+  const tintBuf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, tintBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, capacity * 12, gl.DYNAMIC_DRAW);
+  bindInstanceAttribs(gl, prog, matBuf, tintBuf);
   gl.bindVertexArray(null);
   mesh.instanced = true;
-  mesh.instances = matrices.length;
+  mesh.dynamic = true;
+  mesh.capacity = capacity;
+  mesh.instances = 0;
+  mesh._matBuf = matBuf;
+  mesh._tintBuf = tintBuf;
   return mesh;
+}
+
+export function updateDynamicInstancedMesh(gl, mesh, matrices, tints) {
+  const n = Math.min(matrices.length, mesh.capacity);
+  const matData = new Float32Array(n * 16);
+  for (let i = 0; i < n; i++) matData.set(matrices[i], i * 16);
+  gl.bindBuffer(gl.ARRAY_BUFFER, mesh._matBuf);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, matData);
+  const tintData = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const t = tints[i] || [1, 1, 1];
+    tintData[i * 3] = t[0]; tintData[i * 3 + 1] = t[1]; tintData[i * 3 + 2] = t[2];
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER, mesh._tintBuf);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, tintData);
+  mesh.instances = n;
 }
 
 export function drawMesh(gl, prog, mesh, uniforms) {

@@ -23,6 +23,9 @@ export function parseShotParams() {
     timeScale: Math.max(0.1, Math.min(100, Number(p.get('timeScale')) || 1)),
     sim: p.get('sim') === '1',
     seed: Number.parseInt(p.get('seed') ?? '', 10) || 20261122,
+    drive: p.get('drive'), // test-only: start driving a vehicle type
+    wanted: Math.max(0, Math.min(3, Number(p.get('wanted')) || 0)), // test-only
+    weather: p.get('weather'), // test-only: 'rain' | 'wet' | 'clear'
   };
 }
 

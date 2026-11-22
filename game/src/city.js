@@ -489,6 +489,27 @@ export function generateCity(seed = SEED) {
     }
   }
 
+  // --- city landmarks: 3 recognisable buildings (hospital, police ---
+  // --- station, school), flagged on the nearest building of the right ---
+  // --- zone, with a calm identifying colour. Signs live in landmarks.js. ---
+  {
+    const nearest = (zone, tx, tz) => {
+      let best = null, bestD = Infinity;
+      for (const b of buildings) {
+        if (b.zone !== zone) continue;
+        const d = Math.hypot(b.x - tx, b.z - tz);
+        if (d < bestD) { bestD = d; best = b; }
+      }
+      return best;
+    };
+    const hospital = nearest('downtown', 0, -100);
+    if (hospital) { hospital.landmark = 'hospital'; hospital.color = [0.95, 0.95, 0.95]; }
+    const police = nearest('commercial', 100, 100);
+    if (police) { police.landmark = 'police'; police.color = [0.5, 0.62, 0.85]; }
+    const school = nearest('residential', -200, 200);
+    if (school) { school.landmark = 'school'; school.color = [0.92, 0.85, 0.55]; }
+  }
+
   const zoneCounts = {};
   for (const b of buildings) zoneCounts[b.zone] = (zoneCounts[b.zone] || 0) + 1;
 
