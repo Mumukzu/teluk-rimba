@@ -5,7 +5,7 @@
 // They make the street itself glow near light sources, while the sky and
 // the horizon stay dark. Pure geometry (no WebGL, no DOM) — the renderer
 // decides when to draw it.
-import { terrainHeight } from './city.js';
+import { terrainHeight, ROAD_LINES, ASPHALT_HALF } from './city.js';
 
 const WARM = [1.0, 0.76, 0.42]; // sodium-lamp warm
 const WARM_CORE = [1.0, 0.85, 0.6]; // bright core under the lamp
@@ -26,12 +26,33 @@ function quad(g, cx, cz, w, d, y, col) {
 export function buildNightLightGeoms(city, landmarks) {
   const pools = { pos: [], nrm: [], col: [] };
   const yFor = (x, z) => Math.max(0, terrainHeight(x, z)) + 0.14;
+  const nearestLine = (v) => {
+    let best = ROAD_LINES[0], bd = Infinity;
+    for (const L of ROAD_LINES) {
+      const d = Math.abs(L - v);
+      if (d < bd) { bd = d; best = L; }
+    }
+    return best;
+  };
 
   // Street lamps: wide soft pool + small bright core (171 lamps).
   for (const lamp of city.lamps) {
     const y = yFor(lamp.x, lamp.z);
     quad(pools, lamp.x, lamp.z, 11, 11, y, WARM);
     quad(pools, lamp.x, lamp.z, 5, 5, y + 0.01, WARM_CORE);
+    // Road pool: the same lamp's light ON the asphalt. The lamp sits at
+    // the kerb (asphalt half + 0.9 m out), so its 11 m pool only reaches
+    // the outer lane — the middle of the road stayed black. A second pool
+    // centred on the road axis lights the full width under every lamp.
+    if (lamp.along === 'x') {
+      const L = nearestLine(lamp.x);
+      const w = ASPHALT_HALF(L) * 2 + 2;
+      quad(pools, L, lamp.z, w, 10, yFor(L, lamp.z), WARM);
+    } else {
+      const L = nearestLine(lamp.z);
+      const d = ASPHALT_HALF(L) * 2 + 2;
+      quad(pools, lamp.x, L, 10, d, yFor(lamp.x, L), WARM);
+    }
   }
   // Night market: warm wash over the whole market block + cores per stall row.
   const market = city.blocks.find((b) => b.i === 6 && b.j === 5);
