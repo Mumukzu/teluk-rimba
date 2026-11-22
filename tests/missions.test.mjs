@@ -105,10 +105,16 @@ check('mission 5 boat escape target is in the sea', missionById(5).steps[2].x > 
   check('mission 3 starts', missions.start(3));
   check('chase jeep spawned', !!missions.chaseJeep);
   const j0 = { x: missions.chaseJeep.x, z: missions.chaseJeep.z };
-  for (let i = 0; i < 600; i++) missions.step(1 / 60); // 10 s
+  // Path length, not displacement: the jeep runs a loop, so after 10 s it
+  // can be near where it started even while driving the whole time.
+  let path = 0;
+  for (let i = 0; i < 600; i++) {
+    const px = missions.chaseJeep.x, pz = missions.chaseJeep.z;
+    missions.step(1 / 60); // 10 s
+    path += Math.hypot(missions.chaseJeep.x - px, missions.chaseJeep.z - pz);
+  }
   const j1 = missions.chaseJeep;
-  const moved = Math.hypot(j1.x - j0.x, j1.z - j0.z);
-  check('chase jeep drives its route', moved > 50, moved.toFixed(1) + ' m in 10 s');
+  check('chase jeep drives its route', path > 100, path.toFixed(1) + ' m in 10 s');
   check('chase jeep not escaped yet', !j1.escaped);
   game.driving = { type: 'sedan' };
   missions.step(1 / 60); // past the drive step

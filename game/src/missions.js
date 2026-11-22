@@ -136,18 +136,25 @@ export function createMissions(ctx) {
   // is gone for good. It drives straight segments (the nodes are on roads).
   // It starts on the FAR side of the loop (-500,-600), ~225 m from the
   // player — a real chase, not a 22 m grab (the old spawn at (-600,-400)
-  // was caught in seconds).
+  // was caught in seconds). It heads WEST first, away from the player:
+  // the loop's north edge runs 10 m from the player start, so a jeep
+  // heading north first drives straight to the player's doorstep and the
+  // "chase" ends in ~12 game-sec. Heading west, the jeep only reaches the
+  // north edge after ~600 m of loop (~46 game-sec), so the player has to
+  // pursue it down the forest roads.
   const CHASE_ROUTE = [[-600, -400], [-600, -600], [-500, -600], [-500, -400]];
-  const CHASE_SPEED = 13;
+  // 18 m/s vs the sedan's 25: the player is faster, but not twice as
+  // fast, so the chase takes real driving instead of a 12-second grab.
+  const CHASE_SPEED = 18;
   function spawnChaseJeep() {
     const [x, z] = CHASE_ROUTE[2];
     const v = {
       id: 9001, type: 'jeep', edge: null, s: 0, lane: 0,
       speed: CHASE_SPEED, targetSpeed: CHASE_SPEED, x, z,
-      heading: Math.atan2(0, -1), y: Math.max(0, terrainHeight(x, z)),
+      heading: Math.atan2(-1, 0), y: Math.max(0, terrainHeight(x, z)),
       parked: false, driven: true, dwell: 0, mode: 'chase',
       color: [0.9, 0.3, 0.25], route: null, routeIdx: 0,
-      wp: 3, laps: 0, escaped: false,
+      wp: 1, laps: 0, escaped: false,
     };
     traffic.vehicles.push(v);
     return v;
@@ -312,7 +319,9 @@ export function createMissions(ctx) {
     if (s.type === 'chase') {
       if (!chaseJeep) { fail('The getaway car is gone'); return; }
       if (chaseJeep.escaped) { fail('The getaway jeep escaped'); return; }
-      if (Math.hypot(chaseJeep.x - px, chaseJeep.z - pz) < 7) advanceStep();
+      // Catch radius 4 m: the player has to actually ram the jeep, not just
+      // sweep past it — a 7 m radius let a glancing head-on pass count.
+      if (Math.hypot(chaseJeep.x - px, chaseJeep.z - pz) < 4) advanceStep();
       return;
     }
     if (s.type === 'board') {
