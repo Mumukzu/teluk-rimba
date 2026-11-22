@@ -10,6 +10,11 @@ import {
   COURIER_JOBS, courierById, createCouriers,
 } from '../game/src/extras.js';
 import { saveGame, loadGame, clearSave } from '../game/src/save.js';
+import { createTraffic } from '../game/src/vehicles.js';
+import { createPeds } from '../game/src/peds.js';
+import { createWanted } from '../game/src/police.js';
+import { createMissions, MISSION_BOARD } from '../game/src/missions.js';
+import { ACTION_ENTER } from '../game/src/input.js';
 
 // localStorage stub for Node.
 const store = new Map();
@@ -217,6 +222,37 @@ check('4 stunt ramps', RAMPS.length === 4, `${RAMPS.length}`);
 }
 
 // --- couriers ---
+// Board hook: the mission board hands out courier jobs once the story is done.
+{
+  const city = generateCity();
+  const traffic = createTraffic(city);
+  const peds = createPeds(city);
+  const wanted = createWanted(city, traffic, peds);
+  const game = { money: 0, timeHours: 10, started: true, driving: null, wanted: 0 };
+  const player = { state: { x: MISSION_BOARD.x, z: MISSION_BOARD.z, y: 0, camYaw: 0, camPitch: 0.32, camDist: 7.5, facing: 0 } };
+  const hud = { hints: [], showHint(t) { this.hints.push(t); } };
+  const couriers = createCouriers({ game, player, hud, audio: null, onSave: () => {} });
+  const missions = createMissions({ city, game, player, traffic, peds, wanted, hud, audio: null, onSave: () => {}, couriers });
+  // With a story mission still left, E at the board offers the story job.
+  missions.step(1 / 60, ACTION_ENTER);
+  check('board offers story mission while one remains', missions.active && !couriers.active, `mission ${missions.state.id}`);
+  missions.fail('test reset');
+  // With all 6 done, E at the board starts a courier job instead.
+  missions.restore({ done: [1, 2, 3, 4, 5, 6] });
+  check('all 6 story missions marked done', missions.doneIds().length === 6);
+  // Wait out the 10 s board cooldown set by fail() above, then press E.
+  for (let i = 0; i < 11 * 60; i++) missions.step(1 / 60);
+  missions.step(1 / 60, ACTION_ENTER);
+  check('board hands out a courier job after the story', couriers.active && couriers.state.id === 1, couriers.active ? `job ${couriers.state.id}` : 'none');
+  // E while driving does not start a job.
+  const c2 = createCouriers({ game, player, hud, audio: null, onSave: () => {} });
+  const m2 = createMissions({ city, game, player, traffic, peds, wanted, hud, audio: null, onSave: () => {}, couriers: c2 });
+  m2.restore({ done: [1, 2, 3, 4, 5, 6] });
+  game.driving = { type: 'car' };
+  m2.step(1 / 60, ACTION_ENTER);
+  check('no courier job while driving past the board', !c2.active);
+  game.driving = null;
+}
 check('3 courier jobs', COURIER_JOBS.length === 3, `${COURIER_JOBS.length}`);
 check('courier rewards are 40/50/60', COURIER_JOBS.map((j) => j.reward).join(',') === '40,50,60');
 {

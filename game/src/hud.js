@@ -27,7 +27,7 @@ export function createHud(city) {
     mapOverlay.id = 'full-map';
     mapOverlay.style.cssText = 'position:fixed;inset:0;z-index:40;background:rgba(5,10,18,.88);display:none;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:system-ui,sans-serif;';
     mapOverlay.innerHTML = '<div style="font-size:22px;font-weight:700;letter-spacing:2px;margin-bottom:10px;">TELUK RIMBA — MAP</div>'
-      + '<canvas id="full-map-canvas" width="640" height="640" style="border:2px solid rgba(255,255,255,.6);border-radius:8px;background:#1a2f22;"></canvas>'
+      + '<canvas id="full-map-canvas" width="560" height="560" style="border:2px solid rgba(255,255,255,.6);border-radius:8px;background:#1a2f22;"></canvas>'
       + '<div style="margin-top:10px;font-size:14px;opacity:.9;">'
       + '<span style="color:#ffd23f;">◆</span> You &nbsp;'
       + '<span style="color:#ffd23f;">◆</span> Mission target &nbsp;'
@@ -45,7 +45,7 @@ export function createHud(city) {
     ensureMapOverlay();
     mapOpen = true;
     mapOverlay.style.display = 'flex';
-    drawMap(mapCtx, 640, 640, player, timeHours, markers || []);
+    drawMap(mapCtx, 560, 560, player, timeHours, markers || []);
   }
   function closeMap() {
     if (mapOverlay) mapOverlay.style.display = 'none';
@@ -175,7 +175,7 @@ export function createHud(city) {
       : [];
     drawMap(ctx, W, H, player, timeHours, markers);
     // If the full map is open, keep it live too.
-    if (mapOpen) drawMap(mapCtx, 640, 640, player, timeHours, lastMarkers);
+    if (mapOpen) drawMap(mapCtx, 560, 560, player, timeHours, lastMarkers);
   }
 
   let lastMarkers = [];
