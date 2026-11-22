@@ -505,6 +505,9 @@ export function generateCity(seed = SEED) {
     const cx = range(rand, 614, 644);
     const cz = range(rand, -480, 280);
     if (riverDistance(cx, cz) < 30) continue;
+    // Keep-out around the M1/M6 finish at Coral Beach (620,-100): an
+    // umbrella there fills the chase camera's frame at the finish line.
+    if (Math.hypot(cx - 620, cz + 100) < 24) continue;
     const rot = range(rand, 0, Math.PI * 2);
     beachProps.push({ kind: 'umbrella', x: cx, z: cz, rot, s: range(rand, 1.25, 1.6), color: PROP_TINTS[Math.floor(rand() * PROP_TINTS.length)] });
     const nLounge = rangeInt(rand, 1, 2);
@@ -520,12 +523,13 @@ export function generateCity(seed = SEED) {
   }
   // Dense beach cluster by the pier (Mu: props must be VISIBLE) — a row of
   // big vivid umbrellas + loungers right where the pier meets the sand.
-  // Separate rand stream, so nothing above moves.
+  // Separate rand stream, so nothing above moves. The cluster stays north
+  // of z=-125: the M1/M6 finish at (620,-100) needs a clear camera line.
   {
     const prand = mulberry32(20261129);
     for (let k = 0; k < 12; k++) {
       const cx = range(prand, 618, 642);
-      const cz = range(prand, -215, -85);
+      const cz = range(prand, -215, -125);
       const rot = range(prand, 0, Math.PI * 2);
       beachProps.push({ kind: 'umbrella', x: cx, z: cz, rot, s: range(prand, 1.3, 1.7), color: PROP_TINTS[Math.floor(prand() * PROP_TINTS.length)] });
       beachProps.push({ kind: 'lounger', x: cx + range(prand, -2.5, 2.5), z: cz + range(prand, -2, 2), rot: rot + range(prand, -0.4, 0.4), s: range(prand, 1.2, 1.5), color: PROP_TINTS[Math.floor(prand() * PROP_TINTS.length)] });
