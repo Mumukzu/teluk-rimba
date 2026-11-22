@@ -110,7 +110,7 @@ export function createRenderer(canvas, city) {
   // Dynamic instanced meshes: one per vehicle type + peds (3 parts) +
   // rain streaks + headlights + the lighthouse beam.
   for (const [type, geom] of Object.entries(vehicleGeoms)) {
-    addDyn(progs.litInst, geom, type === 'motorbike' ? 60 : type === 'scooter' ? 30 : type === 'car' ? 30 : 20, 'veh_' + type);
+    addDyn(progs.litInst, geom, type === 'motorbike' ? 100 : type === 'scooter' ? 50 : type === 'car' ? 40 : 30, 'veh_' + type);
   }
   addDyn(progs.litInst, pedTorsoGeom(), 340, 'ped_torso');
   addDyn(progs.litInst, pedLegsGeom(), 340, 'ped_legs');

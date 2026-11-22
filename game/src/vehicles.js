@@ -157,9 +157,9 @@ export function createTraffic(city, opts = {}) {
     ? mainEdges[Math.floor(rand() * mainEdges.length)]
     : city.edges[Math.floor(rand() * city.edges.length)]);
   const MOVING = [
-    ['motorbike', 34], ['scooter', 16], ['car', 12], ['sedan', 10],
-    ['mpv', 8], ['jeep', 6], ['angkot', 10], ['bajaj', 10],
-    ['truck', 6], ['bus', 5], ['firetruck', 1], ['ambulance', 2], ['supercar', 4],
+    ['motorbike', 55], ['scooter', 26], ['car', 20], ['sedan', 16],
+    ['mpv', 12], ['jeep', 10], ['angkot', 14], ['bajaj', 14],
+    ['truck', 8], ['bus', 8], ['firetruck', 2], ['ambulance', 3], ['supercar', 6],
   ];
   const route = busRouteNodes(city);
   route.forEach((id, k) => { if (k % 3 === 0) BUS_STOPS.add(id); });
