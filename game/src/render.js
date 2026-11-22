@@ -16,6 +16,7 @@ import { pedTorsoGeom, pedLegsGeom, pedHeadGeom, pedHairGeom } from './peds.js';
 import { buildWetGeoms } from './weather.js';
 import { buildNightLightGeoms } from './nightlights.js';
 import { buildPlotDressing } from './plots.js';
+import { heliBodyGeom, heliRotorGeom, planeGeom, heliBeamConeGeom, markerGeom } from './air.js';
 import { DAY_LENGTH } from './config.js';
 
 const MOON_POS = [-420, 380, -720];
@@ -65,6 +66,7 @@ export function createRenderer(canvas, city) {
   addStatic(progs.lit, world.sea, mat4Identity());
   addStatic(progs.lit, world.river, mat4Identity());
   addStatic(progs.lit, world.volcano, mat4Identity());
+  addStatic(progs.lit, world.dirtTrack, mat4Identity()); // mountain road (mission 6)
   addStatic(progs.lit, buildRoadMesh(city), mat4Identity());
   addInst(progs.litInst, buildingMeshes.buildings);
   addInst(progs.litInst, buildingMeshes.roofs);
@@ -128,6 +130,13 @@ export function createRenderer(canvas, city) {
   addDyn(progs.litInst, plainBox(0.06, 1.2, 0.06, [1, 1, 1]), 260, 'rain');
   addDyn(progs.unlitInst, headlightGeom(), 160, 'headlights');
   addDyn(progs.transpInst, landmarks.beamGeom, 1, 'beam');
+  // Aircraft: police helicopter (body + spinning rotor), daytime plane,
+  // heli spotlight cone (night only), mission marker column.
+  addDyn(progs.litInst, heliBodyGeom(), 1, 'heli');
+  addDyn(progs.litInst, heliRotorGeom(), 1, 'heliRotor');
+  addDyn(progs.litInst, planeGeom(), 1, 'plane');
+  addDyn(progs.transpInst, heliBeamConeGeom(), 1, 'heliBeam');
+  addDyn(progs.unlitInst, markerGeom(), 1, 'marker');
   // Flat 1x1 ground quad (up-facing) for headlight beams + water flow.
   const flatQuadGeom = (() => {
     const g = { pos: [], nrm: [], col: [] };
@@ -217,12 +226,13 @@ export function createRenderer(canvas, city) {
       const spec = dyn[name];
       if (!spec || !spec.matrices || spec.matrices.length === 0) continue;
       if (name === 'beam' && light.isDay) continue;
+      if (name === 'heliBeam' && light.isDay) continue;
       if (name === 'headlights' && light.isDay) continue;
       if (name === 'headbeams' && light.isDay) continue;
       if (name === 'rain' && rainAmt < 0.05) continue;
       updateDynamicInstancedMesh(gl, entry.mesh, spec.matrices, spec.tints);
       const uniforms = { ...common, uModel: mat4Identity() };
-      const blendAlpha = { beam: 0.12, headbeams: 0.14, flow: 0.3 }[name];
+      const blendAlpha = { beam: 0.12, headbeams: 0.14, flow: 0.3, heliBeam: 0.15 }[name];
       if (blendAlpha !== undefined) {
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);

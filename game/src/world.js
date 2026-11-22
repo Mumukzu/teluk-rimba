@@ -120,12 +120,37 @@ export function buildVolcano() {
   return g;
 }
 
+// Mountain dirt track: a dirt ribbon up the volcano slope for the final
+// mission (mountain road). Follows the terrain so the jeep can climb it.
+export function buildDirtTrack() {
+  const g = emptyGeom();
+  const col = [0.5, 0.38, 0.26];
+  const pts = [[-580, -580], [-660, -660], [-740, -740], [-800, -800]];
+  const HALF = 3.5;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [ax, az] = pts[i], [bx, bz] = pts[i + 1];
+    const dx = bx - ax, dz = bz - az;
+    const len = Math.hypot(dx, dz) || 1;
+    const nx = (-dz / len) * HALF, nz = (dx / len) * HALF;
+    const y = (x, z) => terrainHeight(x, z) + 0.3;
+    const a = [ax + nx, y(ax + nx, az + nz), az + nz];
+    const b = [bx + nx, y(bx + nx, bz + nz), bz + nz];
+    const c = [bx - nx, y(bx - nx, bz - nz), bz - nz];
+    const d = [ax - nx, y(ax - nx, az - nz), az - nz];
+    g.pos.push(...a, ...b, ...c, ...a, ...c, ...d);
+    for (let k = 0; k < 6; k++) g.nrm.push(0, 1, 0);
+    for (let k = 0; k < 6; k++) g.col.push(...col);
+  }
+  return g;
+}
+
 export function buildWorldGeoms() {
   return {
     terrain: buildTerrain(),
     sea: buildSea(),
     river: buildRiver(),
     volcano: buildVolcano(),
+    dirtTrack: buildDirtTrack(),
     // A few distant clouds: flat pale boxes drifting high up.
     clouds: mergeGeoms([
       plainBox(90, 8, 40, [0.96, 0.96, 0.97]),

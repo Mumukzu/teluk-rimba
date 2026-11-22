@@ -41,7 +41,7 @@ export function createHud(city) {
     }
   }
 
-  function drawMinimap(player, timeHours) {
+  function drawMinimap(player, timeHours, marker) {
     const night = timeHours < 6 || timeHours >= 18;
     ctx.fillStyle = night ? '#0d1520' : '#1a2f22';
     ctx.fillRect(0, 0, W, H);
@@ -66,6 +66,23 @@ export function createHud(city) {
     ctx.fillStyle = night ? '#3a3f46' : '#5c5c58';
     for (const b of city.buildings) {
       ctx.fillRect(toX(b.x - b.w / 2), toY(b.z - b.d / 2), Math.max(1, b.w * SCALE), Math.max(1, b.d * SCALE));
+    }
+    // Mission marker: yellow diamond for the current objective, green for
+    // the mission board at Rimba Plaza (no mission active yet).
+    if (marker) {
+      const mx = toX(marker.x), my = toY(marker.z);
+      const pulse = 5 + Math.sin(performance.now() / 300) * 1.5;
+      ctx.fillStyle = marker.board ? '#4ade80' : '#ffd23f';
+      ctx.beginPath();
+      ctx.moveTo(mx, my - pulse);
+      ctx.lineTo(mx + pulse, my);
+      ctx.lineTo(mx, my + pulse);
+      ctx.lineTo(mx - pulse, my);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#111';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
     }
     // Player arrow.
     const px = toX(player.x), py = toY(player.z);

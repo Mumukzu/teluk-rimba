@@ -268,7 +268,7 @@ export function createTraffic(city, opts = {}) {
   }
 
   function stepBoat(b, dt) {
-    if (b.driven) return;
+    if (b.driven || b.parked) return;
     const [tx, tz] = b.waypoints[b.wp];
     const dx = tx - b.x, dz = tz - b.z;
     const dist = Math.hypot(dx, dz);
@@ -316,6 +316,32 @@ export function createTraffic(city, opts = {}) {
       const v = spawnOnEdge('police', bestEdge, 0, 1.5);
       v.mode = 'pursue';
       return v;
+    },
+    // Park a vehicle of a given type at a fixed spot (missions use this to
+    // place the scooter / getaway-chase car / mountain jeep). Parked vehicles
+    // are enterable by the player and stay put until taken.
+    spawnParked(type, x, z, heading = 0) {
+      const v = {
+        id: nextId++, type, edge: null, s: 0, lane: 0,
+        speed: 0, targetSpeed: 0, x, z,
+        heading, y: Math.max(0, terrainHeight(x, z)),
+        parked: true, driven: false, dwell: 0, mode: 'parked',
+        color: PASTEL[Math.floor(rand() * PASTEL.length)], route: null, routeIdx: 0,
+      };
+      vehicles.push(v);
+      return v;
+    },
+    // Park a motor boat in shallow water (mission 5 escape boat). It stays
+    // put (stepBoat skips parked boats) until the player boards it.
+    spawnParkedBoat(x, z) {
+      const b = {
+        id: nextId++, type: 'boat', waypoints: [[x, z]], wp: 0, speed: 0,
+        x, z, heading: Math.PI / 2, y: SEA_LEVEL,
+        parked: true, driven: false, mode: 'parked',
+        color: PASTEL[Math.floor(rand() * PASTEL.length)],
+      };
+      boats.push(b);
+      return b;
     },
     removeVehicle(v) {
       const i = vehicles.indexOf(v);

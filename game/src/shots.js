@@ -7,6 +7,9 @@
 //   &spawn=x,z        start the player at a test location
 //   &timeScale=N      speed up the clock and timers (tests only)
 //   &sim=1            headless fast-sim: no rendering, logic ticks only
+//   &mission=N        test-only: start mission N on load (fresh save)
+//   &autopilot=1      test-only: autopilot drives to the mission objective
+//   &ff=N             test-only: speed up the day/night clock (alias of timeScale)
 // Nothing here runs in normal play: plain ? with no params is the real game.
 export function parseShotParams() {
   const p = new URLSearchParams(window.location.search);
@@ -35,12 +38,14 @@ export function parseShotParams() {
     camPos: camPosVec,
     camLook: camLookVec,
     spawn: spawnPos,
-    timeScale: Math.max(0.1, Math.min(100, Number(p.get('timeScale')) || 1)),
+    timeScale: Math.max(0.1, Math.min(100, Number(p.get('timeScale')) || Number(p.get('ff')) || 1)),
     sim: p.get('sim') === '1',
     seed: Number.parseInt(p.get('seed') ?? '', 10) || 20261122,
     drive: p.get('drive'), // test-only: start driving a vehicle type
     wanted: Math.max(0, Math.min(3, Number(p.get('wanted')) || 0)), // test-only
     weather: p.get('weather'), // test-only: 'rain' | 'wet' | 'clear'
+    mission: Math.max(0, Math.min(6, Number(p.get('mission')) || 0)), // test-only: start mission N
+    autopilot: p.get('autopilot') === '1', // test-only: autopilot to the objective
   };
 }
 

@@ -11,8 +11,18 @@ export function createPlayer(city, startX, startZ) {
     facing: 0, // radians, direction the player walks
     camYaw: Math.PI * 0.75, camPitch: 0.32, camDist: CAMERA.distance,
     moving: false,
+    worldMin: -WORLD.bound, worldMax: WORLD.bound, // missions may widen these
+    seaX: WORLD.seaX, // missions may let the player wade further out
   };
   state.y = Math.max(0, terrainHeight(state.x, state.z));
+
+  // Mission 6 opens the mountain (clamp -800); mission 5 lets the player
+  // wade to the boat. Called every frame by main.js from mission state.
+  function setWorldBound(bound) {
+    state.worldMin = bound.min;
+    state.worldMax = bound.max;
+  }
+  function setSeaLimit(limit) { state.seaX = limit; }
 
   function collide(nx, nz) {
     const r = PLAYER.radius;
@@ -46,9 +56,9 @@ export function createPlayer(city, startX, startZ) {
       // Axis-separated movement so the player slides along walls.
       if (!collide(nx, state.z)) state.x = nx;
       if (!collide(state.x, nz)) state.z = nz;
-      state.x = Math.max(-WORLD.bound, Math.min(WORLD.bound, state.x));
-      state.z = Math.max(-WORLD.bound, Math.min(WORLD.bound, state.z));
-      if (state.x > WORLD.seaX) state.x = WORLD.seaX;
+      state.x = Math.max(state.worldMin, Math.min(state.worldMax, state.x));
+      state.z = Math.max(state.worldMin, Math.min(state.worldMax, state.z));
+      if (state.x > state.seaX) state.x = state.seaX;
       state.y = Math.max(0, terrainHeight(state.x, state.z));
     }
   }
@@ -86,5 +96,5 @@ export function createPlayer(city, startX, startZ) {
     return g;
   }
 
-  return { state, step, camera, figureGeom };
+  return { state, step, camera, figureGeom, setWorldBound, setSeaLimit };
 }

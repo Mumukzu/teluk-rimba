@@ -20,6 +20,10 @@ import { createTraffic } from './vehicles.js';
 import { createPeds } from './peds.js';
 import { createWanted } from './police.js';
 import { createWeather } from './weather.js';
+import { createMissions } from './missions.js';
+import { createAutopilot } from './autopilot.js';
+import { createAircraft } from './air.js';
+import { saveGame, loadGame, clearSave } from './save.js';
 import { mat4TRS } from './gl.js';
 
 const params = parseShotParams();
@@ -62,6 +66,23 @@ const traffic = createTraffic(city);
 const peds = createPeds(city);
 const wanted = createWanted(city, traffic, peds);
 const weather = createWeather({ override: params.weather || null });
+const aircraft = createAircraft(city);
+// Missions + autopilot (tests only) + save/load.
+let missions;
+const doSave = () => saveGame({ money: game.money, done: missions.doneIds(), active: missions.saveState() });
+missions = createMissions({ city, game, player, traffic, peds, wanted, hud, onSave: doSave });
+const autopilot = params.autopilot ? createAutopilot(city) : null;
+// Restore a previous session (money + missions), unless a test mission
+// was requested — test runs start fresh from the mission's start point.
+const saved = loadGame();
+if (saved && !params.mission) missions.restore(saved);
+if (params.mission) {
+  clearSave();
+  const sp = missions.startPos(params.mission);
+  player.state.x = sp.x; player.state.z = sp.z;
+  player.state.y = Math.max(0, terrainHeight(sp.x, sp.z));
+  missions.start(params.mission);
+}
 const aabbs = buildingAABBs(city);
 if (!params.hud) document.getElementById('hud').style.display = 'none';
 
@@ -85,15 +106,16 @@ overlay.addEventListener('keydown', (e) => { if (e.code === 'Enter' || e.code ==
 
 // Screenshot / test mode starts straight into the 3D world — no start screen
 // covering the frame (the grader screenshots ?shot=... directly).
-if (params.shot || params.cam) startGame(true);
+if (params.shot || params.cam || params.mission || params.autopilot) startGame(true);
 
 // Test-only starts: driving a vehicle, or a wanted level.
 if (params.drive && VEHICLES[params.drive]) {
-  // Spawn a fresh vehicle of the requested type right at the spawn point.
+  // Spawn a fresh vehicle of the requested type right at the spawn point
+  // (or at the mission start point, when ?mission moved the player).
   const fresh = {
     id: 9999, type: params.drive, edge: null, s: 0, lane: 0,
-    speed: 0, targetSpeed: 0, x: start.x, z: start.z,
-    heading: 0, y: Math.max(0, terrainHeight(start.x, start.z)),
+    speed: 0, targetSpeed: 0, x: player.state.x, z: player.state.z,
+    heading: 0, y: Math.max(0, terrainHeight(player.state.x, player.state.z)),
     parked: true, driven: false, dwell: 0, mode: 'parked',
     color: [0.88, 0.66, 0.6], route: null, routeIdx: 0,
   };
@@ -111,11 +133,11 @@ function collideVehicle(nx, nz, radius) {
   return false;
 }
 
-function driveStep(v, dt) {
+function driveStep(v, dt, inp) {
   const tune = VEHICLES[v.type];
   const isBoat = v.type === 'boat' || v.type === 'fishingboat' || v.type === 'sailboat';
-  const fwd = (input.forward ? 1 : 0) - (input.back ? 1 : 0);
-  const steer = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+  const fwd = (inp.forward ? 1 : 0) - (inp.back ? 1 : 0);
+  const steer = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
   if (fwd > 0) v.speed = Math.min(tune.maxSpeed, v.speed + tune.accel * dt);
   else if (fwd < 0) v.speed = Math.max(-tune.maxSpeed * 0.4, v.speed - tune.accel * 1.4 * dt);
   else v.speed = Math.abs(v.speed) < 0.5 ? 0 : v.speed - Math.sign(v.speed) * 6 * dt;
@@ -135,16 +157,18 @@ function driveStep(v, dt) {
   } else {
     if (!collideVehicle(nx, v.z, radius)) v.x = nx;
     if (!collideVehicle(v.x, nz, radius)) v.z = nz;
-    v.x = Math.max(-650, Math.min(650, v.x));
-    v.z = Math.max(-650, Math.min(650, v.z));
+    // World bounds: mission 6 opens the mountain (clamp -800).
+    const wb = missions.worldBound();
+    v.x = Math.max(wb.min, Math.min(wb.max, v.x));
+    v.z = Math.max(wb.min, Math.min(wb.max, v.z));
     if (v.x > 640) v.x = 640; // land vehicles stop at the sea
     v.y = Math.max(0, terrainHeight(v.x, v.z));
   }
   // Camera follows behind the vehicle (drag still lets the player look around).
-  const drag = input.takeDrag();
+  const drag = inp.takeDrag();
   player.state.camYaw -= drag.dx * 0.005;
   player.state.camPitch = Math.max(0.08, Math.min(1.1, player.state.camPitch + drag.dy * 0.004));
-  player.state.camDist = Math.max(4, Math.min(16, player.state.camDist + input.takeWheel() * 0.01));
+  player.state.camDist = Math.max(4, Math.min(16, player.state.camDist + inp.takeWheel() * 0.01));
   const wantYaw = v.heading + Math.PI;
   let dy = wantYaw - player.state.camYaw;
   while (dy > Math.PI) dy -= Math.PI * 2;
@@ -180,7 +204,7 @@ function enterExitVehicle() {
 
 // Test hooks for the Playwright checks (tests only).
 window.__GAME__ = {
-  traffic, peds, wanted, weather, game, player,
+  traffic, peds, wanted, weather, game, player, missions, aircraft,
   crime() { wanted.addHeat(1); return wanted.state.wanted; },
   gunshot(x, z) {
     wanted.addHeat(1);
@@ -189,6 +213,9 @@ window.__GAME__ = {
   place() { return placeNameAt(city, player.state.x, player.state.z); },
   driving() { return game.driving ? game.driving.type : null; },
 };
+window.__MISSIONS__ = missions;
+window.__SAVE__ = { save: doSave, load: loadGame, clear: clearSave };
+window.__AIRCRAFT__ = aircraft;
 
 function stepWorld(dt) {
   game.elapsed += dt;
@@ -196,13 +223,15 @@ function stepWorld(dt) {
   weather.step(dt, game.timeHours);
   weather.stepDrops(dt, player.state.x, player.state.z);
   if (game.started) {
-    const actions = input.takeActions();
+    // Autopilot (tests only) steers the same input the player would use.
+    const effInput = (autopilot && autopilot.enabled) ? autopilot.input : input;
+    const actions = effInput.takeActions();
     if (actions & ACTION_ENTER) enterExitVehicle();
     const px = player.state.x, pz = player.state.z;
     if (game.driving) {
-      driveStep(game.driving, dt);
+      driveStep(game.driving, dt, effInput);
     } else {
-      player.step(input, dt);
+      player.step(effInput, dt);
       const moved = Math.hypot(player.state.x - px, player.state.z - pz);
       game.speedKmh = (moved / Math.max(dt, 1e-6)) * 3.6;
     }
@@ -216,9 +245,23 @@ function stepWorld(dt) {
       game.money -= fine;
       hud.showHint('Busted! The police fined you $' + fine + '. Wanted level cleared.');
       game.objective = 'Explore Teluk Rimba — WASD to walk, drag mouse for camera';
+      if (missions.active) missions.fail('Busted by the police');
     }
+    // Missions, autopilot and aircraft tick with the player.
+    missions.step(dt);
+    if (autopilot && autopilot.enabled) {
+      autopilot.update(dt, { player, driving: game.driving, traffic, missions });
+    }
+    aircraft.step(dt, {
+      player: player.state, wanted: game.wanted,
+      isDay: game.timeHours >= 6 && game.timeHours < 18,
+    });
+    player.setWorldBound(missions.worldBound());
+    player.setSeaLimit(missions.seaLimit());
     // Objective hints.
-    if (game.driving) {
+    if (missions.active) {
+      game.objective = missions.objectiveText();
+    } else if (game.driving) {
       game.objective = 'Driving the ' + game.driving.type + ' — E to get out';
     } else if (game.wanted > 0) {
       game.objective = 'WANTED — lose the police! Lay low to cool off';
@@ -240,7 +283,7 @@ function stepWorld(dt) {
     objective: game.objective,
     place: game.place,
   });
-  hud.drawMinimap(player.state, game.timeHours);
+  hud.drawMinimap(player.state, game.timeHours, missions.marker());
 }
 
 // ---- headless fast-sim (tests only): no WebGL, fixed ticks, autopilot ----
@@ -411,6 +454,26 @@ if (params.sim) {
     // Rain streaks around the camera.
     if (weather.state.rain > 0.05) {
       dyn.rain = weather.rainMatrices(camX, camZ);
+    }
+    // Aircraft: police helicopter (+ spinning rotor, night spotlight cone)
+    // and the daytime plane.
+    {
+      const air = aircraft.matricesFor(camX, camZ, !isNight, game.elapsed);
+      for (const [name, spec] of Object.entries(air)) {
+        if (spec.matrices.length) dyn[name] = spec;
+      }
+    }
+    // Mission marker: a tall bright column at the current objective
+    // (yellow) or at the mission board (green, no mission active).
+    {
+      const m = missions.marker();
+      if (m) {
+        const pulse = 1 + 0.08 * Math.sin(game.elapsed * 3);
+        dyn.marker = {
+          matrices: [mat4TRS(m.x, 15, m.z, 0, pulse, 1, pulse)],
+          tints: [m.board ? [0.3, 0.9, 0.5] : [1, 0.85, 0.2]],
+        };
+      }
     }
     return dyn;
   }
