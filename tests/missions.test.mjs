@@ -229,6 +229,28 @@ check('mission 5 boat escape target is in the sea', missionById(5).steps[2].x > 
   ap.update(1 / 60, { player, driving: drivingBack, traffic, missions: straight });
   check('autopilot steers (left or right) when facing away', ap.drive.left || ap.drive.right);
   check('autopilot never reverses toward the target', ap.drive.back === false);
+  // On-foot, far target, the car we got out of 20 m away: walk to it, get in.
+  {
+    const ap2 = createAutopilot(city);
+    const player2 = { state: { x: 70, z: -70, y: 0, camYaw: 0, camPitch: 0.32, camDist: 7.5, facing: 0 } };
+    const car = { type: 'car', x: 88, z: -62, heading: 0, speed: 0, parked: true, driven: false };
+    const traffic2 = { nearestEnterable: () => car, vehicles: [car], boats: [] };
+    const far = { currentTarget: () => ({ x: 400, z: 400, radius: 8, onFoot: false }) };
+    ap2.update(1 / 60, { player: player2, driving: null, traffic: traffic2, missions: far });
+    check('autopilot walks to the car it got out of', ap2.walk.forward === true && !ap2.wantEnter);
+    check('autopilot walks toward the car, not the far target',
+      Math.abs(player2.state.camYaw - Math.atan2(-(88 - 70), -(-62 + 70))) < 0.01);
+    player2.state.x = 86; player2.state.z = -63; // now within 6 m of the car
+    ap2.update(1 / 60, { player: player2, driving: null, traffic: traffic2, missions: far });
+    check('autopilot gets back in the car when close', ap2.wantEnter === true);
+    // No vehicle anywhere near: walk the road graph (never straight into
+    // the river) — the first waypoint must be a road node, not the target.
+    const traffic3 = { nearestEnterable: () => null, vehicles: [], boats: [] };
+    const ap3 = createAutopilot(city);
+    ap3.update(1 / 60, { player: player2, driving: null, traffic: traffic3, missions: far });
+    check('autopilot walks the road graph when no vehicle is near',
+      ap3.walk.forward === true && ap3.route.length > 2);
+  }
   // On-foot target: walks (camera yaw points at the target).
   const mockMissions2 = { currentTarget: () => ({ x: 50, z: -50, radius: 4, onFoot: true }) };
   ap.update(1 / 60, { player, driving: null, traffic, missions: mockMissions2 });

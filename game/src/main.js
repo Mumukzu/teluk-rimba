@@ -5,7 +5,7 @@
 //   ?sim=1            headless fast-sim: logic ticks, no rendering
 //   ?shot=day|night   fixed time of day      &hud=0 hide the HUD
 //   &cam=aerial|street  fixed camera         &spawn=x,z start position
-//   &timeScale=N      faster clock/timers
+//   &timeScale=N      faster clock/timers (shots mode: whole simulation)
 //   &drive=type       start driving a vehicle (motorbike, scooter, car...)
 //   &wanted=N         start with wanted level N (0-3)
 //   &weather=rain|wet|clear  force the weather
@@ -27,6 +27,10 @@ import { saveGame, loadGame, clearSave } from './save.js';
 import { mat4TRS } from './gl.js';
 
 const params = parseShotParams();
+// Test/screenshot mode (no start screen, no audio gesture): any of these
+// params puts the game straight into the world — and in this mode
+// ?timeScale=N (?ff=N) speeds the whole simulation up for fast tests.
+const testMode = !!(params.shot || params.cam || params.mission || params.autopilot || params.sim);
 const canvas = document.getElementById('game');
 const city = generateCity(params.seed);
 const start = params.spawn || START_POS;
@@ -219,7 +223,7 @@ window.__AIRCRAFT__ = aircraft;
 
 function stepWorld(dt) {
   game.elapsed += dt;
-  game.timeHours = (game.timeHours + (dt * params.timeScale * 24) / DAY_LENGTH) % 24;
+  game.timeHours = (game.timeHours + (dt * 24) / DAY_LENGTH) % 24;
   weather.step(dt, game.timeHours);
   weather.stepDrops(dt, player.state.x, player.state.z);
   if (game.started) {
@@ -482,7 +486,10 @@ if (params.sim) {
     requestAnimationFrame(frame);
     let dt = Math.min(0.25, (now - last) / 1000);
     last = now;
-    acc += dt;
+    // In shots mode, ?timeScale=N (?ff=N) runs the whole simulation N times
+    // faster than real time (clock, timers, traffic, autopilot) so mission
+    // play-tests finish in minutes instead of game-hours.
+    acc += dt * (testMode ? params.timeScale : 1);
     while (acc >= STEP) { stepWorld(STEP); acc -= STEP; }
     const cam = cameraForFrame();
     const model = mat4TRS(player.state.x, player.state.y, player.state.z, player.state.facing, 1, 1, 1);

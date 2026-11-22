@@ -5,11 +5,12 @@
 //   &cam=street       street-level camera near downtown
 //   &camPos=x,y,z &camLook=x,y,z  free camera (test/screenshot only)
 //   &spawn=x,z        start the player at a test location
-//   &timeScale=N      speed up the clock and timers (tests only)
+//   &timeScale=N      test mode only: run the whole simulation N times
+//                      faster than real time (clock, mission timers, traffic)
 //   &sim=1            headless fast-sim: no rendering, logic ticks only
 //   &mission=N        test-only: start mission N on load (fresh save)
 //   &autopilot=1      test-only: autopilot drives to the mission objective
-//   &ff=N             test-only: speed up the day/night clock (alias of timeScale)
+//   &ff=N             test-only: alias of timeScale
 // Nothing here runs in normal play: plain ? with no params is the real game.
 export function parseShotParams() {
   const p = new URLSearchParams(window.location.search);

@@ -164,12 +164,32 @@ export function createAutopilot(city) {
 
     // --- need a vehicle and there is one nearby? Get in. ---
     if (!driving && dist > 40) {
-      const v = traffic.nearestEnterable(px, pz, 6);
-      if (v) { ap.wantEnter = true; return; }
-      // No vehicle close by: walk toward the target (slow, but honest).
-      player.state.camYaw = Math.atan2(-(t.x - px), -(t.z - pz));
-      ap.walk.forward = true;
-      ap.walk.run = true;
+      // Prefer the nearest rideable vehicle — the one we just got out of is
+      // usually within ~25 m. Walk to it and get in.
+      const v = traffic.nearestEnterable(px, pz, 40);
+      if (v) {
+        const dv = Math.hypot(v.x - px, v.z - pz);
+        if (dv < 6) { ap.wantEnter = true; return; }
+        player.state.camYaw = Math.atan2(-(v.x - px), -(v.z - pz));
+        ap.walk.forward = true;
+        ap.walk.run = dv > 10;
+        return;
+      }
+      // No vehicle anywhere near: walk the road graph toward the target.
+      // Straight-line walking gets stuck at the river — the BFS route
+      // crosses it on a bridge like a car would.
+      if (ap.route.length === 0 || ap.routeIdx >= ap.route.length) {
+        ap.route = bfsPath(px, pz, t.x, t.z);
+        ap.route.push({ x: t.x, z: t.z });
+        ap.routeIdx = 0;
+      }
+      let wp = ap.route[ap.routeIdx];
+      if (wp && Math.hypot(wp.x - px, wp.z - pz) < 8) { ap.routeIdx++; wp = ap.route[ap.routeIdx]; }
+      if (wp) {
+        player.state.camYaw = Math.atan2(-(wp.x - px), -(wp.z - pz));
+        ap.walk.forward = true;
+        ap.walk.run = true;
+      }
       return;
     }
 
