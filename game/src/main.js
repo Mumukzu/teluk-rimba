@@ -194,8 +194,19 @@ function driveStep(v, dt, inp) {
     const blocked = collideVehicle(nx, v.z, radius) || collideVehicle(v.x, nz, radius);
     if (blocked && Math.abs(v.speed) > 4) {
       audio.collision(Math.abs(v.speed) * 3.6);
-      // Hard hits wear the vehicle down (Phase E2 shop: repair).
-      v.condition = Math.max(0, (v.condition ?? 100) - Math.abs(v.speed) * 1.5);
+      // Hard hits wear the vehicle down (Phase E2 shop: repair). Wear is
+      // throttled to one hit per 0.5 s of game time and scaled down: the
+      // old code charged |speed|*1.5 EVERY STEP, so a 1-second scrape
+      // against a building corner was ~60 hits and zeroed the car
+      // instantly — the M3 chase sedan started at condition 0 (top speed
+      // halved to 12.5 m/s, slower than the 18 m/s jeep) and the mission
+      // was unwinnable from the first second. A real crash still hurts
+      // (25 m/s = 12.5 condition), but scraping no longer kills the car.
+      const now = game.elapsed;
+      if (now - (v.lastWearT ?? -99) > 0.5) {
+        v.lastWearT = now;
+        v.condition = Math.max(0, (v.condition ?? 100) - Math.abs(v.speed) * 0.5);
+      }
       if (v.condition < 30 && !v.warned) {
         v.warned = true;
         hud.showHint('Vehicle damaged — repair at Rimba Market ($100).');
