@@ -227,10 +227,25 @@ function placeInBlock(rand, block, count, zone) {
       let d = range(rand, size.d[0], size.d[1]);
       w = Math.min(w, cw * 0.78); d = Math.min(d, cd * 0.78);
       if (rot90) { const t = w; w = d; d = t; }
+      // Mu: NO building flush against a road. Every facade sits back
+      // from its block edge (SETBACK_M), so a sidewalk strip + trees
+      // always separate it from the asphalt. NOTE: the stored w/d are
+      // the box's local dims — the VISUAL footprint extents are swapped
+      // when rot90, so the margin is enforced on the visual extents.
+      // Shift the centre inward; shrink only if the building is wider
+      // than the block allows (blocks are >= 82 m wide, so this never
+      // triggers in practice).
+      const SETBACK_M = 3;
+      let vw = rot90 ? d : w, vd = rot90 ? w : d; // visual footprint extents
+      vw = Math.min(vw, bw - 2 * SETBACK_M);
+      vd = Math.min(vd, bd - 2 * SETBACK_M);
+      if (rot90) { d = vw; w = vd; } else { w = vw; d = vd; }
+      const cx2 = Math.min(Math.max(cx, block.x0 + vw / 2 + SETBACK_M), block.x1 - vw / 2 - SETBACK_M);
+      const cz2 = Math.min(Math.max(cz, block.z0 + vd / 2 + SETBACK_M), block.z1 - vd / 2 - SETBACK_M);
       const h = range(rand, size.h[0], size.h[1]);
       const col = colors[Math.floor(rand() * colors.length)];
       out.push({
-        x: cx, z: cz, w, d, h,
+        x: cx2, z: cz2, w, d, h,
         rot: rot90 ? Math.PI / 2 : 0,
         zone,
         color: col,
@@ -347,6 +362,20 @@ export function generateCity(seed = SEED) {
       b.floors = Math.max(1, Math.round(b.h / 3.2));
       b.shape = shapes[Math.floor(trand() * shapes.length)];
       if (b.shape === 'glass') b.color = [0.55, 0.72, 0.88]; // glass blue
+      // Mu: no facade flush against a road — the grown tower must sit
+      // back from its block edge like every other building. Shrink the
+      // footprint to fit the 3 m margin, centre stays: shrinking keeps
+      // the two towers in one block 20+ m apart, where shifting them
+      // would crowd them to a 2 m gap. (The river-clearance filter ran
+      // on the pre-growth footprint, which was larger, so clearance
+      // only improves.)
+      const blk = blocks.find((bl) => b.x >= bl.x0 && b.x <= bl.x1 && b.z >= bl.z0 && b.z <= bl.z1);
+      if (blk) {
+        const fw = b.rot ? b.d : b.w, fd = b.rot ? b.w : b.d; // footprint extents
+        const fw2 = Math.min(fw, 2 * Math.min(b.x - blk.x0 - 3, blk.x1 - b.x - 3));
+        const fd2 = Math.min(fd, 2 * Math.min(b.z - blk.z0 - 3, blk.z1 - b.z - 3));
+        if (b.rot) { b.d = fw2; b.w = fd2; } else { b.w = fw2; b.d = fd2; }
+      }
     }
   }
 
