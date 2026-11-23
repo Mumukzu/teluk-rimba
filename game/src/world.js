@@ -137,17 +137,29 @@ export function buildWaterfall() {
   // streak / blue — the white streaks read as foam running down the
   // falling water. Strip edges as fractions of the half-width.
   const STRIPS = [[-1, -0.55, water], [-0.55, -0.25, foam], [-0.25, 0.25, water], [0.25, 0.55, foam], [0.55, 1, water]];
+  // Each strip vertex hugs the channel bowl: its height is the terrain
+  // under THAT across-position + 0.5 (the old flat sheet sat at the
+  // centre-line height, so its outer edges were buried in the banks
+  // and only a thin triangle showed). The sheets now read as a full
+  // 10 m band of blue-white water from the city side.
+  const yAt = (tt, f) => {
+    const [px, pz] = at(tt);
+    return terrainHeight(px + ax * HALF * f, pz + az * HALF * f) + 0.5;
+  };
   for (const t of [0.08, 0.22, 0.36, 0.5, 0.64, 0.78, 0.92]) {
     const [cx, cz] = at(t);
-    const [ux, uz] = at(Math.max(0, t - 0.075));
-    const [dx2, dz2] = at(Math.min(1, t + 0.075));
-    const topY = terrainHeight(ux, uz) + 0.5;
-    const botY = terrainHeight(dx2, dz2) + 0.5;
+    const t0 = Math.max(0, t - 0.075), t1 = Math.min(1, t + 0.075);
+    // Top edge ON the up-slope line (t0), bottom edge ON the down-slope
+    // line (t1): x/z and y must come from the SAME point, or the quad
+    // cuts through the steep slope (the old code put the top edge's
+    // height on the centre line's x/z and buried it ~13 m deep).
+    const [ux, uz] = at(t0);
+    const [dx2, dz2] = at(t1);
     for (const [f0, f1, col] of STRIPS) {
-      const tl = [cx + ax * HALF * f0, topY, cz + az * HALF * f0];
-      const tr = [cx + ax * HALF * f1, topY, cz + az * HALF * f1];
-      const br = [cx + ax * HALF * f1, botY, cz + az * HALF * f1];
-      const bl = [cx + ax * HALF * f0, botY, cz + az * HALF * f0];
+      const tl = [ux + ax * HALF * f0, yAt(t0, f0), uz + az * HALF * f0];
+      const tr = [ux + ax * HALF * f1, yAt(t0, f1), uz + az * HALF * f1];
+      const br = [dx2 + ax * HALF * f1, yAt(t1, f1), dz2 + az * HALF * f1];
+      const bl = [dx2 + ax * HALF * f0, yAt(t1, f0), dz2 + az * HALF * f0];
       // Front (faces the city, SE) + back (faces the mountain, NW).
       g.pos.push(...tl, ...bl, ...br, ...tl, ...br, ...tr);
       for (let k = 0; k < 6; k++) g.nrm.push(...nSE);
@@ -156,10 +168,13 @@ export function buildWaterfall() {
       for (let k = 0; k < 6; k++) g.nrm.push(...nNW);
       for (let k = 0; k < 6; k++) g.col.push(...col);
     }
-    // Foam patch at the foot of this sheet.
-    const fy = terrainHeight(dx2, dz2) + 0.15;
+    // Foam patch at the foot of this sheet — one height per corner,
+    // hugging the slope (the old single height, taken 11 m down-slope,
+    // left corners floating metres above the steep ground as pale slabs
+    // that read cream/brown in the sun).
     const f = 2.2;
-    const p = [[cx - f, fy, cz - f], [cx + f, fy, cz - f], [cx + f, fy, cz + f], [cx - f, fy, cz + f]];
+    const p = [[cx - f, 0, cz - f], [cx + f, 0, cz - f], [cx + f, 0, cz + f], [cx - f, 0, cz + f]]
+      .map(([x, , z]) => [x, terrainHeight(x, z) + 0.15, z]);
     g.pos.push(...p[0], ...p[1], ...p[2], ...p[0], ...p[2], ...p[3]);
     for (let k = 0; k < 6; k++) g.nrm.push(0, 1, 0);
     for (let k = 0; k < 6; k++) g.col.push(...foam);
@@ -212,16 +227,18 @@ export function buildVolcano() {
 // mission (mountain road). Follows the terrain so the jeep can climb it.
 // ROUTE (Mu, 23 Nov — the old straight line ran down the MIDDLE of the
 // waterfall channel, so the cascade read as a brown stripe): the middle
-// points are offset ~40 m to the NE side of the river line, so the track
-// curves WELL CLEAR of the cascade instead of hugging it. Endpoints stay
+// points are offset ~70 m to the NE side of the river line, so the track
+// curves WELL CLEAR of the cascade — no brown stripe beside the falls
+// in the hero shot. The colour is muted grey-brown and the ribbon
+// narrower, so it never shouts against the blue water. Endpoints stay
 // on the mission line (base (-580,-580), summit (-800,-800)). The track is
 // VISUAL ONLY (missions use coordinates, not this geometry), so the
 // reroute cannot break mission 6.
 export function buildDirtTrack() {
   const g = emptyGeom();
-  const col = [0.5, 0.38, 0.26];
-  const pts = [[-580, -580], [-688, -632], [-768, -712], [-800, -800]];
-  const HALF = 3.5;
+  const col = [0.45, 0.36, 0.29];
+  const pts = [[-580, -580], [-709, -611], [-789, -691], [-800, -800]];
+  const HALF = 3.0;
   for (let i = 0; i < pts.length - 1; i++) {
     const [ax, az] = pts[i], [bx, bz] = pts[i + 1];
     const dx = bx - ax, dz = bz - az;

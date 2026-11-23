@@ -68,10 +68,14 @@ export function terrainHeight(x, z) {
   }
   // Lake basin below the waterfall (Mu): a bowl on the river at
   // (-440,-440) where the mountain river widens before the city.
-  // Nearest building is 57 m away, the M6 dirt track never reaches
-  // here (it stops at (-580,-580)), so the bowl floods nothing.
+  // The bowl is DEEP (6 m) and WIDE (75 m) so the whole 80 m lake disc
+  // sits BELOW the surrounding ground — the old 3 m / 45 m bowl left
+  // the disc's rim buried under flat ground, so the lake read as just
+  // the river ribbon. Nearest building is 57 m away (the dip there is
+  // only ~0.35 m); the M6 dirt track never reaches here (it stops at
+  // (-580,-580)), so the bowl floods nothing.
   const ld = Math.hypot(x + 440, z + 440);
-  if (ld < 45) h -= 3.0 * Math.pow(1 - ld / 45, 2);
+  if (ld < 75) h -= 6.0 * Math.pow(1 - ld / 75, 2);
   return h;
 }
 
