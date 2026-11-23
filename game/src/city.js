@@ -8,6 +8,11 @@ import { mulberry32, range, rangeInt, clamp, smoothstep, hash2 } from './rng.js'
 export const SEED = 20261122;
 export const TARGET_BUILDINGS = 1000;
 
+// Mu: NO building flush against a road — every facade sits back from its
+// block edge by SETBACK_M, so a sidewalk strip + trees always separate
+// it from the asphalt.
+export const SETBACK_M = 3;
+
 // Road grid: 13 lines per axis, 100 m apart. Mains every other line.
 export const ROAD_LINES = [-600, -500, -400, -300, -200, -100, 0, 100, 200, 300, 400, 500, 600];
 export const MAIN_LINES = new Set([-400, -200, 0, 200, 400]);
@@ -227,15 +232,13 @@ function placeInBlock(rand, block, count, zone) {
       let d = range(rand, size.d[0], size.d[1]);
       w = Math.min(w, cw * 0.78); d = Math.min(d, cd * 0.78);
       if (rot90) { const t = w; w = d; d = t; }
-      // Mu: NO building flush against a road. Every facade sits back
-      // from its block edge (SETBACK_M), so a sidewalk strip + trees
-      // always separate it from the asphalt. NOTE: the stored w/d are
-      // the box's local dims — the VISUAL footprint extents are swapped
-      // when rot90, so the margin is enforced on the visual extents.
-      // Shift the centre inward; shrink only if the building is wider
-      // than the block allows (blocks are >= 82 m wide, so this never
-      // triggers in practice).
-      const SETBACK_M = 3;
+      // Every facade sits back from its block edge by SETBACK_M (see the
+      // module constant above). NOTE: the stored w/d are the box's local
+      // dims — the VISUAL footprint extents are swapped when rot90, so
+      // the margin is enforced on the visual extents. Shift the centre
+      // inward; shrink only if the building is wider than the block
+      // allows (blocks are >= 82 m wide, so this never triggers in
+      // practice).
       let vw = rot90 ? d : w, vd = rot90 ? w : d; // visual footprint extents
       vw = Math.min(vw, bw - 2 * SETBACK_M);
       vd = Math.min(vd, bd - 2 * SETBACK_M);
@@ -324,8 +327,8 @@ export function generateCity(seed = SEED) {
     const size = ZONE_SIZE.residential;
     const w = range(rand, size.w[0], size.w[1]);
     const d = range(rand, size.d[0], size.d[1]);
-    const x = range(rand, blk.x0 + w / 2 + 3, blk.x1 - w / 2 - 3);
-    const z = range(rand, blk.z0 + d / 2 + 3, blk.z1 - d / 2 - 3);
+    const x = range(rand, blk.x0 + w / 2 + SETBACK_M, blk.x1 - w / 2 - SETBACK_M);
+    const z = range(rand, blk.z0 + d / 2 + SETBACK_M, blk.z1 - d / 2 - SETBACK_M);
     if (!Number.isFinite(x) || !Number.isFinite(z)) continue;
     const cand = { x, z, w, d, h: range(rand, size.h[0], size.h[1]), rot: 0, zone: 'residential', color: ZONE_COLORS.residential[Math.floor(rand() * ZONE_COLORS.residential.length)], floors: 1 };
     cand.floors = Math.max(1, Math.round(cand.h / 3.2));
@@ -362,18 +365,18 @@ export function generateCity(seed = SEED) {
       b.floors = Math.max(1, Math.round(b.h / 3.2));
       b.shape = shapes[Math.floor(trand() * shapes.length)];
       if (b.shape === 'glass') b.color = [0.55, 0.72, 0.88]; // glass blue
-      // Mu: no facade flush against a road — the grown tower must sit
-      // back from its block edge like every other building. Shrink the
-      // footprint to fit the 3 m margin, centre stays: shrinking keeps
-      // the two towers in one block 20+ m apart, where shifting them
-      // would crowd them to a 2 m gap. (The river-clearance filter ran
-      // on the pre-growth footprint, which was larger, so clearance
+      // No facade flush against a road — the grown tower must sit back
+      // from its block edge like every other building. Shrink the
+      // footprint to fit the SETBACK_M margin, centre stays: shrinking
+      // keeps the two towers in one block 20+ m apart, where shifting
+      // them would crowd them to a 2 m gap. (The river-clearance filter
+      // ran on the pre-growth footprint, which was larger, so clearance
       // only improves.)
       const blk = blocks.find((bl) => b.x >= bl.x0 && b.x <= bl.x1 && b.z >= bl.z0 && b.z <= bl.z1);
       if (blk) {
         const fw = b.rot ? b.d : b.w, fd = b.rot ? b.w : b.d; // footprint extents
-        const fw2 = Math.min(fw, 2 * Math.min(b.x - blk.x0 - 3, blk.x1 - b.x - 3));
-        const fd2 = Math.min(fd, 2 * Math.min(b.z - blk.z0 - 3, blk.z1 - b.z - 3));
+        const fw2 = Math.min(fw, 2 * Math.min(b.x - blk.x0 - SETBACK_M, blk.x1 - b.x - SETBACK_M));
+        const fd2 = Math.min(fd, 2 * Math.min(b.z - blk.z0 - SETBACK_M, blk.z1 - b.z - SETBACK_M));
         if (b.rot) { b.d = fw2; b.w = fd2; } else { b.w = fw2; b.d = fd2; }
       }
     }
