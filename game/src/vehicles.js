@@ -971,7 +971,7 @@ export function carGeom({ len, w, bodyH, cabinLen, cabinH, cabinX, hoodSlope = 0
     if (ex >= sx) continue; // degenerate segment (very short car)
     addTo(body, xlate(plainBox(sx - ex, skirtH, w, DARK), (sx + ex) / 2, 0.35 + skirtH / 2, 0));
   }
-  addTo(body, xlate(plainBox(len * 0.95, 0.15, w - 0.3, DARK), 0, 0.42, 0)); // underbody
+  addTo(body, xlate(plainBox(len - 0.04, 0.15, w - 0.3, DARK), 0, 0.42, 0)); // underbody — FULL LENGTH (was 0.95*len): the old short underbody left a see-through slot under the body at the front/rear ends, which read as a hollow open shell from a low rear angle. Width stays w-0.3 so the wheels stay clear.
   addTo(body, xlate(plainBox(len * 0.92, 0.1, w + 0.04, [1, 1, 1]), 0, bodyTop - 0.06, 0)); // shoulder
   // Thick sloped hood + trunk lid (0.26, not a thin board): the bottom
   // sinks 0.12 into the body box so the hood reads as one solid volume
@@ -1098,6 +1098,7 @@ function busGeom(withWheels = true) {
   const body = emptyGeom(), glass = emptyGeom();
   addTo(body, xlate(plainBox(9, 1.0, 2.5, [1, 1, 1]), 0, 0.85, 0));
   addTo(body, xlate(plainBox(9, 0.12, 2.5, [1, 1, 1]), 0, 2.26, 0));
+  addTo(body, xlate(plainBox(8.9, 0.25, 2.0, DARK), 0, 0.28, 0)); // chassis — closes the see-through gap under the body between the wheels (2.0 wide so the wheels at z=+-1.17 stay clear)
   addTo(body, xlate(plainBox(9.0, 0.18, 2.54, DARK), 0, 1.15, 0)); // side stripe
   addTo(body, xlate(plainBox(8.6, 0.1, 2.54, [1, 1, 1]), 0, 1.32, 0)); // sill rail
   // Window band (transparent) + dividers + reflection streaks.
@@ -1168,6 +1169,7 @@ function truckGeom(withWheels = true) {
   addTo(body, xlate(plainBox(1.5, 1.1, 1.9, INTERIOR), 2.35, 1.3, 0));
   addTo(body, xlate(plainBox(0.4, 0.6, 0.7, SEAT), 2.0, 1.15, 0));
   addTo(body, xlate(plainBox(4.6, 2.0, 2.35, [0.85, 0.85, 0.82]), -0.9, 1.35, 0)); // cargo box
+  addTo(body, xlate(plainBox(6.6, 0.25, 1.9, DARK), 0, 0.28, 0)); // chassis — closes the see-through gap under the cab + cargo box (1.9 wide so the wheels at z=+-1.08 stay clear)
   for (const px of [-2.2, -0.9, 0.4]) {
     addTo(body, xlate(plainBox(0.1, 2.0, 2.39, [0.78, 0.78, 0.75]), px, 1.35, 0)); // ribs
   }
@@ -1196,6 +1198,7 @@ function firetruckGeom(withWheels = true) {
   }
   addTo(body, xlate(plainBox(1.6, 1.2, 2.0, INTERIOR), 2.5, 1.35, 0)); // cab interior
   addTo(body, xlate(plainBox(5.3, 1.9, 2.5, [1, 1, 1]), -1.05, 1.3, 0));
+  addTo(body, xlate(plainBox(6.9, 0.25, 2.0, DARK), 0, 0.28, 0)); // chassis — closes the see-through gap under the body (2.0 wide so the wheels at z=+-1.15 stay clear)
   for (const px of [-2.6, -1.05, 0.5]) {
     addTo(body, xlate(plainBox(0.12, 1.9, 2.52, [0.9, 0.9, 0.88]), px, 1.3, 0)); // body ribs
   }
@@ -1235,7 +1238,7 @@ function ambulanceGeom(withWheels = true) {
   for (const [sx, ex] of [[2.6, 2.25], [1.35, -1.35], [-2.25, -2.6]]) {
     addTo(body, xlate(plainBox(sx - ex, 0.25, 2.0, DARK), (sx + ex) / 2, 0.475, 0));
   }
-  addTo(body, xlate(plainBox(4.9, 0.15, 1.7, DARK), 0, 0.42, 0)); // underbody
+  addTo(body, xlate(plainBox(5.16, 0.15, 1.7, DARK), 0, 0.42, 0)); // underbody — FULL LENGTH (was 4.9): no see-through slot at the ends
   addTo(glass, xlate(plainBox(3.4, 0.6, 2.02, GLASS), -0.2, 1.45, 0)); // side glass band
   for (const pz of [1.02, -1.02]) {
     addTo(glass, xlate(plainBox(3.0, 0.14, 0.03, GLASS_REFLECT), -0.2, 1.62, pz)); // its streak
@@ -1276,6 +1279,7 @@ function bajajGeom(withWheels = true) {
   addTo(body, xlate(plainBox(2.2, 0.5, 1.25, [1, 1, 1]), 0, 0.6, 0));
   addTo(body, xlate(plainBox(1.2, 0.15, 1.1, [0.2, 0.2, 0.22]), -0.5, 0.95, 0)); // seat
   addTo(body, xlate(plainBox(2.0, 0.1, 1.3, [1, 1, 1]), 0, 1.75, 0)); // canopy roof
+  addTo(body, xlate(plainBox(1.6, 0.1, 0.8, DARK), -0.2, 0.35, 0)); // floor — closes the see-through gap under the seat (narrow + short of the front wheel so no wheel is buried)
   for (const [px, pz] of [[0.85, 0.55], [0.85, -0.55], [-0.85, 0.55], [-0.85, -0.55]]) {
     addTo(body, xlate(plainBox(0.08, 0.85, 0.08, DARK), px, 1.32, pz)); // canopy posts
   }
