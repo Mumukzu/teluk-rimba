@@ -16,7 +16,7 @@ import { buildBeachPropMeshes } from './beach.js';
 import { buildLandmarks } from './landmarks.js';
 import { buildMoonGeom, buildStarsSpec, buildSkyDomeGeom, buildCloudSpec, skyColors } from './sky.js';
 import { buildVehicleBodyGeoms, buildVehicleGlassGeoms, headlightGeom, buildWheelGeom, buildWheelGeomFar, buildBikeFrontGeom, beamConeGeom, beamPoolGeom, tailGeom, beaconGeom } from './vehicles.js';
-import { pedTorsoGeom, pedWowokTorsoGeom, pedArmGeom, pedLegGeom, pedSkirtGeom, pedHeadGeom, pedHairShortGeom, pedHairLongGeom, pedBadgeGeom, fishingRodGeom } from './peds.js';
+import { pedTorsoGeom, pedWowokTorsoGeom, pedArmGeom, pedHandGeom, pedLegGeom, pedSkirtGeom, pedHeadGeom, pedHairShortGeom, pedHairLongGeom, pedBadgeGeom, fishingRodGeom } from './peds.js';
 import { buildWetGeoms } from './weather.js';
 import { buildNightLightGeoms } from './nightlights.js';
 import { buildPlotDressing } from './plots.js';
@@ -213,6 +213,7 @@ export function createRenderer(canvas, city) {
   addDyn(progs.litInst, pedTorsoGeom(), 2000, 'ped_torso');
   addDyn(progs.litInst, pedArmGeom(-1), 2000, 'ped_armL');
   addDyn(progs.litInst, pedArmGeom(1), 2000, 'ped_armR');
+  addDyn(progs.litInst, pedHandGeom(), 4000, 'ped_hands'); // round skin balls, 2 per NPC
   addDyn(progs.litInst, pedLegGeom(-1), 2000, 'ped_legsL');
   addDyn(progs.litInst, pedLegGeom(1), 2000, 'ped_legsR');
   addDyn(progs.litInst, pedSkirtGeom(), 400, 'ped_skirt');
@@ -223,10 +224,11 @@ export function createRenderer(canvas, city) {
   addDyn(progs.litInst, fishingRodGeom(), 100, 'ped_rod');
   // The player (Wowok): the same humanoid base model, animated per part
   // (one instance each) so his arms/legs swing when he walks and he SITS
-  // in the vehicle when driving. Capacity 1 each.
+  // in the vehicle when driving. Capacity 1 each (2 hands).
   addDyn(progs.litInst, pedWowokTorsoGeom(), 1, 'player_torso'); // baked red/white panels, tint [1,1,1]
   addDyn(progs.litInst, pedArmGeom(-1), 1, 'player_armL');
   addDyn(progs.litInst, pedArmGeom(1), 1, 'player_armR');
+  addDyn(progs.litInst, pedHandGeom(), 2, 'player_hands');
   addDyn(progs.litInst, pedLegGeom(-1), 1, 'player_legsL');
   addDyn(progs.litInst, pedLegGeom(1), 1, 'player_legsR');
   addDyn(progs.litInst, pedHeadGeom(), 1, 'player_head');

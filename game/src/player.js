@@ -3,7 +3,7 @@
 import { PLAYER, CAMERA, WORLD } from './config.js';
 import { terrainHeight, buildingAABBs } from './city.js';
 import { plainBox, mat4TRS, mat4RotX, mat4Multiply } from './gl.js';
-import { pedWowokTorsoGeom, pedArmGeom, pedLegGeom, pedHeadGeom, pedHairShortGeom } from './peds.js';
+import { pedWowokTorsoGeom, pedArmGeom, pedHandGeom, pedLegGeom, pedHeadGeom, pedHairShortGeom } from './peds.js';
 
 export function createPlayer(city, startX, startZ) {
   const aabbs = buildingAABBs(city);
@@ -140,30 +140,32 @@ export function createPlayer(city, startX, startZ) {
       lean = running ? 0.1 : 0;
       base = mat4TRS(state.x, state.y + bob, state.z, state.facing, s, s * breathe, s);
     }
-    // Lean pivots at the hips (y 0.9) so the upper body tilts without
+    // Lean pivots at the hips (y 0.88) so the upper body tilts without
     // sliding off the legs.
-    const hip = mat4TRS(0, 0.9, 0, 0, 1, 1, 1);
-    const hipInv = mat4TRS(0, -0.9, 0, 0, 1, 1, 1);
+    const hip = mat4TRS(0, 0.88, 0, 0, 1, 1, 1);
+    const hipInv = mat4TRS(0, -0.88, 0, 0, 1, 1, 1);
     const upper = lean !== 0
       ? mat4Multiply(mat4Multiply(base, mat4Multiply(hip, mat4RotX(lean))), hipInv)
       : base;
     const seated = !!driving;
     const torsoM = seated ? base : upper;
-    const shoulderL = mat4TRS(-0.28, 1.40, 0, 0, 1, 1, 1);
-    const shoulderR = mat4TRS(0.28, 1.40, 0, 0, 1, 1, 1);
+    const shoulderL = mat4TRS(-0.28, 1.22, 0, 0, 1, 1, 1);
+    const shoulderR = mat4TRS(0.28, 1.22, 0, 0, 1, 1, 1);
     const armSwingL = seated ? -1.0 : -swing; // driving: both arms forward
     const armSwingR = seated ? -1.0 : swing;
     const armL = mat4Multiply(mat4Multiply(torsoM, shoulderL), mat4RotX(armSwingL));
     const armR = mat4Multiply(mat4Multiply(torsoM, shoulderR), mat4RotX(armSwingR));
-    const hipL = mat4TRS(-0.11, 0.90, 0, 0, 1, 1, 1);
-    const hipR = mat4TRS(0.11, 0.90, 0, 0, 1, 1, 1);
+    const wrist = mat4TRS(0, -0.39, 0, 0, 1, 1, 1);
+    const handL = mat4Multiply(armL, wrist);
+    const handR = mat4Multiply(armR, wrist);
+    const hipM = mat4TRS(0, 0.88, 0, 0, 1, 1, 1);
     const legBase = mat4TRS(
       driving ? base[12] : state.x, driving ? base[13] : state.y + bob, driving ? base[14] : state.z,
       driving ? driving.heading : state.facing, s, s, s);
     const legSwingL = seated ? 0.8 : swing;
     const legSwingR = seated ? 0.8 : -swing;
-    const legL = mat4Multiply(mat4Multiply(legBase, hipL), mat4RotX(legSwingL));
-    const legR = mat4Multiply(mat4Multiply(legBase, hipR), mat4RotX(legSwingR));
+    const legL = mat4Multiply(mat4Multiply(legBase, hipM), mat4RotX(legSwingL));
+    const legR = mat4Multiply(mat4Multiply(legBase, hipM), mat4RotX(legSwingR));
     return {
       torso: { matrices: [torsoM], tints: [[1, 1, 1]] }, // baked red/white panels — tint must stay white
       armL: { matrices: [armL], tints: [WOWOK.jacket] },
@@ -172,10 +174,11 @@ export function createPlayer(city, startX, startZ) {
       legR: { matrices: [legR], tints: [WOWOK.pants] },
       head: { matrices: [torsoM], tints: [WOWOK.skin] },
       hair: { matrices: [torsoM], tints: [WOWOK.hair] },
+      hands: { matrices: [handL, handR], tints: [WOWOK.skin, WOWOK.skin] },
     };
   }
 
-  // Player figure: a real humanoid (same ~7-head base model as the NPCs),
+  // Player figure: a real humanoid (same reference base model as the NPCs),
   // merged into ONE mesh — used as the fallback / test figure. The live
   // game draws the animated parts (partMatrices) instead.
   function figureGeom() {
@@ -190,10 +193,12 @@ export function createPlayer(city, startX, startZ) {
     };
     const add = (p) => { g.pos.push(...p.pos); g.nrm.push(...p.nrm); g.col.push(...p.col); };
     add(pedWowokTorsoGeom()); // baked red jacket + white shirt panels, no tint
-    add(tint(shift(pedArmGeom(-1), -0.28, 1.40, 0), WOWOK.jacket));
-    add(tint(shift(pedArmGeom(1), 0.28, 1.40, 0), WOWOK.jacket));
-    add(tint(shift(pedLegGeom(-1), 0, 0.90, 0), WOWOK.pants));
-    add(tint(shift(pedLegGeom(1), 0, 0.90, 0), WOWOK.pants));
+    add(tint(shift(pedArmGeom(-1), -0.28, 1.22, 0), WOWOK.jacket));
+    add(tint(shift(pedArmGeom(1), 0.28, 1.22, 0), WOWOK.jacket));
+    add(tint(shift(pedHandGeom(), -0.28, 0.83, 0), WOWOK.skin)); // hands at the wrists
+    add(tint(shift(pedHandGeom(), 0.28, 0.83, 0), WOWOK.skin));
+    add(tint(shift(pedLegGeom(-1), 0, 0.88, 0), WOWOK.pants));
+    add(tint(shift(pedLegGeom(1), 0, 0.88, 0), WOWOK.pants));
     add(tint(pedHeadGeom(), WOWOK.skin));
     add(tint(pedHairShortGeom(), WOWOK.hair));
     return g;

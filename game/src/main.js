@@ -577,6 +577,7 @@ if (params.sim) {
     dyn.ped_torso = ped.torso;
     dyn.ped_armL = ped.armL;
     dyn.ped_armR = ped.armR;
+    dyn.ped_hands = ped.hands;
     dyn.ped_legsL = ped.legL;
     dyn.ped_legsR = ped.legR;
     dyn.ped_skirt = ped.skirt;
@@ -593,6 +594,7 @@ if (params.sim) {
       dyn.player_torso = pp.torso;
       dyn.player_armL = pp.armL;
       dyn.player_armR = pp.armR;
+      dyn.player_hands = pp.hands;
       dyn.player_legsL = pp.legL;
       dyn.player_legsR = pp.legR;
       dyn.player_head = pp.head;
