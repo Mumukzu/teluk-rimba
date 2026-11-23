@@ -40,6 +40,10 @@ export function buildShopGlow(city) {
     // warm panel + spill on EVERY face of a downtown tower (front, back,
     // left, right), so the base reads lit from any angle. Commercial shops
     // keep the single front panel. One instanced mesh either way.
+    // Mu 23 Nov 22:55 — downtown towers have a glass lobby now, so the
+    // flat ground panel is GONE on downtown faces (it would hide the
+    // clear glass + pillars); the spill + amber sign band stay, and the
+    // lobby glow core (buildings.js) lights the glass from inside.
     // Mu 23 Nov 22:01 — CBD ground floor BRIGHTER + LIVELIER: the panel
     // is wider (up to 18 m) and its tint pushes past 1.0, the spill is
     // wider/deeper/stronger, and every OTHER downtown tower gets a lit
@@ -65,11 +69,18 @@ export function buildShopGlow(city) {
       const h = 2.1;
       const fx = b.x + nx * (out + 0.13);
       const fz = b.z + nz * (out + 0.13);
-      matrices.push(mat4TRS(fx, 1.35, fz, rot, w, h, 1));
       const base = GLOW_TINTS[Math.floor(rand() * GLOW_TINTS.length)];
       const j = b.zone === 'downtown' ? 1.0 + rand() * 0.15 : 0.85 + rand() * 0.15;
       const tint = [base[0] * j, base[1] * j, base[2] * j];
-      tints.push(tint);
+      // Mu 23 Nov 22:55 — downtown towers have a glass lobby now: the flat
+      // warm panel would hide the clear glass + pillars, so NO ground
+      // panel on downtown faces. The lobby glow core (buildings.js) lights
+      // the glass from inside instead, and the spill below still washes
+      // the sidewalk. Commercial shops keep their panel.
+      if (b.zone !== 'downtown') {
+        matrices.push(mat4TRS(fx, 1.35, fz, rot, w, h, 1));
+        tints.push(tint);
+      }
       // Warm spill on the ground in front of the shop (Mu's refs: warm
       // light on the sidewalk) — downtown: a wider, deeper, stronger wash
       // (5 m deep, 3 m out, 0.62x the panel tint); commercial keeps the

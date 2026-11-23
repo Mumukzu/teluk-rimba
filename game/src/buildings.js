@@ -179,8 +179,14 @@ export function buildBuildingMeshes(gl, progs, city) {
     const rc = ROOF_COLORS[b.zone] || ROOF_COLORS.residential;
     roofTints.push([rc[0] * rv, rc[1] * rv, rc[2] * rv]);
     // Plinth (base band, darker facade) + cornice (top band, lighter).
-    plinthMatrices.push(mat4TRS(b.x, 0.3, b.z, b.rot, b.w + 0.6, 0.6, b.d + 0.6));
-    plinthTints.push(darken(b.color, 0.7));
+    // Mu 23 Nov 22:55 — downtown towers get NO plinth: the darkened base
+    // band was part of the grey strip under the glass. Their ground floor
+    // is a glass lobby instead (big pillars + frames, below).
+    const isDowntown = b.zone === 'downtown';
+    if (!isDowntown) {
+      plinthMatrices.push(mat4TRS(b.x, 0.3, b.z, b.rot, b.w + 0.6, 0.6, b.d + 0.6));
+      plinthTints.push(darken(b.color, 0.7));
+    }
     corniceMatrices.push(mat4TRS(b.x, b.h - 0.2, b.z, b.rot, b.w + 0.5, 0.4, b.d + 0.5));
     corniceTints.push(lighten(b.color, 1.15));
     // Ground-floor glass band: a glass strip around the base (y 0..2.2),
@@ -191,18 +197,92 @@ export function buildBuildingMeshes(gl, progs, city) {
     // (drawn with the transparent / night-only programs in render.js);
     // low houses keep the dark lit band.
     if (b.h >= 12) {
-      glassBandTallMatrices.push(mat4TRS(b.x, 1.1, b.z, b.rot, b.w + 0.14, 2.2, b.d + 0.14));
-      glassBandTallTints.push([0.85, 0.92, 1.0]); // pale blue-white glass
-      // Mu 23 Nov 21:19 — CBD ground floor glows ALL AROUND at night: the
-      // glow core on downtown towers sits PROUD of the glass band (0.10 m
-      // out, vs 0.01 m for other tall buildings), so the warm band reads
-      // directly on all four sides instead of dimmed behind the glass.
-      // Shopfront details still poke through (door 0.17, sign 0.14).
-      const glowOut = b.zone === 'downtown' ? 0.20 : 0.02;
-      glassGlowMatrices.push(mat4TRS(b.x, 1.05, b.z, b.rot, b.w + glowOut, 1.9, b.d + glowOut));
-      const gt = GLASS_GLOW_TINTS[Math.floor(hash01(b.x + 5, b.z + 9) * GLASS_GLOW_TINTS.length)];
-      const gj = 0.85 + hash01(b.x, b.z + 4) * 0.15;
-      glassGlowTints.push([gt[0] * gj, gt[1] * gj, gt[2] * gj]);
+      if (isDowntown) {
+        // --- CBD glass lobby (Mu 23 Nov 22:55) ---
+        // Root cause of the grey strip: the curtain wall's ground row
+        // (j=0) is plain mullion-grey, never glass — on a 150-200 m tower
+        // that row is 4-8 m tall, so the base read as one big flat grey
+        // wall under the glass. The lobby covers the whole ground row:
+        // bright interior core (day) + clear glass + warm glow core
+        // behind the glass (night, full 360°), framed by big pillars.
+        // Lobby height = the curtain's ground-row height for this class.
+        const lobbyH = b.h / BUILDING_CLASSES[cls].segRows;
+        // Bright warm lobby interior, just proud of the facade (+0.02) —
+        // seen through the clear glass by day.
+        glassBandMatrices.push(mat4TRS(b.x, lobbyH / 2, b.z, b.rot, b.w + 0.04, lobbyH, b.d + 0.04));
+        glassBandTints.push([0.96, 0.94, 0.88]);
+        // Clear bright glass, full lobby height (+0.08 proud).
+        glassBandTallMatrices.push(mat4TRS(b.x, lobbyH / 2, b.z, b.rot, b.w + 0.16, lobbyH, b.d + 0.16));
+        glassBandTallTints.push([0.93, 0.97, 1.0]);
+        // Warm glow core BEHIND the glass (+0.05 proud, glass at +0.08),
+        // so at night the whole lobby glows through the glass instead of
+        // the core hiding it as a flat panel. Brighter than the old core
+        // (jitter 1.0-1.15), full lobby height, all four faces.
+        glassGlowMatrices.push(mat4TRS(b.x, lobbyH / 2, b.z, b.rot, b.w + 0.10, lobbyH, b.d + 0.10));
+        const gt = GLASS_GLOW_TINTS[Math.floor(hash01(b.x + 5, b.z + 9) * GLASS_GLOW_TINTS.length)];
+        const gj = 1.0 + hash01(b.x, b.z + 4) * 0.15;
+        glassGlowTints.push([gt[0] * gj, gt[1] * gj, gt[2] * gj]);
+        // Big pillars + dark frames on all four faces (into the plinth
+        // mesh — same unitBox, same lit program, +0 draw calls).
+        const pillarTint = [0.88, 0.86, 0.80]; // warm light stone
+        const frameTint = [0.28, 0.30, 0.34]; // soft dark frame
+        // Four square corner pillars (read on both faces).
+        for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+          const wx = b.x + Math.cos(b.rot) * (sx * b.w / 2) + Math.sin(b.rot) * (sz * b.d / 2);
+          const wz = b.z - Math.sin(b.rot) * (sx * b.w / 2) + Math.cos(b.rot) * (sz * b.d / 2);
+          plinthMatrices.push(mat4TRS(wx, lobbyH / 2, wz, b.rot, 1.2, lobbyH, 1.2));
+          plinthTints.push(pillarTint);
+        }
+        for (const turn of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+          const rot = b.rot + turn;
+          const nx = Math.sin(rot), nz = Math.cos(rot);
+          const ax = Math.cos(rot), az = -Math.sin(rot);
+          const across = (turn === 0 || turn === Math.PI) ? b.w : b.d;
+          const out = (turn === 0 || turn === Math.PI) ? b.d : b.w;
+          const cx = b.x + nx * (out / 2), cz = b.z + nz * (out / 2);
+          // Intermediate pillars every ~6 m. The front face keeps a clear
+          // 6.4 m entrance bay for the door + shop sign.
+          const nSeg = Math.max(2, Math.round(across / 6));
+          const kept = [-across / 2];
+          for (let k = 1; k < nSeg; k++) {
+            const t = -across / 2 + (k * across) / nSeg;
+            if (turn === 0 && Math.abs(t) < 3.2) continue;
+            kept.push(t);
+            plinthMatrices.push(mat4TRS(cx + ax * t, lobbyH / 2, cz + az * t, rot, 1.2, lobbyH, 0.6));
+            plinthTints.push(pillarTint);
+          }
+          kept.push(across / 2);
+          // Slim vertical mullion mid-panel between neighbouring pillars
+          // (skipped across the front door), top rail, and a segmented
+          // bottom rail (no rail across the door — it would read as a bar
+          // over the doorway).
+          for (let i = 0; i < kept.length - 1; i++) {
+            const tm = (kept[i] + kept[i + 1]) / 2;
+            if (turn === 0 && Math.abs(tm) < 1.6) continue;
+            plinthMatrices.push(mat4TRS(cx + ax * tm, lobbyH / 2, cz + az * tm, rot, 0.15, lobbyH - 0.52, 0.18));
+            plinthTints.push(frameTint);
+          }
+          plinthMatrices.push(mat4TRS(cx + nx * 0.10, lobbyH - 0.13, cz + nz * 0.10, rot, across, 0.26, 0.18));
+          plinthTints.push(frameTint);
+          for (let i = 0; i < kept.length - 1; i++) {
+            const a = kept[i], c = kept[i + 1];
+            if (turn === 0 && a < 1.6 && c > -1.6) continue;
+            const tm = (a + c) / 2;
+            plinthMatrices.push(mat4TRS(cx + ax * tm, 0.13, cz + az * tm, rot, c - a, 0.26, 0.18));
+            plinthTints.push(frameTint);
+          }
+        }
+      } else {
+        glassBandTallMatrices.push(mat4TRS(b.x, 1.1, b.z, b.rot, b.w + 0.14, 2.2, b.d + 0.14));
+        glassBandTallTints.push([0.85, 0.92, 1.0]); // pale blue-white glass
+        // Mu 23 Nov 21:19 — the glow core on other tall buildings sits
+        // just proud of the glass band (0.01 m), so the warm band reads
+        // directly instead of dimmed behind the glass.
+        glassGlowMatrices.push(mat4TRS(b.x, 1.05, b.z, b.rot, b.w + 0.02, 1.9, b.d + 0.02));
+        const gt = GLASS_GLOW_TINTS[Math.floor(hash01(b.x + 5, b.z + 9) * GLASS_GLOW_TINTS.length)];
+        const gj = 0.85 + hash01(b.x, b.z + 4) * 0.15;
+        glassGlowTints.push([gt[0] * gj, gt[1] * gj, gt[2] * gj]);
+      }
     } else {
       glassBandMatrices.push(mat4TRS(b.x, 1.1, b.z, b.rot, b.w + 0.12, 2.2, b.d + 0.12));
       glassBandTints.push(GLASS_BAND[b.zone] || [0.4, 0.42, 0.4]);

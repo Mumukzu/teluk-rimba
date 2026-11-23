@@ -262,7 +262,14 @@ check('bridges are the 4 whitelisted crossings',
     }
     check('CBD crown stacks chain without gaps (poles sink into tiers)', stackOk, worst);
   }
-  check('plinth + cornice on every building', meshes.plinth.matrices.length === 1000 && meshes.cornice.matrices.length === 1000);
+  // Mu 23 Nov 22:55 — downtown towers have a glass lobby now, so they
+  // carry NO dark plinth band (the grey strip is gone); their plinth-mesh
+  // entries are lobby pillars + frames instead. Cornice still on every
+  // building; base bands (0.6 m tall) on every non-downtown building.
+  const downtownCount = city.buildings.filter((b) => b.zone === 'downtown').length;
+  check('cornice on every building, plinth band on every non-downtown building (downtown has a glass lobby)',
+    meshes.cornice.matrices.length === 1000
+    && meshes.plinth.matrices.filter((m) => Math.abs(m[5] - 0.6) < 1e-6).length === 1000 - downtownCount);
   check('entrance kit or shopfront on every building', meshes.entrance.matrices.length + meshes.shopfront.matrices.length === 1000);
   check('balconies placed (multi-storey fronts)', meshes.balconies.matrices.length > 500);
   check('roof units on some but not all buildings', meshes.roofUnits.matrices.length > 100 && meshes.roofUnits.matrices.length < 1000);

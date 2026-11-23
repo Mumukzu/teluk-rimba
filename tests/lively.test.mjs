@@ -30,25 +30,57 @@ check('stepped tiers only on h>=20 unshaped blocks',
   lv.stepped.matrices.every((m) => m[13] >= 20 + 1.5 - 0.01));
 
 // ---- Ground-floor glass for tall buildings (Mu) ----
-check('glass band covers all 1000 buildings (621 dark + 379 tall)',
-  meshes.glassBand.matrices.length === 621
+// Mu 23 Nov 22:55 — CBD ground floor is a glass lobby now: glassBand holds
+// the 621 low-house dark bands PLUS 21 bright lobby interiors (one per
+// downtown tower, full lobby height); glassBandTall still holds one glass
+// box per tall building (the downtown ones are taller + clearer now).
+check('glass band covers all 1000 buildings + 21 downtown lobby interiors (621 dark + 21 lobby + 379 tall)',
+  meshes.glassBand.matrices.length === 642
   && meshes.glassBandTall.matrices.length === 379
-  && meshes.glassBand.matrices.length + meshes.glassBandTall.matrices.length === 1000,
+  && meshes.glassBand.matrices.length + meshes.glassBandTall.matrices.length === 1021,
   `${meshes.glassBand.matrices.length} + ${meshes.glassBandTall.matrices.length}`);
 check('warm interior glow core on every tall building', meshes.glassGlow.matrices.length === 379);
 check('glass + glow matrices and tints are finite',
   allFin(meshes.glassBandTall.matrices) && allFin(meshes.glassGlow.matrices)
   && allFinT(meshes.glassBandTall.tints) && allFinT(meshes.glassGlow.tints));
+// ---- CBD glass lobby (Mu 23 Nov 22:55): no grey strip under the glass —
+// big pillars + frames on all four faces of every downtown tower, clear
+// glass + warm glow core at full lobby height (the curtain's ground row).
+{
+  const downtown = city.buildings.filter((b) => b.zone === 'downtown');
+  const tall = (m) => m[5] > 3; // pillars/mullions/lobby glass are >3 m tall; bands/rails are not
+  check('21 bright lobby interiors in the glass band (one per downtown tower)',
+    meshes.glassBand.matrices.filter(tall).length === downtown.length,
+    meshes.glassBand.matrices.filter(tall).length + ' interiors');
+  check('21 full-height lobby glass boxes (downtown glassBandTall)',
+    meshes.glassBandTall.matrices.filter(tall).length === downtown.length,
+    meshes.glassBandTall.matrices.filter(tall).length + ' tall glass');
+  check('21 full-height lobby glow cores (downtown glassGlow)',
+    meshes.glassGlow.matrices.filter(tall).length === downtown.length,
+    meshes.glassGlow.matrices.filter(tall).length + ' tall glows');
+  check('lobby pillars + frames on every downtown tower (plinth mesh, tall parts)',
+    meshes.plinth.matrices.filter(tall).length >= downtown.length * 30,
+    meshes.plinth.matrices.filter(tall).length + ' tall plinth parts');
+  // (matrices are Float32Array: 0.6 stores as 0.6000000238, so the height
+  // epsilon must be 1e-6, not 1e-9.)
+  const noPlinthBand = downtown.every((b) => !meshes.plinth.matrices.some((m) =>
+    Math.abs(m[12] - b.x) < 1e-6 && Math.abs(m[13] - 0.3) < 1e-6 && Math.abs(m[14] - b.z) < 1e-6
+    && Math.abs(m[5] - 0.6) < 1e-6));
+  check('no dark plinth band on any downtown tower (grey strip gone)', noPlinthBand);
+}
 
 // ---- CBD full glass (Mu 23 Nov 21:19; tint lighter pale sky-blue Mu 23 Nov 22:17): lighter pale sky-blue curtain wall, warm
 // lit windows on every tower, ground floor glowing on all four sides ----
 {
   const sg = buildShopGlow(city);
-  // 316 commercial front panels + 21 downtown towers x 4 faces = 400
-  // ground panels + 11 amber sign bands (every other downtown tower).
-  check('shop glow: 411 panels (400 ground + 11 sign bands, CBD towers glow on all 4 sides)', sg.counts.panels === 411, sg.counts.panels + ' panels');
+  // 316 commercial front panels + 11 amber sign bands (every other
+  // downtown tower). Mu 23 Nov 22:55 — downtown towers have a glass lobby
+  // now, so their 84 flat ground panels are gone (the lobby glow core
+  // lights the glass from inside instead); the 400 ground spills stay,
+  // one per face, washing the sidewalk.
+  check('shop glow: 327 panels (316 commercial + 11 sign bands, no flat downtown panel — glass lobby instead)', sg.counts.panels === 327, sg.counts.panels + ' panels');
   check('shop glow: 11 amber sign bands on downtown towers', sg.counts.bands === 11, sg.counts.bands + ' bands');
-  check('shop glow: 400 ground spills (one per ground panel)', sg.counts.spills === 400, sg.counts.spills + ' spills');
+  check('shop glow: 400 ground spills (one per ground panel face)', sg.counts.spills === 400, sg.counts.spills + ' spills');
   check('shop glow panels + spills are finite',
     allFin(sg.matrices) && allFinT(sg.tints) && allFin(sg.spill.matrices) && allFinT(sg.spill.tints));
   const lw = buildLitWindows(city);
