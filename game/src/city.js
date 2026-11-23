@@ -504,13 +504,30 @@ export function generateCity(seed = SEED) {
     }
   }
 
-  // --- traffic lights: main x main intersections, two opposite corners ---
+  // --- traffic lights: two opposite corners at EVERY intersection ---
+  // (was main x main only). On main x main corners the offset stays
+  // 1.2 m past the corridor edge (the old positions, clear of the bus
+  // stops at corridor-0.5); elsewhere the pole stands on the sidewalk's
+  // outer edge. A corner in the river falls back to the other diagonal,
+  // then to any single dry corner.
   const trafficLights = [];
-  for (const Lx of MAIN_LINES) {
-    for (const Lz of MAIN_LINES) {
-      const o = CORRIDOR_HALF(Lx) + 1.2;
-      trafficLights.push({ x: Lx + o, z: Lz + o });
-      trafficLights.push({ x: Lx - o, z: Lz - o });
+  for (const n of nodes) {
+    const main = IS_MAIN(n.x) && IS_MAIN(n.z);
+    const o = Math.max(CORRIDOR_HALF(n.x), CORRIDOR_HALF(n.z)) + (main ? 1.2 : -0.5);
+    let placed = false;
+    for (const pair of [[[1, 1], [-1, -1]], [[1, -1], [-1, 1]]]) {
+      const pts = pair.map(([sx, sz]) => ({ x: n.x + sx * o, z: n.z + sz * o }));
+      if (pts.every((p) => riverDistance(p.x, p.z) >= 12)) {
+        trafficLights.push(...pts);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      for (const [sx, sz] of [[1, 1], [-1, -1], [1, -1], [-1, 1]]) {
+        const x = n.x + sx * o, z = n.z + sz * o;
+        if (riverDistance(x, z) >= 12) { trafficLights.push({ x, z }); break; }
+      }
     }
   }
 

@@ -29,6 +29,13 @@ const ROOF_COLORS = {
 const SHOP_ACCENTS = [
   [0.9, 0.3, 0.25], [0.2, 0.6, 0.9], [0.95, 0.7, 0.15], [0.3, 0.7, 0.35], [0.85, 0.4, 0.6],
 ];
+// Ground-floor glass band tint by zone (cool glass for shops/towers,
+// warm dark glass for houses).
+const GLASS_BAND = {
+  downtown: [0.35, 0.45, 0.55], commercial: [0.35, 0.45, 0.55],
+  residential: [0.45, 0.42, 0.38], beach: [0.45, 0.42, 0.38],
+  port: [0.4, 0.4, 0.38], forest: [0.4, 0.4, 0.38],
+};
 const hash01 = (x, z) => {
   const s = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453;
   return s - Math.floor(s);
@@ -97,7 +104,15 @@ export function buildBuildingMeshes(gl, progs, city) {
   const shopfrontMatrices = [], shopfrontTints = [];
   const balconyMatrices = [], balconyTints = [];
   const roofUnitMatrices = [], roofUnitTints = [];
+  // Phase H: ground-floor glass band on every building, roof deck +
+  // parapet walls on mid/tall buildings.
+  const glassBandMatrices = [], glassBandTints = [];
+  const roofDeckMatrices = [], roofDeckTints = [];
+  const parapetNSMatrices = [], parapetNSTints = [];
+  const parapetEWMatrices = [], parapetEWTints = [];
   const unitBox = plainBox(1, 1, 1, [1, 1, 1]);
+  const parapetNSGeom = plainBox(1, 1, 0.15, [1, 1, 1]);
+  const parapetEWGeom = plainBox(0.15, 1, 1, [1, 1, 1]);
   for (const b of city.buildings) {
     // Base box is centred; lift so its bottom sits on the ground.
     const cls = buildingClass(b.h);
@@ -113,6 +128,28 @@ export function buildBuildingMeshes(gl, progs, city) {
     plinthTints.push(darken(b.color, 0.7));
     corniceMatrices.push(mat4TRS(b.x, b.h - 0.2, b.z, b.rot, b.w + 0.5, 0.4, b.d + 0.5));
     corniceTints.push(lighten(b.color, 1.15));
+    // Ground-floor glass band: a glass strip around the base (y 0..2.2),
+    // 0.06 proud of the facade (depth-safe at aerial range). The plinth
+    // (0.3 proud) covers its bottom 0.6 m; the shopfront/entrance kits
+    // sit proud of it, so the band reads around them, never through them.
+    glassBandMatrices.push(mat4TRS(b.x, 1.1, b.z, b.rot, b.w + 0.12, 2.2, b.d + 0.12));
+    glassBandTints.push(GLASS_BAND[b.zone] || [0.4, 0.42, 0.4]);
+    // Roof deck + parapet walls on mid/tall buildings: a slab on the roof
+    // (0.6 of the footprint) ringed by low walls at the roof-slab edge.
+    if (b.h >= 12) {
+      roofDeckMatrices.push(mat4TRS(b.x, b.h + 0.62, b.z, b.rot, b.w * 0.6, 0.25, b.d * 0.6));
+      roofDeckTints.push([rc[0] * rv * 0.85, rc[1] * rv * 0.85, rc[2] * rv * 0.85]);
+      const sr = Math.sin(b.rot), cr = Math.cos(b.rot);
+      const parTint = darken(b.color, 0.75);
+      for (const s of [-1, 1]) {
+        // NS walls (local z faces): length w+0.7 along local x.
+        parapetNSMatrices.push(mat4TRS(b.x + sr * s * (b.d / 2 + 0.28), b.h + 1.0, b.z + cr * s * (b.d / 2 + 0.28), b.rot, b.w + 0.7, 1.0, 1));
+        parapetNSTints.push(parTint);
+        // EW walls (local x faces): length d+0.7 along local z.
+        parapetEWMatrices.push(mat4TRS(b.x + cr * s * (b.w / 2 + 0.28), b.h + 1.0, b.z - sr * s * (b.w / 2 + 0.28), b.rot, 1, 1.0, b.d + 0.7));
+        parapetEWTints.push(parTint);
+      }
+    }
     // Front face centre (local +z after rotY is the outward normal).
     const fx = b.x + Math.sin(b.rot) * (b.d / 2);
     const fz = b.z + Math.cos(b.rot) * (b.d / 2);
@@ -138,10 +175,12 @@ export function buildBuildingMeshes(gl, progs, city) {
       }
     }
     // Roof clutter on about half the buildings tall enough to carry it.
+    // On decked roofs (h >= 12) the units sit ON the deck (top h+0.75),
+    // not half-buried in it.
     if (b.h >= 6 && hash01(b.x + 11, b.z + 5) < 0.5) {
       const ox = (hash01(b.x, b.z + 1) - 0.5) * b.w * 0.4;
       const oz = (hash01(b.x + 2, b.z) - 0.5) * b.d * 0.4;
-      roofUnitMatrices.push(mat4TRS(b.x + ox, b.h + 0.5, b.z + oz, b.rot, 1, 1, 1));
+      roofUnitMatrices.push(mat4TRS(b.x + ox, b.h + (b.h >= 12 ? 0.75 : 0.5), b.z + oz, b.rot, 1, 1, 1));
       roofUnitTints.push([1, 1, 1]);
     }
     if (!b.shape) continue;
@@ -177,6 +216,10 @@ export function buildBuildingMeshes(gl, progs, city) {
     shopfront: part(buildShopfrontGeom(), shopfrontMatrices, shopfrontTints),
     balconies: part(buildBalconyGeom(), balconyMatrices, balconyTints),
     roofUnits: part(buildRoofUnitGeom(), roofUnitMatrices, roofUnitTints),
+    glassBand: part(unitBox, glassBandMatrices, glassBandTints),
+    roofDeck: part(unitBox, roofDeckMatrices, roofDeckTints),
+    parapetNS: { geom: parapetNSGeom, matrices: parapetNSMatrices, tints: parapetNSTints, prog: progs.litInst },
+    parapetEW: { geom: parapetEWGeom, matrices: parapetEWMatrices, tints: parapetEWTints, prog: progs.litInst },
   };
 }
 

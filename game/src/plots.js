@@ -8,7 +8,9 @@ import { riverDistance } from './city.js';
 import { emptyGeom, plainBox } from './gl.js';
 import { distinctColor, parkedCarGeom } from './vehicles.js';
 
-const PAVE = [0.78, 0.78, 0.76]; // light grey paving
+const PAVE = [0.58, 0.58, 0.56]; // light grey paving — dark enough to read
+// as paving in bright daylight, never a glaring white strip at the bases.
+const PAVE_VAR = 0.05; // per-slab shade variation, so slabs read as tiles
 const FENCE_COL = [0.85, 0.82, 0.72];
 const BENCH_COL = [0.55, 0.42, 0.28];
 const BIN_COL = [0.15, 0.3, 0.2]; // dark green trash bin
@@ -83,7 +85,7 @@ export function buildPlotDressing(city) {
     // Paving: 2x2 light-grey slabs with a slight shade variation.
     const mx = (b.x0 + b.x1) / 2, mz = (b.z0 + b.z1) / 2;
     for (const [x0, z0, x1, z1] of [[b.x0, b.z0, mx, mz], [mx, b.z0, b.x1, mz], [b.x0, mz, mx, b.z1], [mx, mz, b.x1, b.z1]]) {
-      const v = range(rand, -0.03, 0.03);
+      const v = range(rand, -PAVE_VAR, PAVE_VAR);
       quadUp(paving, x0, z0, x1, z1, 0.06, [PAVE[0] + v, PAVE[1] + v, PAVE[2] + v]);
     }
 

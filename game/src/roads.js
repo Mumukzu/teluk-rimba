@@ -5,10 +5,24 @@ import { ROAD_LINES, MAIN_LINES, IS_MAIN, CORRIDOR_HALF, ASPHALT_HALF, riverDist
 import { emptyGeom, plainBox, mat4TRS } from './gl.js';
 
 const ASPHALT = [0.29, 0.29, 0.3]; // mid-tone grey, clearly darker than sidewalk
-const SIDEWALK = [0.62, 0.61, 0.58];
+// Sidewalks: mid grey, clearly darker than the old near-white so the road
+// edge reads; alternate 8 m tile shades for a paver read. Kerb: a darker
+// raised lip (0.19) along the asphalt edge.
+const SIDEWALK = [0.54, 0.53, 0.5];
+const SIDEWALK_ALT = [0.47, 0.46, 0.43];
+const KERB = [0.42, 0.41, 0.39];
 const DASH_MAIN = [0.85, 0.72, 0.25]; // thin yellow dashes on main roads
 const DASH_MINOR = [0.88, 0.88, 0.86]; // thin white dashes on small roads
 const ZEBRA = [0.92, 0.92, 0.9];
+
+function tri(g, a, b, c, y, col) {
+  // Single up-facing triangle (a,c,b winding, same as quad()).
+  const n = [0, 1, 0];
+  const P = (p) => [p[0], y, p[1]];
+  g.pos.push(...P(a), ...P(c), ...P(b));
+  for (let k = 0; k < 3; k++) g.nrm.push(...n);
+  for (let k = 0; k < 3; k++) g.col.push(...col);
+}
 
 function quad(g, a, b, c, d, y, col) {
   // Winding a->c->b faces +y (up); the naive a->b->c order faces down and
@@ -81,6 +95,40 @@ export function zebraSpots(city) {
   return spots;
 }
 
+// Zebra on EVERY leg of an intersection (not just one approach): a leg is
+// kept only if the edge exists, is not a bridge deck, and the crossing sits
+// on land. Returns a Map keyed by node id -> array of {x, z, alongX, dir}.
+// (zebraSpots stays as-is: the frozen phase-f test asserts one spot per
+// node through it.)
+export function zebraLegs(city) {
+  const legs = new Map();
+  const nodeByIJ = new Map(city.nodes.map((n) => [n.i + ',' + n.j, n]));
+  const edgeOf = new Map();
+  for (const e of city.edges) {
+    edgeOf.set(e.a + '|' + e.b, e);
+    edgeOf.set(e.b + '|' + e.a, e);
+  }
+  for (const n of city.nodes) {
+    const arr = [];
+    const ah = Math.max(ASPHALT_HALF(n.x), ASPHALT_HALF(n.z));
+    for (const [di, dj, alongX, dir] of [[1, 0, true, 1], [-1, 0, true, -1], [0, -1, false, -1], [0, 1, false, 1]]) {
+      const m = nodeByIJ.get((n.i + di) + ',' + (n.j + dj));
+      if (!m) continue;
+      const e = edgeOf.get(n.id + '|' + m.id);
+      if (!e || e.bridge) continue; // no zebra on a bridge deck
+      const cx = alongX ? n.x + dir * 10 : n.x;
+      const cz = alongX ? n.z : n.z + dir * 10;
+      const ends = alongX
+        ? [[cx, cz - ah + 1.4], [cx, cz + ah - 1.4]]
+        : [[cx - ah + 1.4, cz], [cx + ah - 1.4, cz]];
+      if (![[cx, cz], ...ends].every(([x, z]) => riverDistance(x, z) > 11)) continue;
+      arr.push({ x: n.x, z: n.z, alongX, dir });
+    }
+    legs.set(n.id, arr);
+  }
+  return legs;
+}
+
 export function buildRoadMesh(city) {
   const g = emptyGeom();
   const N = ROAD_LINES.length;
@@ -107,15 +155,40 @@ export function buildRoadMesh(city) {
   const drawRun = (horiz, fixed, from, to, main) => {
     if (to - from < 2) return;
     const ah = ASPHALT_HALF(fixed), ch = CORRIDOR_HALF(fixed);
+    // Asphalt runs the full segment (under the intersection squares too).
     if (horiz) {
       quad(g, [from, fixed - ah], [to, fixed - ah], [to, fixed + ah], [from, fixed + ah], 0.03, ASPHALT);
-      quad(g, [from, fixed - ch], [to, fixed - ch], [to, fixed - ah], [from, fixed - ah], 0.1, SIDEWALK);
-      quad(g, [from, fixed + ah], [to, fixed + ah], [to, fixed + ch], [from, fixed + ch], 0.1, SIDEWALK);
     } else {
       quad(g, [fixed - ah, from], [fixed + ah, from], [fixed + ah, to], [fixed - ah, to], 0.03, ASPHALT);
-      quad(g, [fixed - ch, from], [fixed - ah, from], [fixed - ah, to], [fixed - ch, to], 0.1, SIDEWALK);
-      quad(g, [fixed + ah, from], [fixed + ch, from], [fixed + ch, to], [fixed + ah, to], 0.1, SIDEWALK);
     }
+    // Sidewalk strip on one side (side = -1 | +1): 8 m tile segments in
+    // alternating shades, raised to 0.16 (above the asphalt), plus a
+    // darker raised kerb lip (0.19) at the asphalt edge. Clipped to
+    // [from+ah, to-ah] so the strip never crosses a road mouth — the
+    // intersection corners are closed by rounded fans (see buildRoadMesh).
+    // Corner order is normalised (a,b on the low edge) so the winding
+    // always faces +y on both sides and both orientations.
+    const sidewalkStrip = (side) => {
+      // Clip to the intersection square's edge at each end (the square
+      // spans ±max(ah, crossing ah) around the node), so the strip never
+      // crosses a road mouth.
+      const s0 = from + Math.max(ah, ASPHALT_HALF(from)), s1 = to - Math.max(ah, ASPHALT_HALF(to));
+      if (s1 - s0 < 2) return;
+      const inner = fixed + side * ah, outer = fixed + side * ch;
+      const lo = Math.min(inner, outer), hi = Math.max(inner, outer);
+      let k = 0;
+      for (let s = s0; s < s1; s += 8, k++) {
+        const e = Math.min(s + 8, s1);
+        const col = k % 2 === 0 ? SIDEWALK : SIDEWALK_ALT;
+        if (horiz) quad(g, [s, lo], [e, lo], [e, hi], [s, hi], 0.16, col);
+        else quad(g, [lo, s], [hi, s], [hi, e], [lo, e], 0.16, col);
+      }
+      const kLo = Math.min(inner, inner + side * 0.45), kHi = Math.max(inner, inner + side * 0.45);
+      if (horiz) quad(g, [s0, kLo], [s1, kLo], [s1, kHi], [s0, kHi], 0.19, KERB);
+      else quad(g, [kLo, s0], [kHi, s0], [kHi, s1], [kLo, s1], 0.19, KERB);
+    };
+    sidewalkStrip(-1);
+    sidewalkStrip(1);
     const m0 = from + 16, m1 = to - 16; // marking range, clear of crossings
     // Solid white edge lines on both sides of the asphalt.
     const edge = (off) => {
@@ -123,15 +196,14 @@ export function buildRoadMesh(city) {
       else quad(g, [fixed + off - 0.075, m0], [fixed + off + 0.075, m0], [fixed + off + 0.075, m1], [fixed + off - 0.075, m1], 0.06, DASH_MINOR);
     };
     edge(-ah + 0.35); edge(ah - 0.35);
-    // Drain covers: dark grates on the sidewalk edge (kerb side), every
-    // ~35 m, clear of intersections — same merged ground mesh, no extra
-    // draw call. Offset ah+0.45 sits between the asphalt edge and the
-    // lamp line (ah+0.9), so covers never sit under a lamp or a tree.
+    // Drain covers: dark grates on the sidewalk (clear of the kerb lip and
+    // the lamp line), every ~35 m, clear of intersections — same merged
+    // ground mesh, no extra draw call.
     const DRAIN = [0.16, 0.16, 0.17];
     for (let s = m0 + 8; s < m1; s += 35) {
-      for (const off of [-ah - 0.45, ah + 0.45]) {
-        if (horiz) quad(g, [s - 0.45, fixed + off - 0.25], [s + 0.45, fixed + off - 0.25], [s + 0.45, fixed + off + 0.25], [s - 0.45, fixed + off + 0.25], 0.11, DRAIN);
-        else quad(g, [fixed + off - 0.25, s - 0.45], [fixed + off + 0.25, s - 0.45], [fixed + off + 0.25, s + 0.45], [fixed + off - 0.25, s + 0.45], 0.11, DRAIN);
+      for (const off of [-ah - 0.75, ah + 0.75]) {
+        if (horiz) quad(g, [s - 0.45, fixed + off - 0.25], [s + 0.45, fixed + off - 0.25], [s + 0.45, fixed + off + 0.25], [s - 0.45, fixed + off + 0.25], 0.17, DRAIN);
+        else quad(g, [fixed + off - 0.25, s - 0.45], [fixed + off + 0.25, s - 0.45], [fixed + off + 0.25, s + 0.45], [fixed + off - 0.25, s + 0.45], 0.17, DRAIN);
       }
     }
     // Centre line: main roads get a double solid yellow line (4 lanes, 2
@@ -205,9 +277,11 @@ export function buildRoadMesh(city) {
   }
   // Intersection squares, drawn as four quadrant quads so a square that
   // touches the river (the (0,-100) bridge endpoint) loses only the wet
-  // quadrant instead of painting asphalt into the water. One zebra crossing
-  // + one stop line per intersection, on the chosen approach.
-  const spots = zebraSpots(city);
+  // quadrant instead of painting asphalt into the water. A zebra crossing
+  // + a stop line on EVERY leg, and a rounded sidewalk corner fan at each
+  // corner of the square (radius 3 m, closing the clipped sidewalk strips
+  // with a curved outer edge instead of a stiff 90° point).
+  const legs = zebraLegs(city);
   for (const node of city.nodes) {
     const ah = Math.max(ASPHALT_HALF(node.x), ASPHALT_HALF(node.z));
     const quadAt = (sx, sz) => {
@@ -221,10 +295,25 @@ export function buildRoadMesh(city) {
       if (cornerRd < 12.5) continue;
       quadAt(sx, sz);
     }
-    const spot = spots.get(node.id);
-    if (spot) {
-      zebraCrossing(g, spot.x, spot.z, spot.alongX, spot.dir, ah);
-      stopLine(g, spot.x, spot.z, spot.alongX, spot.dir, ah);
+    for (const leg of legs.get(node.id) || []) {
+      zebraCrossing(g, leg.x, leg.z, leg.alongX, leg.dir, ah);
+      stopLine(g, leg.x, leg.z, leg.alongX, leg.dir, ah);
+    }
+    // Rounded corners: quarter-disc fan (4 segments) at each corner of
+    // the square, centred on the square's corner, arcing outward to the
+    // two sidewalk strips. Skipped where the corner would sit in water.
+    const fanR = 3;
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      const cx = node.x + sx * ah, cz = node.z + sz * ah;
+      const midX = cx + sx * fanR * 0.7071, midZ = cz + sz * fanR * 0.7071;
+      if (riverDistance(cx, cz) < 12 || riverDistance(midX, midZ) < 12) continue;
+      let prev = [cx + sx * fanR, cz];
+      for (let k = 1; k <= 4; k++) {
+        const a = (k / 4) * Math.PI / 2;
+        const p = [cx + Math.cos(a) * fanR * sx, cz + Math.sin(a) * fanR * sz];
+        tri(g, [cx, cz], prev, p, 0.16, SIDEWALK);
+        prev = p;
+      }
     }
   }
   return g;
