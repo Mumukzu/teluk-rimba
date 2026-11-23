@@ -162,6 +162,10 @@ export function createRenderer(canvas, city) {
   // floodlight heads as a night-only unlit instanced mesh.
   addStatic(progs.lit, stadium.base, mat4Identity());
   addInst(progs.unlitInst, stadium.floodHeads, { nightOnly: true });
+  // Stadium floodlight pools + beams (Mu): warm light on the pitch and
+  // visible cones from the heads, night only (+2 draws at night, 0 by day).
+  addStatic(progs.transp, stadium.floodPools, mat4Identity(), { transparent: true, alpha: 0.2, nightOnly: true });
+  addStatic(progs.transp, stadium.floodBeams, mat4Identity(), { transparent: true, alpha: 0.24, nightOnly: true });
   addInst(progs.litInst, treeMesh);
   addInst(progs.litInst, palmMesh);
   addInst(progs.litInst, lampMeshes.poles);

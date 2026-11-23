@@ -7,7 +7,9 @@
 // rect, block (11,7) Marina Shore) — the geometry never disagrees with
 // the map, the minimap, or the collision boxes. Pure geometry (no WebGL,
 // no DOM) — the renderer draws it as 1 static mesh (+1 night-only
-// instanced mesh for the floodlight heads).
+// instanced mesh for the floodlight heads, +2 night-only transparent
+// draws: warm light pools on the pitch and beam cones from the heads,
+// Mu 23 Nov — the heads alone left the pitch dark).
 import { emptyGeom, plainBox } from './gl.js';
 
 const CONCRETE = [0.75, 0.75, 0.72];
@@ -152,6 +154,69 @@ export function buildStadium(city) {
   box(6, 3, 0.3, BOARD, cx, 4.1, z1 + 4.5);
   box(5.4, 0.5, 0.06, AMBER, cx, 5.2, z1 + 4.28);
 
+  // --- Night floodlighting (Mu 23 Nov): the heads alone left the pitch
+  // dark — the light never reached the grass. Two night-only meshes:
+  // warm light pools laid over the pitch (same pattern as the street
+  // lamp pools in nightlights.js) and a visible beam cone from each
+  // head slanting down to the pitch centre (same shape + colour fade
+  // as the vehicle beam cones in vehicles.js). Pure geometry; the
+  // renderer draws both transparent + night-only.
+  const POOL_WARM = [1.0, 0.76, 0.42];
+  const POOL_CORE = [1.0, 0.85, 0.6];
+  const floodPools = emptyGeom();
+  // Flat up-facing quad — triangle order a,c,b / a,d,c, same as the
+  // night-light pools (the renderer culls back faces).
+  function poolQuad(g, qx, qz, w, d, y, col) {
+    const n = [0, 1, 0];
+    const P = (x, z) => [x, y, z];
+    g.pos.push(
+      ...P(qx - w / 2, qz - d / 2), ...P(qx + w / 2, qz + d / 2), ...P(qx + w / 2, qz - d / 2),
+      ...P(qx - w / 2, qz - d / 2), ...P(qx - w / 2, qz + d / 2), ...P(qx + w / 2, qz + d / 2),
+    );
+    for (let k = 0; k < 6; k++) g.nrm.push(...n);
+    for (let k = 0; k < 6; k++) g.col.push(...col);
+  }
+  // One soft wash over the whole pitch (y 0.36 — above the white
+  // markings, whose tops sit at 0.34) + one brighter core per corner,
+  // centred halfway between the pole and the pitch centre, so the
+  // corners read brightest and the layers stack toward the middle.
+  poolQuad(floodPools, cx, cz, pitchW, pitchD, 0.36, POOL_WARM);
+  for (const [fx, fz] of [[x0 + 4, z0 + 4], [x1 - 4, z0 + 4], [x0 + 4, z1 - 4], [x1 - 4, z1 - 4]]) {
+    poolQuad(floodPools, (fx + cx) / 2, (fz + cz) / 2, 24, 16, 0.37, POOL_CORE);
+  }
+  // Beam cone per floodlight: apex at the head, slanting down toward
+  // the pitch centre. LEN 32 m / R 4 m keeps the whole cone above the
+  // grass (lowest ring vertex ~0.31 m). Both triangle windings, so the
+  // cone reads from every side.
+  const floodBeams = emptyGeom();
+  const BEAM_SEG = 10, BEAM_LEN = 32, BEAM_R = 4;
+  const BEAM_APEX_COL = [1, 0.95, 0.75];
+  const BEAM_RING_COL = [0.42, 0.36, 0.26];
+  for (const [hx, hy, hz] of headPos) {
+    const ax = cx - hx, ay = 0.25 - hy, az = cz - hz;
+    const al = Math.hypot(ax, ay, az);
+    const ux = ax / al, uy = ay / al, uz = az / al;
+    // Orthonormal basis across the axis: horizontal right + up2.
+    const hn = Math.hypot(ux, uz);
+    const rx = -uz / hn, rz = ux / hn;
+    const wx = -rz * uy, wy = rz * ux - rx * uz, wz = rx * uy;
+    const rcx = hx + ux * BEAM_LEN, rcy = hy + uy * BEAM_LEN, rcz = hz + uz * BEAM_LEN;
+    const ringPt = (a) => [
+      rcx + (rx * Math.cos(a) + wx * Math.sin(a)) * BEAM_R,
+      rcy + wy * Math.sin(a) * BEAM_R,
+      rcz + (rz * Math.cos(a) + wz * Math.sin(a)) * BEAM_R,
+    ];
+    for (let k = 0; k < BEAM_SEG; k++) {
+      const b0 = ringPt((k / BEAM_SEG) * Math.PI * 2);
+      const b1 = ringPt(((k + 1) / BEAM_SEG) * Math.PI * 2);
+      floodBeams.pos.push(...[hx, hy, hz], ...b1, ...b0, ...[hx, hy, hz], ...b0, ...b1);
+      for (let j = 0; j < 6; j++) floodBeams.nrm.push(0, 1, 0);
+      floodBeams.col.push(
+        ...BEAM_APEX_COL, ...BEAM_RING_COL, ...BEAM_RING_COL,
+        ...BEAM_APEX_COL, ...BEAM_RING_COL, ...BEAM_RING_COL);
+    }
+  }
+
   // Floodlight heads: one bright 2x0.9 m panel per pole, drawn only at
   // night (unlit instanced mesh, warm white tint).
   const lampGeom = (() => {
@@ -163,6 +228,8 @@ export function buildStadium(city) {
 
   return {
     base: g,
+    floodPools,
+    floodBeams,
     floodHeads: {
       geom: lampGeom,
       matrices: headPos.map(([x, y, z]) => {
@@ -178,6 +245,9 @@ export function buildStadium(city) {
       boxes,
       tris: g.pos.length / 9,
       floodlights: headPos.length,
+      floodPoolQuads: floodPools.pos.length / 18,
+      floodBeamCones: headPos.length,
+      floodBeamTris: floodBeams.pos.length / 9,
       pitchW,
       pitchD,
     },

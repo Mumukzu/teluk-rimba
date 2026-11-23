@@ -57,6 +57,44 @@ check('4 floodlight heads', sd.floodHeads.matrices.length === 4 && sd.floodHeads
 check('floodlight heads stand at the four corners (14.4 m up)', sd.floodHeads.matrices.every((m) => Math.abs(m[13] - 14.4) < 0.001)
   && sd.floodHeads.matrices.map((m) => `${m[12]},${m[14]}`).sort().join('|') === '516,132|516,180|584,132|584,180');
 check('floodlight tints are warm white', sd.floodHeads.tints.every((t) => t[0] === 1 && t[1] === 0.9 && t[2] === 0.6));
+
+// --- Night floodlighting (Mu 23 Nov): warm pools on the pitch + beam
+// cones from the heads, so the pitch reads lit at night. ---
+check('floodlight pools exist (1 wash + 4 cores = 5 quads)', sd.floodPools && sd.floodPools.pos.length === 5 * 18,
+  `${sd.floodPools ? sd.floodPools.pos.length / 18 : 0} quads`);
+check('all flood pool vertices are finite', allFin(sd.floodPools.pos) && allFin(sd.floodPools.col));
+check('flood pools lie on the pitch, above the markings (y 0.36/0.37)', (() => {
+  const ys = new Set();
+  for (let i = 0; i < sd.floodPools.pos.length; i += 3) {
+    const x = sd.floodPools.pos[i], y = sd.floodPools.pos[i + 1], z = sd.floodPools.pos[i + 2];
+    if (x < st.cx - 30 || x > st.cx + 30 || z < st.cz - 20 || z > st.cz + 20) return false;
+    ys.add(Math.round(y * 100));
+  }
+  return ys.size === 2 && ys.has(36) && ys.has(37);
+})());
+check('floodlight beams exist (4 cones = 80 tris)', sd.floodBeams && sd.floodBeams.pos.length / 9 === 80,
+  `${sd.floodBeams ? sd.floodBeams.pos.length / 9 : 0} tris`);
+check('all flood beam vertices are finite', allFin(sd.floodBeams.pos) && allFin(sd.floodBeams.col));
+check('each beam starts at a floodlight head (14.4 m) and slants down toward the pitch centre', (() => {
+  const heads = sd.floodHeads.matrices.map((m) => [m[12], m[13], m[14]]);
+  for (const [hx, hy, hz] of heads) {
+    let apexFound = false, ringNearCentre = false;
+    const dHead = Math.hypot(hx - st.cx, hz - st.cz);
+    for (let i = 0; i < sd.floodBeams.pos.length; i += 3) {
+      const x = sd.floodBeams.pos[i], y = sd.floodBeams.pos[i + 1], z = sd.floodBeams.pos[i + 2];
+      if (Math.abs(x - hx) < 0.01 && Math.abs(y - hy) < 0.01 && Math.abs(z - hz) < 0.01) apexFound = true;
+      if (Math.hypot(x - st.cx, z - st.cz) < dHead - 10 && y < 8) ringNearCentre = true;
+    }
+    if (!apexFound || !ringNearCentre) return false;
+  }
+  return true;
+})());
+check('no beam vertex goes below the ground', (() => {
+  for (let i = 1; i < sd.floodBeams.pos.length; i += 3) if (sd.floodBeams.pos[i] < 0) return false;
+  return true;
+})());
+check('stadium counts agree (pools + beams)', sd.counts.floodPoolQuads === 5 && sd.counts.floodBeamCones === 4 && sd.counts.floodBeamTris === 80,
+  JSON.stringify(sd.counts));
 check('stadium counts agree', sd.counts.floodlights === 4 && sd.counts.pitchW === 60 && sd.counts.pitchD === 40,
   JSON.stringify(sd.counts));
 
