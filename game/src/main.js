@@ -517,7 +517,7 @@ if (params.sim) {
   // buildDynamics (player.partMatrices), not as a static mesh.
   const activityPropsMesh = renderer.makePlayerMesh(peds.activityPropsGeom());
   const landmarks = renderer.landmarks;
-  const lively = renderer.lively; // smoke spots / neon glow / laundry (buildDynamics)
+  const lively = renderer.lively; // neon glow / laundry (buildDynamics)
   const plotDressing = renderer.plotDressing; // yard fountain spots (animated water)
   let last = performance.now();
   let acc = 0;
@@ -844,23 +844,11 @@ if (params.sim) {
         };
       }
     }
-    // Lively city (Mu): smoke puffs, neon flicker, laundry sway.
-    // No flags/pennants — forbidden. All three ride dynamic meshes
-    // (render.js), refilled here every frame from renderer.lively.
+    // Lively city (Mu): neon flicker, laundry sway. Smoke REMOVED
+    // (Mu, 23 Nov 2026). No flags/pennants — forbidden. Both ride
+    // dynamic meshes (render.js), refilled here every frame from
+    // renderer.lively.
     if (lively) {
-      // Smoke: 2 puffs per spot, rising + drifting + growing, fading
-      // from mid-grey to pale as they age; loop with a per-spot phase.
-      const sm = { matrices: [], tints: [] };
-      for (const s of lively.smokeSpots) {
-        for (let k = 0; k < 2; k++) {
-          const age = (game.elapsed * 0.16 + s.phase + k * 0.5) % 1;
-          const sc = 0.9 + age * 2.4;
-          sm.matrices.push(mat4TRS(s.x + age * 7, s.y + age * 13, s.z + age * 1.5, 0, sc, sc * 0.8, sc));
-          const g = 0.5 + age * 0.28;
-          sm.tints.push([g, g, g + 0.03]);
-        }
-      }
-      dyn.smoke = sm;
       // Neon halo: gentle flicker — brightness breathes 0.82..1.0 with
       // a per-sign phase. Night only (render.js skips it by day).
       if (lively.neonGlow.matrices.length) {

@@ -310,10 +310,10 @@ export function createRenderer(canvas, city) {
   // Phase E2: hidden coins (spinning gold discs) + stunt ramps (wedges).
   addDyn(progs.unlitInst, plainBox(0.9, 0.9, 0.15, [1, 0.84, 0.2]), 12, 'coins');
   addDyn(progs.litInst, wedgeGeom(), 4, 'ramps');
-  // Lively city (Mu): smoke puffs (chimneys + warungs), neon halo glow
-  // (night only, flickers), laundry cloth pieces (sway in the wind).
-  // All refilled every frame from main.js buildDynamics. (+3 draws.)
-  addDyn(progs.transpInst, plainBox(1, 1, 1, [1, 1, 1]), 160, 'smoke');
+  // Lively city (Mu): neon halo glow (night only, flickers), laundry
+  // cloth pieces (sway in the wind). Smoke REMOVED (Mu, 23 Nov 2026:
+  // puffs read as artefacts). All refilled every frame from main.js
+  // buildDynamics. (+2 draws.)
   addDyn(progs.unlitInst, plainBox(1.25, 5.25, 0.06, [1, 1, 1]), 160, 'neonGlow');
   addDyn(progs.litInst, lively.clothGeom, 200, 'laundry');
   const flatQuadGeom = (() => {
@@ -465,7 +465,7 @@ export function createRenderer(canvas, city) {
       updateDynamicInstancedMesh(gl, entry.mesh, spec.matrices, spec.tints);
       const uniforms = { ...common, uModel: mat4Identity() };
       const blendAlpha = name.startsWith('vehglass_') ? 0.42
-        : { beam: 0.12, headbeams: 0.09, flow: 0.3, sea: 0.45, heliBeam: 0.15, beamcones: 0.24, smoke: 0.28 }[name];
+        : { beam: 0.12, headbeams: 0.09, flow: 0.3, sea: 0.45, heliBeam: 0.15, beamcones: 0.24 }[name];
       if (blendAlpha !== undefined) {
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -486,7 +486,7 @@ export function createRenderer(canvas, city) {
     get tris() { return tris; },
     dayLength: DAY_LENGTH,
     landmarks,
-    lively, // smoke spots / neon glow bases / laundry pieces (main.js buildDynamics)
+    lively, // neon glow bases / laundry pieces (main.js buildDynamics)
     plotDressing, // yard fountain spots (animated water rides the flow mesh)
   };
 }

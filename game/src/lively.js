@@ -10,8 +10,9 @@
 //      bright at night, gently flickering);
 //   4. street life — food carts, tent warungs, cafe tables on sidewalks;
 //   5. used roofs — gardens, small pools, helipads, small courts;
-//   6. small animations — chimney/warung smoke (drifting puffs), neon
-//      flicker, laundry swaying in the wind (dynamic meshes, main.js).
+//   6. small animations — neon flicker, laundry swaying in the wind
+//      (dynamic meshes, main.js). Chimney/warung smoke REMOVED (Mu,
+//      23 Nov 2026: the drifting puffs read as artefacts, not smoke).
 // Pure geometry (no document at build time — the two canvas atlases are
 // null in Node tests, same pattern as the rooftop signs).
 import { emptyGeom, plainBox, mat4TRS, mergeGeoms, translateGeom } from './gl.js';
@@ -382,7 +383,6 @@ export function buildLivelyMeshes(city) {
   // merged into the same clutter mesh as the facade dressing (1 draw
   // total). Placement mirrors the street vendors (landmarks.js): outer
   // sidewalk edge, clear of intersections, river and buildings.
-  const streetSmokeSpots = [];
   const streetCounts = { carts: 0, tents: 0, cafe: 0 };
   const streetSpots = []; // every placed street-life item (test: river clearance)
   {
@@ -440,7 +440,6 @@ export function buildLivelyMeshes(city) {
       }
       addBoxAt(clutter, 0.5, 0.25, 0.4, [0.85, 0.6, 0.35], s.x, 1.3, s.z, s.rot);
       nCarts++;
-      if (streetSmokeSpots.length < 12) streetSmokeSpots.push({ x: s.x, y: 2.6, z: s.z, phase: hash01(s.x, s.z) });
     }
     // Tent warungs (4 poles + flat canopy + ridge slab + counter + stools).
     for (let k = 0; k < 12; k++) {
@@ -463,7 +462,6 @@ export function buildLivelyMeshes(city) {
         addBoxAt(clutter, 0.4, 0.45, 0.4, [0.7, 0.65, 0.55], wx, 0.22, wz, s.rot);
       }
       nTents++;
-      if (streetSmokeSpots.length < 12) streetSmokeSpots.push({ x: s.x, y: 2.7, z: s.z, phase: hash01(s.x + 1, s.z) });
     }
     // Cafe tables + chairs on the sidewalk (table + leg + 2 chairs).
     for (let k = 0; k < 25; k++) {
@@ -558,19 +556,9 @@ export function buildLivelyMeshes(city) {
     roofUseCount++;
   }
 
-  // ---- Feature 6 (data): smoke spots + laundry cloth geometry ----
-  // Chimneys on ~15% of mid/tall roofs (a small brick stack in the
-  // clutter mesh, so the smoke has something to rise from) + the 12
-  // warung/cart spots from feature 4. Each spot emits 2 puffs (main.js
-  // cycles them); 70 spots x 2 = 140 puffs, capacity 160.
-  const smokeSpots = [...streetSmokeSpots];
-  for (const b of city.buildings) {
-    if (b.h < 12 || b.shape) continue;
-    if (hash01(b.x + 29, b.z + 7) >= 0.15) continue;
-    const cx = b.x + b.w * 0.2, cz = b.z + b.d * 0.2;
-    addBoxAt(clutter, 0.5, 1.2, 0.5, [0.55, 0.35, 0.3], cx, b.h + 1.1, cz, b.rot);
-    smokeSpots.push({ x: cx, y: b.h + 1.7, z: cz, phase: hash01(b.x + 31, b.z) });
-  }
+  // ---- Feature 6 (data): laundry cloth geometry ----
+  // (Smoke removed — Mu, 23 Nov 2026: puffs read as artefacts. The
+  // chimney stacks that fed the puffs are gone with them.)
   // Cloth piece: a thin box with its TOP edge at y=0, so main.js can
   // swing it around the laundry line with a single rotX (feature 6).
   const clothGeom = translateGeom(plainBox(0.55, 0.75, 0.04, [1, 1, 1]), 0, -0.375, 0);
@@ -584,9 +572,7 @@ export function buildLivelyMeshes(city) {
     neonGeom, neonAtlasCanvas: typeof document === 'undefined' ? null : drawNeonAtlas(),
     neonGlow: { matrices: neonGlowMatrices, tints: neonGlowTints, phases: neonGlowPhases },
     laundryPieces,
-    streetSmokeSpots,
     streetSpots,
-    smokeSpots,
     clothGeom,
     counts: {
       stepped: steppedMatrices.length, pitched: pitchedMatrices.length,
@@ -594,7 +580,6 @@ export function buildLivelyMeshes(city) {
       murals: muralPicks.length, neon: neonCount,
       carts: streetCounts.carts, tents: streetCounts.tents, cafe: streetCounts.cafe,
       roofUse: roofUseCount, roofUseKinds,
-      smokeSpots: smokeSpots.length,
       clutterTris: clutter.pos.length / 9,
     },
   };

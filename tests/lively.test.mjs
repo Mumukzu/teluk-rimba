@@ -121,11 +121,12 @@ check('roof-use kinds add up',
   + lv.counts.roofUseKinds.helipad + lv.counts.roofUseKinds.court === lv.counts.roofUse,
   JSON.stringify(lv.counts.roofUseKinds));
 
-// ---- Feature 6 (data): smoke + laundry ----
-check('smoke spots: chimneys + warungs', lv.counts.smokeSpots >= 50, lv.counts.smokeSpots + ' spots');
-check('2 smoke puffs per spot fit the 160-capacity mesh', lv.counts.smokeSpots * 2 <= 160);
-check('smoke spots are finite',
-  lv.smokeSpots.every((s) => Number.isFinite(s.x) && Number.isFinite(s.y) && Number.isFinite(s.z)));
+// ---- Feature 6 (data): laundry only — smoke REMOVED (Mu, 23 Nov 2026:
+// the drifting puffs read as artefacts in photos, not smoke) ----
+check('smoke removed: no smokeSpots data or count on the lively module',
+  lv.smokeSpots === undefined && lv.counts.smokeSpots === undefined
+  && lv.streetSmokeSpots === undefined,
+  'smokeSpots=' + lv.smokeSpots + ' counts.smokeSpots=' + lv.counts.smokeSpots);
 check('cloth geometry pivots at its top edge (sway axis)',
   Math.max(...lv.clothGeom.pos.filter((_, i) => i % 3 === 1)) === 0);
 
