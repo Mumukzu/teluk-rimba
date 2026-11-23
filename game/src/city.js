@@ -172,7 +172,11 @@ export function blockAt(city, x, z) {
 }
 
 // Display name for the HUD: "Area — Block" inside a block, else just the area.
+// Inside the stadium the name is the stadium itself.
 export function placeNameAt(city, x, z) {
+  if (city.stadium && x >= city.stadium.x0 && x <= city.stadium.x1 && z >= city.stadium.z0 && z <= city.stadium.z1) {
+    return city.stadium.name;
+  }
   const area = areaNameAt(city, x, z);
   const b = blockAt(city, x, z);
   if (b && b.zone !== 'plaza' && b.zone !== 'market') return area + ' — ' + b.name;
@@ -482,6 +486,73 @@ export function generateCity(seed = SEED) {
     }
   }
 
+  // --- Rimba Stadium (Mu 23 Nov 22:18): a football stadium on the
+  // riverbank. A full-size pitch (105x68) cannot fit anywhere in the
+  // city: the road grid is 100 m, and every 105 m+ rect crosses a live
+  // road or the river (verified by scan: 0 sites, min 2 live edges
+  // crossed; no flat riverside land outside the grid either — volcano
+  // slopes NW, sea E). So the stadium takes ONE beach block on the
+  // riverbank — Marina Shore, block (11,7), the closest beach block to
+  // the river mouth that still clears it: pitch 60x40 + stands, 76x56
+  // total, nearest edge 32 m from the river (clear of the rd 17-31
+  // riverfront tree band, the promenade, and the bench/fishing spots).
+  // The block's beach buildings are replaced, and the count is topped
+  // back up to exactly 1000 with houses on valid residential plots.
+  // Separate rand stream, so the rest of the city is byte-identical.
+  let stadium = null;
+  {
+    const blk = blocks.find((b) => b.i === 11 && b.j === 7);
+    const SW = 76, SD = 56; // stadium structure rect (pitch 60x40 + stands)
+    let best = null;
+    for (let x0 = blk.x0 + SETBACK_M; x0 + SW <= blk.x1 - SETBACK_M; x0 += 2) {
+      for (let z0 = blk.z0 + SETBACK_M; z0 + SD <= blk.z1 - SETBACK_M; z0 += 2) {
+        let m = Infinity;
+        for (let gx = x0; gx <= x0 + SW; gx += 4) {
+          for (let gz = z0; gz <= z0 + SD; gz += 4) m = Math.min(m, riverDistance(gx, gz));
+        }
+        // Closest to the river that still clears the tree band (rd >= 32).
+        if (m >= 32 && (!best || m < best.minRd)) best = { x0, z0, minRd: m };
+      }
+    }
+    if (!best) throw new Error('Rimba Stadium: no riverside site in block (11,7)');
+    const removed = buildings.filter((b) => b.x >= blk.x0 && b.x <= blk.x1 && b.z >= blk.z0 && b.z <= blk.z1);
+    buildings = buildings.filter((b) => !(b.x >= blk.x0 && b.x <= blk.x1 && b.z >= blk.z0 && b.z <= blk.z1));
+    // Top the count back up to exactly 1000 (same rules as the main
+    // top-up loop, separate stream so nothing else in the city moves).
+    // Keep clear of the school anchor (-200,200) so the landmark never
+    // jumps to a new house.
+    const srand = mulberry32(20261132);
+    let topTries = 0;
+    while (buildings.length < TARGET_BUILDINGS && topTries++ < 20000) {
+      const rblk = residentialBlocks[Math.floor(srand() * residentialBlocks.length)];
+      const size = ZONE_SIZE.residential;
+      const w = range(srand, size.w[0], size.w[1]);
+      const d = range(srand, size.d[0], size.d[1]);
+      const x = range(srand, rblk.x0 + w / 2 + SETBACK_M, rblk.x1 - w / 2 - SETBACK_M);
+      const z = range(srand, rblk.z0 + d / 2 + SETBACK_M, rblk.z1 - d / 2 - SETBACK_M);
+      if (!Number.isFinite(x) || !Number.isFinite(z)) continue;
+      if (Math.hypot(x + 200, z - 200) < 60) continue;
+      const cand = { x, z, w, d, h: range(srand, size.h[0], size.h[1]), rot: 0, zone: 'residential', color: ZONE_COLORS.residential[Math.floor(srand() * ZONE_COLORS.residential.length)], floors: 1 };
+      cand.floors = Math.max(1, Math.round(cand.h / 3.2));
+      if (!clearOfRiver(cand)) continue;
+      const clash = buildings.some((b) =>
+        Math.abs(b.x - x) < (b.w + w) / 2 + 2 && Math.abs(b.z - z) < (b.d + d) / 2 + 2 &&
+        b.x + b.w / 2 > rblk.x0 && b.x - b.w / 2 < rblk.x1 && b.z + b.d / 2 > rblk.z0 && b.z - b.d / 2 < rblk.z1);
+      if (clash) continue;
+      buildings.push(cand);
+    }
+    if (buildings.length !== TARGET_BUILDINGS) throw new Error('Rimba Stadium top-up failed: ' + buildings.length);
+    stadium = {
+      name: 'Rimba Stadium',
+      block: { i: blk.i, j: blk.j, name: blk.name },
+      x0: best.x0, x1: best.x0 + SW, z0: best.z0, z1: best.z0 + SD,
+      cx: best.x0 + SW / 2, cz: best.z0 + SD / 2,
+      pitchW: 60, pitchD: 40, standDepth: 8,
+      minRiverDistance: Math.round(best.minRd),
+      removedBuildings: removed.length,
+    };
+  }
+
   // --- road graph: nodes at intersections, edges between neighbours ---
   // Mu's rule: the river is crossed by ONLY 4 bridges. A node that sits in
   // the river channel (water) is not an intersection at all, and every
@@ -765,6 +836,7 @@ export function generateCity(seed = SEED) {
     blocks,
     nodes,
     edges,
+    stadium,
     streetTrees,
     forestTrees,
     lamps,
@@ -812,10 +884,24 @@ export function isConnected(city) {
   return reachableNodes(city, start).size === city.nodes.length;
 }
 
-// Axis-aligned building footprints, for player collision.
+// Axis-aligned building footprints, for player collision. The stadium
+// stands are solid walls too (with entrance gaps on the north/south
+// sides, so the player can walk onto the pitch).
 export function buildingAABBs(city) {
-  return city.buildings.map((b) => ({
+  const boxes = city.buildings.map((b) => ({
     x0: b.x - b.w / 2, x1: b.x + b.w / 2,
     z0: b.z - b.d / 2, z1: b.z + b.d / 2,
   }));
+  if (city.stadium) {
+    const st = city.stadium, sd = st.standDepth, gap = 3; // 6 m entrance gap
+    // West + east stands (full length, no gap).
+    boxes.push({ x0: st.x0, x1: st.x0 + sd, z0: st.z0, z1: st.z1 });
+    boxes.push({ x0: st.x1 - sd, x1: st.x1, z0: st.z0, z1: st.z1 });
+    // South + north stands, split around the centre entrance gap.
+    boxes.push({ x0: st.x0 + sd, x1: st.cx - gap, z0: st.z0, z1: st.z0 + sd });
+    boxes.push({ x0: st.cx + gap, x1: st.x1 - sd, z0: st.z0, z1: st.z0 + sd });
+    boxes.push({ x0: st.x0 + sd, x1: st.cx - gap, z0: st.z1 - sd, z1: st.z1 });
+    boxes.push({ x0: st.cx + gap, x1: st.x1 - sd, z0: st.z1 - sd, z1: st.z1 });
+  }
+  return boxes;
 }

@@ -100,7 +100,10 @@ export function createPeds(city, opts = {}) {
     }
     return true;
   };
-  const openSpot = (x, z) => riverDistance(x, z) >= 20 && !nearRoad(x, z, 8) && clearOfBuildings(x, z, 2);
+  const openSpot = (x, z) => riverDistance(x, z) >= 20 && !nearRoad(x, z, 8) && clearOfBuildings(x, z, 2)
+    // Not inside the stadium (the pitch and stands are not a place to
+    // stand around — the entrances face the river promenade instead).
+    && !(city.stadium && x > city.stadium.x0 && x < city.stadium.x1 && z > city.stadium.z0 && z < city.stadium.z1);
 
   // --- activity spots (deterministic, seeded): the empty spaces where NPCs
   // DO things instead of walking the roads. Each spot: {x, z, heading}.

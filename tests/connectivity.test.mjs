@@ -17,7 +17,9 @@ check('building count is exactly 1000', s.buildings === TARGET_BUILDINGS, `got $
 check('road graph is fully connected', isConnected(city), `${reachableNodes(city, 84).size}/${s.nodes} nodes reachable`);
 check('every block has buildings or is a reserved open block', city.blocks.every((b) => {
   const n = city.buildings.filter((bd) => bd.x >= b.x0 && bd.x <= b.x1 && bd.z >= b.z0 && bd.z <= b.z1).length;
-  return (b.zone === 'river' || b.zone === 'plaza' || b.zone === 'market') ? n === 0 : n > 0;
+  const st = city.stadium;
+  const isStadiumBlock = st && st.cx >= b.x0 && st.cx <= b.x1 && st.cz >= b.z0 && st.cz <= b.z1;
+  return (b.zone === 'river' || b.zone === 'plaza' || b.zone === 'market' || isStadiumBlock) ? n === 0 : n > 0;
 }));
 check('downtown blocks hold exactly 1 big tower each (Mu 23 Nov 21:03: one big tower per block, using the empty space)', city.blocks.filter((b) => b.zone === 'downtown').every((b) => {
   const n = city.buildings.filter((bd) => bd.x >= b.x0 && bd.x <= b.x1 && bd.z >= b.z0 && bd.z <= b.z1).length;

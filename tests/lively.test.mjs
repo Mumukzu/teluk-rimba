@@ -22,20 +22,20 @@ const allFinT = (t) => t.every((c) => c.every((v) => Number.isFinite(v)));
 const allFinG = (g) => g.pos.every(Number.isFinite) && g.nrm.every(Number.isFinite) && g.col.every(Number.isFinite);
 
 // ---- Feature 1: varied building shapes ----
-check('stepped tiers on tall unshaped blocks', lv.counts.stepped === 229, lv.counts.stepped + ' tiers');
-check('pitched roofs on low houses/shops', lv.counts.pitched === 135, lv.counts.pitched + ' roofs');
+check('stepped tiers on tall unshaped blocks', lv.counts.stepped === 224, lv.counts.stepped + ' tiers');
+check('pitched roofs on low houses/shops', lv.counts.pitched === 136, lv.counts.pitched + ' roofs');
 check('pitched roof geometry is a closed prism (6 tris)', lv.pitched.geom.pos.length / 9 === 6);
 check('stepped + pitched matrices are finite', allFin(lv.stepped.matrices) && allFin(lv.pitched.matrices));
 check('stepped tiers only on h>=20 unshaped blocks',
   lv.stepped.matrices.every((m) => m[13] >= 20 + 1.5 - 0.01));
 
 // ---- Ground-floor glass for tall buildings (Mu) ----
-check('glass band covers all 1000 buildings (616 dark + 384 tall)',
-  meshes.glassBand.matrices.length === 616
-  && meshes.glassBandTall.matrices.length === 384
+check('glass band covers all 1000 buildings (621 dark + 379 tall)',
+  meshes.glassBand.matrices.length === 621
+  && meshes.glassBandTall.matrices.length === 379
   && meshes.glassBand.matrices.length + meshes.glassBandTall.matrices.length === 1000,
   `${meshes.glassBand.matrices.length} + ${meshes.glassBandTall.matrices.length}`);
-check('warm interior glow core on every tall building', meshes.glassGlow.matrices.length === 384);
+check('warm interior glow core on every tall building', meshes.glassGlow.matrices.length === 379);
 check('glass + glow matrices and tints are finite',
   allFin(meshes.glassBandTall.matrices) && allFin(meshes.glassGlow.matrices)
   && allFinT(meshes.glassBandTall.tints) && allFinT(meshes.glassGlow.tints));
@@ -53,7 +53,7 @@ check('glass + glow matrices and tints are finite',
     allFin(sg.matrices) && allFinT(sg.tints) && allFin(sg.spill.matrices) && allFinT(sg.spill.tints));
   const lw = buildLitWindows(city);
   // 21 downtown towers x 80 warm windows + the other zones unchanged.
-  check('lit windows: 11,273 (CBD towers light 80 each, all warm, bigger quads)', lw.matrices.length === 11273, lw.matrices.length + ' windows');
+  check('lit windows: 11,248 (CBD towers light 80 each, all warm, bigger quads)', lw.matrices.length === 11248, lw.matrices.length + ' windows');
   check('lit window matrices + tints are finite', allFin(lw.matrices) && allFinT(lw.tints));
 }
 
@@ -83,7 +83,7 @@ check('street life stays out of the river (>= 20 m)',
   lv.streetSpots.length + ' spots, min rd ' + Math.min(...lv.streetSpots.map((s) => riverDistance(s.x, s.z))).toFixed(1));
 
 // ---- Feature 5: used roofs ----
-check('roofs in use (gardens + pools + helipads + courts)', lv.counts.roofUse === 221, lv.counts.roofUse + ' roofs');
+check('roofs in use (gardens + pools + helipads + courts)', lv.counts.roofUse === 220, lv.counts.roofUse + ' roofs');
 check('roof-use kinds add up',
   lv.counts.roofUseKinds.garden + lv.counts.roofUseKinds.pool
   + lv.counts.roofUseKinds.helipad + lv.counts.roofUseKinds.court === lv.counts.roofUse,

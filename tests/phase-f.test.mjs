@@ -133,7 +133,7 @@ check('bridges are the 4 whitelisted crossings',
 {
   const counts = { short: 0, mid: 0, tall: 0, skyscraper: 0 };
   for (const b of city.buildings) counts[buildingClass(b.h)]++;
-  check('building classes: 616 short / 310 mid / 64 tall / 10 skyscraper', counts.short === 616 && counts.mid === 310 && counts.tall === 64 && counts.skyscraper === 10);
+  check('building classes: 621 short / 306 mid / 63 tall / 10 skyscraper', counts.short === 621 && counts.mid === 306 && counts.tall === 63 && counts.skyscraper === 10);
   // Window cells stay small: max cell height/width per class.
   const maxH = { short: 0, mid: 0, tall: 0, skyscraper: 0 }, maxW = { short: 0, mid: 0, tall: 0, skyscraper: 0 };
   for (const b of city.buildings) {

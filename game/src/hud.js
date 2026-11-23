@@ -114,6 +114,15 @@ export function createHud(city) {
     for (const b of city.buildings) {
       c.fillRect(X(b.x - b.w / 2), Y(b.z - b.d / 2), Math.max(1, b.w * sc), Math.max(1, b.d * sc));
     }
+    // Rimba Stadium: green pitch rect with a white outline.
+    if (city.stadium) {
+      const st = city.stadium;
+      c.fillStyle = night ? '#1d5c2e' : '#2e7d32';
+      c.fillRect(X(st.x0), Y(st.z0), (st.x1 - st.x0) * sc, (st.z1 - st.z0) * sc);
+      c.strokeStyle = '#e8e8e8';
+      c.lineWidth = 1;
+      c.strokeRect(X(st.x0), Y(st.z0), (st.x1 - st.x0) * sc, (st.z1 - st.z0) * sc);
+    }
     // Markers.
     for (const m of markers || []) {
       const mx = X(m.x), my = Y(m.z);

@@ -22,6 +22,7 @@ import { buildWetGeoms } from './weather.js';
 import { buildNightLightGeoms } from './nightlights.js';
 import { buildPlotDressing } from './plots.js';
 import { buildRiverfront } from './riverfront.js';
+import { buildStadium } from './stadium.js';
 import { heliBodyGeom, heliRotorGeom, planeGeom, heliBeamConeGeom, markerGeom } from './air.js';
 import { wedgeGeom } from './extras.js';
 import { DAY_LENGTH } from './config.js';
@@ -63,6 +64,7 @@ export function createRenderer(canvas, city) {
   const nightPools = buildNightLightGeoms(city, landmarks);
   const plotDressing = buildPlotDressing(city);
   const riverfront = buildRiverfront(city); // Phase I: river banks, caps, docks, parks (+2 draws)
+  const stadium = buildStadium(city); // Rimba Stadium (Mu): pitch + stands + floodlights (+1 draw, +1 at night)
   const vehicleGeoms = buildVehicleBodyGeoms(); // no wheels: the shared wheel mesh supplies them
   const vehicleGlassGeoms = buildVehicleGlassGeoms();
 
@@ -155,6 +157,11 @@ export function createRenderer(canvas, city) {
   // flowers (green, 1 draw). All code-made, no external images.
   addStatic(progs.lit, riverfront.hard, mat4Identity());
   addStatic(progs.lit, riverfront.green, mat4Identity());
+  // Rimba Stadium (Mu): one merged static mesh (apron, pitch, lines,
+  // goals, stands, canopy, floodlight poles, scoreboard) + the four
+  // floodlight heads as a night-only unlit instanced mesh.
+  addStatic(progs.lit, stadium.base, mat4Identity());
+  addInst(progs.unlitInst, stadium.floodHeads, { nightOnly: true });
   addInst(progs.litInst, treeMesh);
   addInst(progs.litInst, palmMesh);
   addInst(progs.litInst, lampMeshes.poles);
