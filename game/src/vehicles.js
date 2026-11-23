@@ -677,6 +677,35 @@ function pushTriN(g, a, b, c, na, nb, nc, col) {
   g.nrm.push(...na, ...nb, ...nc);
   g.col.push(...col, ...col, ...col);
 }
+// Push a triangle twice (both windings) so it reads from every angle
+// with backface culling on — same trick as the headlight beam cones.
+function pushTriBoth(g, a, b, c, n, col) {
+  pushTri(g, a, b, c, n, col);
+  pushTri(g, a, c, b, n, col);
+}
+// Vertical triangular prism at a body corner (plan view): cuts the sharp
+// 90 deg nose/rear corner into a 45 deg face. (cx, cz) is the corner,
+// (sx, sz) the outward signs; the prism spans y0..y1, body colour. The
+// two leg faces sit 1 cm proud of the body faces (a thin trim edge); the
+// hypotenuse is the chamfer face.
+function chamferCorner(g, cx, cz, sx, sz, y0, y1) {
+  const c = 0.16, o = 0.01;
+  const p0 = [cx + sx * o, y0, cz + sz * o];
+  const p1 = [cx - sx * c, y0, cz + sz * o];
+  const p2 = [cx + sx * o, y0, cz - sz * c];
+  const q0 = [cx + sx * o, y1, cz + sz * o];
+  const q1 = [cx - sx * c, y1, cz + sz * o];
+  const q2 = [cx + sx * o, y1, cz - sz * c];
+  const nCh = [sx / Math.SQRT2, 0, sz / Math.SQRT2];
+  pushTriBoth(g, p1, p2, q2, nCh, [1, 1, 1]);
+  pushTriBoth(g, p1, q2, q1, nCh, [1, 1, 1]);
+  pushTriBoth(g, p0, p1, q1, [sx, 0, 0], [1, 1, 1]);
+  pushTriBoth(g, p0, q1, q0, [sx, 0, 0], [1, 1, 1]);
+  pushTriBoth(g, p0, p2, q2, [0, 0, sz], [1, 1, 1]);
+  pushTriBoth(g, p0, q2, q0, [0, 0, sz], [1, 1, 1]);
+  pushTriBoth(g, q0, q1, q2, [0, 1, 0], [1, 1, 1]); // top cap
+  pushTriBoth(g, p0, p2, p1, [0, -1, 0], [1, 1, 1]); // bottom cap
+}
 // Regular N-gon prism along Z: a round tyre / drum / reel, not a box.
 // Caps face +/-Z, sides get radial normals so the tyre reads as round.
 function prismZ(sides, r, thick, color) {
@@ -879,6 +908,13 @@ function addRoundHeadlight(g, x, y, z, r = 0.14) {
   addTo(g, xlate(rotY(prismZ(10, r + 0.03, 0.05, DARK), Math.PI / 2, 0, 0), x, y, z));
   addTo(g, xlate(rotY(prismZ(10, r, 0.06, WARM_LIGHT), Math.PI / 2, 0, 0), x + 0.01, y, z));
 }
+// Round headlight set FLUSH in the fascia plane (jeep): a dark bezel disc
+// 0.02 proud of the body face + the lamp disc 0.022 proud — the lamp
+// never sticks out as a separate box.
+function addRoundHeadlightFlush(g, x, y, z, r = 0.16) {
+  addTo(g, xlate(rotY(prismZ(10, r + 0.03, 0.03, DARK), Math.PI / 2, 0, 0), x + 0.005, y, z));
+  addTo(g, xlate(rotY(prismZ(10, r, 0.02, WARM_LIGHT), Math.PI / 2, 0, 0), x + 0.012, y, z));
+}
 
 // Generic car: low body + sloped hood/trunk, glasshouse (side glass +
 // sloped windshield + sloped rear window, all in the transparent glass
@@ -906,9 +942,11 @@ export function carGeom({ len, w, bodyH, cabinLen, cabinH, cabinX, hoodSlope = 0
   }
   addTo(body, xlate(plainBox(len * 0.95, 0.15, w - 0.3, DARK), 0, 0.42, 0)); // underbody
   addTo(body, xlate(plainBox(len * 0.92, 0.1, w + 0.04, [1, 1, 1]), 0, bodyTop - 0.06, 0)); // shoulder
-  // Sloped hood (front dips) + sloped trunk lid (hatchbacks slope steeply).
-  addTo(body, rotZ(xlate(plainBox(1.15, 0.14, w - 0.25, [1, 1, 1]), len / 2 - 0.75, bodyTop + 0.05, 0), -hoodSlope, len / 2 - 0.75, bodyTop + 0.05));
-  addTo(body, rotZ(xlate(plainBox(0.95, 0.14, w - 0.25, [1, 1, 1]), -len / 2 + 0.6, bodyTop + 0.05, 0), tailSlope, -len / 2 + 0.6, bodyTop + 0.05));
+  // Thick sloped hood + trunk lid (0.26, not a thin board): the bottom
+  // sinks 0.12 into the body box so the hood reads as one solid volume
+  // with the body — no floating slab, no dark gap beneath it.
+  addTo(body, rotZ(xlate(plainBox(1.15, 0.26, w - 0.25, [1, 1, 1]), len / 2 - 0.75, bodyTop + 0.01, 0), -hoodSlope, len / 2 - 0.75, bodyTop + 0.01));
+  addTo(body, rotZ(xlate(plainBox(0.95, 0.26, w - 0.25, [1, 1, 1]), -len / 2 + 0.6, bodyTop + 0.01, 0), tailSlope, -len / 2 + 0.6, bodyTop + 0.01));
   // CABIN — one solid trapezoid volume, not a flat roof board on thin
   // pillars. The base (cabinLen) is longer than the roof (cabinLen-0.7);
   // the front/rear edges slope inward following the glass, and the roof
@@ -971,27 +1009,34 @@ export function carGeom({ len, w, bodyH, cabinLen, cabinH, cabinX, hoodSlope = 0
     }
     addTo(body, xlate(plainBox(0.08, 0.08, 0.05, [1, 0.6, 0.1]), len / 2 - 0.6, panelY + panelH * 0.25, pz));
   }
-  // Bumpers with a chrome strip, headlights + taillights with bezels,
-  // grille with a chrome bar, mirrors with stems.
+  // Fascia (front + rear): ONE solid nose. The bumper is body colour and
+  // protrudes only ~0.07 past the fascia face; a dark lower lip under it
+  // joins the side skirts with no hole; the grille is a thin dark slot
+  // set flush in the face; headlights + taillights sit FLUSH in the
+  // fascia plane (thin dark housing plate + lamp plate, ~0.02 proud) —
+  // nothing sticks out as a separate box, no dark gap under the hood.
+  // Nose corners are chamfered (45 deg face) so the nose never reads as
+  // a block. Same construction at the rear.
   for (const sx3 of [1, -1]) {
-    addTo(body, xlate(plainBox(0.22, 0.22, w - 0.1, DARK), sx3 * (len / 2 - 0.02), 0.42, 0));
-    addTo(body, xlate(plainBox(0.24, 0.05, w - 0.1, CHROME), sx3 * (len / 2 - 0.02), 0.52, 0));
+    const fx = sx3 * (len / 2);
+    addTo(body, xlate(plainBox(0.14, 0.2, w - 0.08, [1, 1, 1]), fx, 0.44, 0)); // bumper bar
+    addTo(body, xlate(plainBox(0.02, 0.04, w - 0.1, CHROME), fx + sx3 * 0.075, 0.52, 0)); // its trim strip
+    addTo(body, xlate(plainBox(0.1, 0.09, w - 0.08, DARK), fx + sx3 * 0.01, 0.33, 0)); // lower lip
+    addTo(body, xlate(plainBox(0.02, 0.12, 0.5, [0.92, 0.92, 0.85]), fx + sx3 * 0.08, 0.44, 0)); // plate on the bumper
+    for (const pz of [1, -1]) chamferCorner(body, fx, pz * (w / 2), sx3, pz, 0.55, bodyTop);
   }
   for (const pz of [w / 2 - 0.42, -w / 2 + 0.42]) {
     if (roundLights) {
-      addRoundHeadlight(body, len / 2 + 0.02, 0.72, pz, 0.16);
+      addRoundHeadlightFlush(body, len / 2, 0.72, pz, 0.16);
     } else {
-      addTo(body, xlate(plainBox(0.06, 0.24, 0.5, DARK), len / 2 - 0.02, 0.72, pz));
-      addTo(body, xlate(plainBox(0.12, 0.18, 0.42, WARM_LIGHT), len / 2 + 0.02, 0.72, pz));
+      addTo(body, xlate(plainBox(0.02, 0.26, 0.52, DARK), len / 2 + 0.005, 0.72, pz)); // housing
+      addTo(body, xlate(plainBox(0.02, 0.2, 0.44, WARM_LIGHT), len / 2 + 0.012, 0.72, pz)); // lamp, flush
     }
-    addTo(body, xlate(plainBox(0.06, 0.22, 0.48, DARK), -len / 2 + 0.02, 0.72, pz));
-    addTo(body, xlate(plainBox(0.1, 0.16, 0.4, RED_LIGHT), -len / 2 - 0.02, 0.72, pz));
+    addTo(body, xlate(plainBox(0.02, 0.24, 0.5, DARK), -len / 2 - 0.005, 0.72, pz)); // rear housing
+    addTo(body, xlate(plainBox(0.02, 0.18, 0.42, RED_LIGHT), -len / 2 - 0.012, 0.72, pz)); // taillight, flush
   }
-  addTo(body, xlate(plainBox(0.08, 0.18, w * 0.5, DARK), len / 2 + 0.02, 0.52, 0));
-  addTo(body, xlate(plainBox(0.04, 0.04, w * 0.45, CHROME), len / 2 + 0.04, 0.56, 0));
-  // Small license plates on both bumpers.
-  addTo(body, xlate(plainBox(0.03, 0.12, 0.5, [0.92, 0.92, 0.85]), len / 2 + 0.145, 0.42, 0));
-  addTo(body, xlate(plainBox(0.03, 0.12, 0.5, [0.92, 0.92, 0.85]), -len / 2 - 0.145, 0.42, 0));
+  addTo(body, xlate(plainBox(0.02, 0.16, w * 0.5, DARK), len / 2 + 0.005, 0.6, 0)); // grille slot, flush
+  addTo(body, xlate(plainBox(0.02, 0.03, w * 0.45, CHROME), len / 2 + 0.012, 0.62, 0)); // its chrome bar
   for (const pz of [w / 2 + 0.04, -w / 2 - 0.04]) {
     addTo(body, xlate(plainBox(0.05, 0.05, 0.14, DARK), cabinX + 0.5, bodyTop + 0.28, pz));
     addTo(body, xlate(plainBox(0.18, 0.1, 0.13, DARK), cabinX + 0.5, bodyTop + 0.32, pz + (pz > 0 ? 0.06 : -0.06)));
@@ -1043,12 +1088,17 @@ function busGeom(withWheels = true) {
   // Side door: lower panel (body) + glass upper half (transparent).
   addTo(body, xlate(plainBox(0.85, 0.75, 0.06, [1, 1, 1]), 3.7, 0.72, 1.26));
   addTo(glass, xlate(plainBox(0.8, 0.7, 0.06, GLASS), 3.7, 1.45, 1.26));
+  // Solid fascia: body-colour bumper bar (protrudes ~0.07) + dark lower
+  // lip, lamps flush in the fascia plane.
   for (const sx of [1, -1]) {
-    addTo(body, xlate(plainBox(0.25, 0.25, 2.4, DARK), sx * 4.45, 0.48, 0));
+    addTo(body, xlate(plainBox(0.14, 0.25, 2.4, [1, 1, 1]), sx * 4.5, 0.48, 0));
+    addTo(body, xlate(plainBox(0.1, 0.08, 2.4, DARK), sx * 4.51, 0.32, 0));
   }
   for (const pz of [0.85, -0.85]) {
-    addTo(body, xlate(plainBox(0.1, 0.2, 0.4, WARM_LIGHT), 4.52, 0.7, pz));
-    addTo(body, xlate(plainBox(0.1, 0.2, 0.4, RED_LIGHT), -4.52, 0.7, pz));
+    addTo(body, xlate(plainBox(0.02, 0.22, 0.42, DARK), 4.505, 0.7, pz));
+    addTo(body, xlate(plainBox(0.02, 0.18, 0.38, WARM_LIGHT), 4.512, 0.7, pz));
+    addTo(body, xlate(plainBox(0.02, 0.22, 0.42, DARK), -4.505, 0.7, pz));
+    addTo(body, xlate(plainBox(0.02, 0.18, 0.38, RED_LIGHT), -4.512, 0.7, pz));
     addTo(body, xlate(plainBox(0.05, 0.05, 0.16, DARK), 4.2, 1.9, pz > 0 ? 1.3 : -1.3));
     addTo(body, xlate(plainBox(0.22, 0.14, 0.14, DARK), 4.2, 1.95, pz > 0 ? 1.38 : -1.38));
   }
@@ -1056,9 +1106,9 @@ function busGeom(withWheels = true) {
     if (withWheels) addWheel(body, wx, wz, 0.7, 0.18);
     addArch(body, wx, wz, 0.7, 2.5);
   }
-  // License plates on both bumpers.
-  addTo(body, xlate(plainBox(0.03, 0.12, 0.5, [0.92, 0.92, 0.85]), 4.59, 0.48, 0));
-  addTo(body, xlate(plainBox(0.03, 0.12, 0.5, [0.92, 0.92, 0.85]), -4.59, 0.48, 0));
+  // License plates on the bumper faces.
+  addTo(body, xlate(plainBox(0.02, 0.12, 0.5, [0.92, 0.92, 0.85]), 4.58, 0.48, 0));
+  addTo(body, xlate(plainBox(0.02, 0.12, 0.5, [0.92, 0.92, 0.85]), -4.58, 0.48, 0));
   return { body, glass };
 }
 
@@ -1072,12 +1122,14 @@ function truckGeom(withWheels = true) {
   for (const pz of [1.16, -1.16]) {
     addTo(glass, xlate(plainBox(0.7, 0.7, 0.06, GLASS), 2.6, 1.6, pz)); // cab side windows
   }
-  addTo(body, xlate(plainBox(0.08, 0.5, 1.6, DARK), 3.32, 0.75, 0)); // grille
-  addTo(body, xlate(plainBox(0.04, 0.05, 1.5, CHROME), 3.36, 0.85, 0));
-  addTo(body, xlate(plainBox(0.04, 0.05, 1.5, CHROME), 3.36, 0.65, 0));
-  addTo(body, xlate(plainBox(0.25, 0.25, 2.3, DARK), 3.3, 0.45, 0)); // bumper
+  addTo(body, xlate(plainBox(0.02, 0.5, 1.6, DARK), 3.305, 0.75, 0)); // grille, flush
+  addTo(body, xlate(plainBox(0.02, 0.05, 1.5, CHROME), 3.312, 0.85, 0));
+  addTo(body, xlate(plainBox(0.02, 0.05, 1.5, CHROME), 3.312, 0.65, 0));
+  addTo(body, xlate(plainBox(0.14, 0.25, 2.3, [1, 1, 1]), 3.3, 0.45, 0)); // bumper, body colour
+  addTo(body, xlate(plainBox(0.1, 0.08, 2.3, DARK), 3.31, 0.3, 0)); // lower lip
   for (const pz of [0.85, -0.85]) {
-    addTo(body, xlate(plainBox(0.1, 0.18, 0.35, WARM_LIGHT), 3.34, 0.9, pz));
+    addTo(body, xlate(plainBox(0.02, 0.2, 0.37, DARK), 3.305, 0.9, pz)); // housing
+    addTo(body, xlate(plainBox(0.02, 0.16, 0.33, WARM_LIGHT), 3.312, 0.9, pz)); // lamp, flush
     addTo(body, xlate(plainBox(0.05, 0.05, 0.14, DARK), 3.1, 1.7, pz > 0 ? 1.2 : -1.2));
     addTo(body, xlate(plainBox(0.16, 0.1, 0.12, DARK), 3.1, 1.75, pz > 0 ? 1.28 : -1.28));
   }
@@ -1097,7 +1149,7 @@ function truckGeom(withWheels = true) {
     if (withWheels) addWheel(body, wx, wz, 0.65, 0.18);
     addArch(body, wx, wz, 0.65, 2.4);
   }
-  addTo(body, xlate(plainBox(0.03, 0.12, 0.5, [0.92, 0.92, 0.85]), 3.44, 0.45, 0)); // front plate
+  addTo(body, xlate(plainBox(0.02, 0.12, 0.5, [0.92, 0.92, 0.85]), 3.38, 0.45, 0)); // front plate
   return { body, glass };
 }
 
@@ -1127,9 +1179,13 @@ function firetruckGeom(withWheels = true) {
   addTo(body, xlate(plainBox(5.6, 0.18, 0.5, [0.85, 0.85, 0.86]), -0.6, 2.45, 0)); // ladder
   addTo(body, xlate(plainBox(0.5, 0.16, 0.4, RED_LIGHT), 2.5, 2.35, -0.28));
   addTo(body, xlate(plainBox(0.5, 0.16, 0.4, [0.15, 0.3, 0.95]), 2.5, 2.35, 0.28));
-  addTo(body, xlate(plainBox(0.25, 0.25, 2.4, DARK), 3.62, 0.48, 0));
+  addTo(body, xlate(plainBox(0.14, 0.25, 2.4, [1, 1, 1]), 3.6, 0.48, 0)); // bumper, body colour
+  addTo(body, xlate(plainBox(0.1, 0.08, 2.4, DARK), 3.61, 0.32, 0)); // lower lip
   addTo(body, xlate(plainBox(0.6, 0.12, 0.5, DARK), -3.7, 0.3, 0)); // rear step
-  for (const pz of [0.9, -0.9]) addTo(body, xlate(plainBox(0.1, 0.18, 0.35, WARM_LIGHT), 3.64, 0.9, pz));
+  for (const pz of [0.9, -0.9]) {
+    addTo(body, xlate(plainBox(0.02, 0.2, 0.37, DARK), 3.605, 0.9, pz)); // housing
+    addTo(body, xlate(plainBox(0.02, 0.16, 0.33, WARM_LIGHT), 3.612, 0.9, pz)); // lamp, flush
+  }
   for (const [wx, wz] of [[2.8, 1.15], [2.8, -1.15], [-1.2, 1.15], [-1.2, -1.15], [-2.9, 1.15], [-2.9, -1.15]]) {
     if (withWheels) addWheel(body, wx, wz, 0.65, 0.18);
     addArch(body, wx, wz, 0.65, 2.5);
@@ -1169,8 +1225,12 @@ function ambulanceGeom(withWheels = true) {
     addTo(glass, xlate(plainBox(0.04, 0.6, 0.7, GLASS), -2.66, 1.5, pz));
     addTo(body, xlate(plainBox(0.05, 0.06, 0.2, DARK), -2.66, 1.05, pz));
   }
-  addTo(body, xlate(plainBox(0.25, 0.22, 1.95, DARK), 2.6, 0.45, 0)); // bumper
-  for (const pz of [0.7, -0.7]) addTo(body, xlate(plainBox(0.1, 0.16, 0.32, WARM_LIGHT), 2.62, 0.85, pz));
+  addTo(body, xlate(plainBox(0.14, 0.22, 1.95, [1, 1, 1]), 2.6, 0.45, 0)); // bumper, body colour
+  addTo(body, xlate(plainBox(0.1, 0.08, 1.95, DARK), 2.61, 0.31, 0)); // lower lip
+  for (const pz of [0.7, -0.7]) {
+    addTo(body, xlate(plainBox(0.02, 0.18, 0.34, DARK), 2.605, 0.85, pz)); // housing
+    addTo(body, xlate(plainBox(0.02, 0.14, 0.3, WARM_LIGHT), 2.612, 0.85, pz)); // lamp, flush
+  }
   for (const [wx, wz] of [[1.8, 0.905], [1.8, -0.905], [-1.8, 0.905], [-1.8, -0.905]]) {
     if (withWheels) addWheel(body, wx, wz, 0.6, 0.17);
     addArchRing(body, wx, wz, 0.6, 2.0);
@@ -1191,9 +1251,11 @@ function bajajGeom(withWheels = true) {
   addTo(glass, xlate(plainBox(0.08, 0.55, 1.1, GLASS), 0.95, 1.35, 0)); // windshield
   addTo(glass, xlate(plainBox(0.02, 0.2, 0.8, GLASS_REFLECT), 1.0, 1.45, 0)); // its streak
   addTo(body, xlate(plainBox(0.08, 0.07, 0.7, DARK), 0.85, 1.15, 0)); // handlebar
-  addTo(body, xlate(plainBox(0.1, 0.15, 0.3, WARM_LIGHT), 1.12, 0.75, 0)); // headlight
-  addTo(body, xlate(plainBox(0.2, 0.15, 1.1, DARK), 1.08, 0.42, 0)); // front bumper
-  addTo(body, xlate(plainBox(0.08, 0.12, 0.3, RED_LIGHT), -1.12, 0.75, 0)); // taillight
+  addTo(body, xlate(plainBox(0.02, 0.17, 0.32, DARK), 1.105, 0.75, 0)); // headlight housing, flush
+  addTo(body, xlate(plainBox(0.02, 0.13, 0.28, WARM_LIGHT), 1.112, 0.75, 0)); // headlight, flush
+  addTo(body, xlate(plainBox(0.14, 0.15, 1.1, [1, 1, 1]), 1.1, 0.42, 0)); // front bumper, body colour
+  addTo(body, xlate(plainBox(0.02, 0.14, 0.32, DARK), -1.105, 0.75, 0)); // taillight housing, flush
+  addTo(body, xlate(plainBox(0.02, 0.1, 0.28, RED_LIGHT), -1.112, 0.75, 0)); // taillight, flush
   for (const pz of [0.64, -0.64]) {
     addTo(body, xlate(plainBox(2.0, 0.15, 0.05, DARK), 0, 0.42, pz)); // side skirts
   }
@@ -1286,7 +1348,8 @@ export function buildBikeFrontGeom() {
   const g = emptyGeom();
   addTo(g, rotZ(xlate(plainBox(0.08, 0.75, 0.08, DARK), 0.72, 0.65, 0), -0.3, 0.72, 0.65)); // fork
   addTo(g, xlate(plainBox(0.1, 0.08, 0.6, [0.15, 0.15, 0.16]), 0.68, 1.0, 0)); // handlebar
-  addTo(g, xlate(plainBox(0.08, 0.12, 0.18, WARM_LIGHT), 0.88, 0.95, 0)); // round headlight
+  addTo(g, xlate(plainBox(0.02, 0.14, 0.2, DARK), 0.875, 0.95, 0)); // headlight housing, flush
+  addTo(g, xlate(plainBox(0.02, 0.1, 0.16, WARM_LIGHT), 0.885, 0.95, 0)); // headlight, flush
   addTo(g, rotZ(xlate(plainBox(0.45, 0.06, 0.3, DARK), 0.78, 0.62, 0), -0.35, 0.78, 0.62)); // front fender
   for (const pz of [0.32, -0.32]) {
     addTo(g, xlate(plainBox(0.06, 0.06, 0.14, DARK), 0.68, 1.08, pz)); // mirrors
