@@ -370,6 +370,116 @@ export function buildLivelyMeshes(city) {
     neonCount++;
   }
 
+  // ---- Feature 4: street life (no pennant flags — forbidden by Mu) ----
+  // Food carts, tent warungs, cafe tables+chairs on sidewalk edges —
+  // merged into the same clutter mesh as the facade dressing (1 draw
+  // total). Placement mirrors the street vendors (landmarks.js): outer
+  // sidewalk edge, clear of intersections, river and buildings.
+  const streetSmokeSpots = [];
+  const streetCounts = { carts: 0, tents: 0, cafe: 0 };
+  {
+    const rand = mulberry32(20261123);
+    const aabbs = buildingAABBs(city);
+    const placed = [];
+    const clearOfBuildings = (x, z, m = 1.5) =>
+      !aabbs.some((a) => x > a.x0 - m && x < a.x1 + m && z > a.z0 - m && z < a.z1 + m);
+    const spot = (mainOk) => {
+      for (let t = 0; t < 400; t++) {
+        const L = ROAD_LINES[Math.floor(rand() * ROAD_LINES.length)];
+        if (!mainOk && IS_MAIN(L)) continue;
+        const along = -420 + rand() * 840;
+        const horiz = rand() < 0.5;
+        const side = rand() < 0.5 ? -1 : 1;
+        const off = ASPHALT_HALF(L) + 2.6;
+        const x = horiz ? along : L + side * off;
+        const z = horiz ? L + side * off : along;
+        if (riverDistance(x, z) < 20) continue;
+        let nearCross = false;
+        for (const M of ROAD_LINES) {
+          if (Math.abs(x - M) < 14 && Math.abs(z - M) < 14) { nearCross = true; break; }
+        }
+        if (nearCross || !clearOfBuildings(x, z)) continue;
+        if (placed.some((p) => Math.hypot(p.x - x, p.z - z) < 8)) continue;
+        placed.push({ x, z });
+        return { x, z, rot: horiz ? 0 : Math.PI / 2 };
+      }
+      return null;
+    };
+    const CART_TINTS = [
+      [0.95, 0.55, 0.4], [0.4, 0.8, 0.6], [0.95, 0.75, 0.3],
+      [0.6, 0.7, 0.95], [0.95, 0.5, 0.65],
+    ];
+    let nCarts = 0, nTents = 0, nCafe = 0;
+    // Food carts (body + canopy + poles + wheels + goods).
+    for (let k = 0; k < 20; k++) {
+      const s = spot(true);
+      if (!s) break;
+      const tint = CART_TINTS[k % CART_TINTS.length];
+      const off = (dx, dz) => {
+        const c = Math.cos(s.rot), sn = Math.sin(s.rot);
+        return [s.x + dx * c + dz * sn, s.z - dx * sn + dz * c];
+      };
+      addBoxAt(clutter, 1.6, 0.9, 1.0, [0.9, 0.85, 0.75], s.x, 0.75, s.z, s.rot);
+      addBoxAt(clutter, 1.9, 0.08, 1.3, tint, s.x, 2.2, s.z, s.rot);
+      for (const [px, pz] of [[-0.85, -0.55], [0.85, -0.55], [-0.85, 0.55], [0.85, 0.55]]) {
+        const [wx, wz] = off(px, pz);
+        addBoxAt(clutter, 0.06, 1.3, 0.06, [0.3, 0.3, 0.32], wx, 1.55, wz, s.rot);
+      }
+      for (const wx of [-0.7, 0.7]) {
+        const [vx, vz] = off(wx, 0.55);
+        addBoxAt(clutter, 0.1, 0.34, 0.34, [0.15, 0.15, 0.16], vx, 0.17, vz, s.rot);
+      }
+      addBoxAt(clutter, 0.5, 0.25, 0.4, [0.85, 0.6, 0.35], s.x, 1.3, s.z, s.rot);
+      nCarts++;
+      if (streetSmokeSpots.length < 12) streetSmokeSpots.push({ x: s.x, y: 2.6, z: s.z, phase: hash01(s.x, s.z) });
+    }
+    // Tent warungs (4 poles + flat canopy + ridge slab + counter + stools).
+    for (let k = 0; k < 12; k++) {
+      const s = spot(false);
+      if (!s) break;
+      const tint = CART_TINTS[(k + 2) % CART_TINTS.length];
+      const off = (dx, dz) => {
+        const c = Math.cos(s.rot), sn = Math.sin(s.rot);
+        return [s.x + dx * c + dz * sn, s.z - dx * sn + dz * c];
+      };
+      for (const [px, pz] of [[-1.3, -1.0], [1.3, -1.0], [-1.3, 1.0], [1.3, 1.0]]) {
+        const [wx, wz] = off(px, pz);
+        addBoxAt(clutter, 0.08, 2.4, 0.08, [0.3, 0.3, 0.32], wx, 1.2, wz, s.rot);
+      }
+      addBoxAt(clutter, 2.8, 0.08, 2.2, tint, s.x, 2.5, s.z, s.rot);
+      addBoxAt(clutter, 2.8, 0.08, 1.0, tint, s.x, 2.68, s.z, s.rot);
+      addBoxAt(clutter, 2.0, 0.9, 0.8, [0.85, 0.8, 0.7], s.x, 0.45, s.z, s.rot);
+      for (const sx of [-0.7, 0.7]) {
+        const [wx, wz] = off(sx, 1.3);
+        addBoxAt(clutter, 0.4, 0.45, 0.4, [0.7, 0.65, 0.55], wx, 0.22, wz, s.rot);
+      }
+      nTents++;
+      if (streetSmokeSpots.length < 12) streetSmokeSpots.push({ x: s.x, y: 2.7, z: s.z, phase: hash01(s.x + 1, s.z) });
+    }
+    // Cafe tables + chairs on the sidewalk (table + leg + 2 chairs).
+    for (let k = 0; k < 25; k++) {
+      const s = spot(true);
+      if (!s) break;
+      const rot = s.rot + (hash01(s.x, s.z) < 0.5 ? 0 : Math.PI / 2);
+      // Local offsets rotated by rot (same convention as addBoxAt).
+      const off = (dx, dz) => {
+        const c = Math.cos(rot), sn = Math.sin(rot);
+        return [s.x + dx * c + dz * sn, s.z - dx * sn + dz * c];
+      };
+      addBoxAt(clutter, 0.9, 0.07, 0.9, [0.95, 0.95, 0.93], s.x, 0.72, s.z, rot);
+      addBoxAt(clutter, 0.08, 0.72, 0.08, [0.3, 0.3, 0.32], s.x, 0.36, s.z, rot);
+      for (const [cx, cz] of [[-0.85, 0], [0.85, 0]]) {
+        const [wx, wz] = off(cx, cz);
+        const [bx, bz] = off(cx, cz - 0.2);
+        addBoxAt(clutter, 0.42, 0.06, 0.42, [0.8, 0.6, 0.4], wx, 0.45, wz, rot);
+        addBoxAt(clutter, 0.42, 0.5, 0.06, [0.8, 0.6, 0.4], bx, 0.72, bz, rot);
+        addBoxAt(clutter, 0.06, 0.45, 0.06, [0.3, 0.3, 0.32], wx, 0.22, wz, rot);
+      }
+      nCafe++;
+    }
+    streetCounts.carts = nCarts; streetCounts.tents = nTents; streetCounts.cafe = nCafe;
+  }
+
   return {
     stepped: { geom: unitBox, matrices: steppedMatrices, tints: steppedTints },
     pitched: { geom: pitchedRoofGeom(), matrices: pitchedMatrices, tints: pitchedTints },
@@ -379,10 +489,12 @@ export function buildLivelyMeshes(city) {
     neonGeom, neonAtlasCanvas: typeof document === 'undefined' ? null : drawNeonAtlas(),
     neonGlow: { matrices: neonGlowMatrices, tints: neonGlowTints, phases: neonGlowPhases },
     laundryPieces,
+    streetSmokeSpots,
     counts: {
       stepped: steppedMatrices.length, pitched: pitchedMatrices.length,
       curtains: curtainMatrices.length, laundry: laundryPieces.length,
       murals: muralPicks.length, neon: neonCount,
+      carts: streetCounts.carts, tents: streetCounts.tents, cafe: streetCounts.cafe,
       clutterTris: clutter.pos.length / 9,
     },
   };
