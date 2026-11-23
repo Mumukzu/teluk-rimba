@@ -232,8 +232,8 @@ export function buildLitWindows(city) {
   // Warm lit windows: a random SUBSET of the building's OWN dark window
   // cells — the exact same grid subdividedBox() draws (same class, same
   // segFront/segRows/sideCols, same cell (i,j), same centre). The lit quad
-  // is drawn slightly INSET inside the glass quad (40% of the cell vs the
-  // glass's 56%) and a touch more proud of the wall, so at night every
+  // is drawn slightly INSET inside the glass quad (60% of the cell vs the
+  // glass's 78%) and a touch more proud of the wall, so at night every
   // glowing square sits precisely inside a dark window frame — never
   // between windows, never outside a frame. Drawn with the unlit program
   // ONLY at night, one instanced draw call, ~10,500 windows.
@@ -303,9 +303,9 @@ export function buildLitWindows(city) {
       const fx = b.x + lx * cr + lz * sr;
       const fz = b.z - lx * sr + lz * cr;
       const y = b.h / 2 + v * b.h;
-      // Quad geometry is 1.8 x 1.3 m; scale it to 40% of the cell so the
-      // glow sits INSIDE the 56% glass quad with a dark frame around it.
-      matrices.push(mat4TRS(fx, y, fz, rotY, 0.40 * cellW / 1.8, 0.40 * cellH / 1.3, 1));
+      // Quad geometry is 1.8 x 1.3 m; scale it to 60% of the cell so the
+      // glow sits INSIDE the 78% glass quad with a dark frame around it.
+      matrices.push(mat4TRS(fx, y, fz, rotY, 0.60 * cellW / 1.8, 0.60 * cellH / 1.3, 1));
       const warm = rand() < 0.8; // ~80% warm yellow, rest cool white
       const pal = warm ? WARM : COOL;
       tints.push(pal[Math.floor(rand() * pal.length)]);

@@ -266,7 +266,8 @@ function pushQuad(g, a, b, c, d, n, col) {
 // d deep, so they need their own column count, not the front's).
 // Windows are INSET: the wall cell stays, and the glass quad sits slightly
 // proud inside it, so each window reads as a window (~1-2 m) instead of a
-// giant dark rectangle the full cell wide. Wall cells get a subtle
+// giant dark rectangle the full cell wide. Glass is 78% of the cell (Mu:
+// 56% read too small) — a clear window with a wall border around it.
 // horizontal band every 4th row and side faces are shaded a touch darker,
 // so facades read as buildings, not plain blocks.
 export function subdividedBox(w, h, d, segFront = 6, segRows = 10, sideCols = 2) {
@@ -300,13 +301,15 @@ export function subdividedBox(w, h, d, segFront = 6, segRows = 10, sideCols = 2)
         const glass = windowed ? win(i, j) : null;
         pushQuad(g, a, b, c, dd, normal, wall(i, j));
         if (glass) {
-          // Inset glass quad, 56% of the cell, 0.005 proud of the wall
+          // Inset glass quad, 78% of the cell, 0.005 proud of the wall
           // (local units — a few cm once instanced, no z-fighting).
+          // Big enough to read as a real window, with a visible wall
+          // border around each one (Mu: the 56% quads read too small).
           const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
           const ad = [dd[0] - a[0], dd[1] - a[1], dd[2] - a[2]];
           const off = [normal[0] * 0.005, normal[1] * 0.005, normal[2] * 0.005];
           const p2 = (fu, fv) => [a[0] + ab[0] * fu + ad[0] * fv + off[0], a[1] + ab[1] * fu + ad[1] * fv + off[1], a[2] + ab[2] * fu + ad[2] * fv + off[2]];
-          pushQuad(g, p2(0.22, 0.22), p2(0.78, 0.22), p2(0.78, 0.78), p2(0.22, 0.78), normal, glass);
+          pushQuad(g, p2(0.11, 0.11), p2(0.89, 0.11), p2(0.89, 0.89), p2(0.11, 0.89), normal, glass);
         }
       }
     }
