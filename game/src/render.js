@@ -18,6 +18,7 @@ import { pedTorsoGeom, pedLegsGeom, pedHeadGeom, pedHairGeom } from './peds.js';
 import { buildWetGeoms } from './weather.js';
 import { buildNightLightGeoms } from './nightlights.js';
 import { buildPlotDressing } from './plots.js';
+import { buildRiverfront } from './riverfront.js';
 import { heliBodyGeom, heliRotorGeom, planeGeom, heliBeamConeGeom, markerGeom } from './air.js';
 import { wedgeGeom } from './extras.js';
 import { DAY_LENGTH } from './config.js';
@@ -49,6 +50,7 @@ export function createRenderer(canvas, city) {
   const wet = buildWetGeoms();
   const nightPools = buildNightLightGeoms(city, landmarks);
   const plotDressing = buildPlotDressing(city);
+  const riverfront = buildRiverfront(city); // Phase I: river banks, caps, docks, parks (+2 draws)
   const vehicleGeoms = buildVehicleBodyGeoms(); // no wheels: the shared wheel mesh supplies them
   const vehicleGlassGeoms = buildVehicleGlassGeoms();
 
@@ -99,6 +101,11 @@ export function createRenderer(canvas, city) {
   // benches in dense and residential blocks (Mu: no plain green yards).
   addStatic(progs.lit, plotDressing.paving, mat4Identity());
   addStatic(progs.lit, plotDressing.props, mat4Identity());
+  // Riverfront (Phase I): embankment wall + promenade + fence + end caps
+  // + docks/steps (hard, 1 draw) and riverbank trees + park benches +
+  // flowers (green, 1 draw). All code-made, no external images.
+  addStatic(progs.lit, riverfront.hard, mat4Identity());
+  addStatic(progs.lit, riverfront.green, mat4Identity());
   addInst(progs.litInst, treeMesh);
   addInst(progs.litInst, palmMesh);
   addInst(progs.litInst, lampMeshes.poles);
