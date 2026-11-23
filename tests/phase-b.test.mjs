@@ -135,7 +135,7 @@ check('weather is dry again by night', (() => { weather.step(5, 21); return weat
 const lm = buildLandmarks(city);
 check('night market has 14 stalls', lm.counts.stalls === 14, `got ${lm.counts.stalls}`);
 check('24 street vendors', lm.counts.vendors === 24);
-check('10 bus stops', lm.counts.busStops === 10, `got ${lm.counts.busStops}`);
+check('16 bus stops — one per bus-route node, every sector', lm.counts.busStops === 16, `got ${lm.counts.busStops}`);
 check('gas station + repair shop placed', lm.counts.gasStation === 1 && lm.counts.repairShop === 1);
 check('10 neon billboards', lm.counts.billboards === 10, `got ${lm.counts.billboards}`);
 check('3 city landmarks flagged (hospital/police/school)', city.buildings.filter((b) => b.landmark).length === 3,

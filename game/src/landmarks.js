@@ -190,17 +190,22 @@ export function buildLandmarks(city) {
   // ---------- Bus stops: shelters on main-road sidewalks ----------
   const busStopGeom = emptyGeom();
   const busStops = [];
-  {
-    const stops = [];
-    for (const Lx of MAIN_LINES) {
-      for (const Lz of MAIN_LINES) {
-        if (stops.length >= 10) break;
-        stops.push([Lx, Lz]);
-      }
-      if (stops.length >= 10) break;
-    }
-    for (const [Lx, Lz] of stops) {
-      const x = Lx + CORRIDOR_HALF(Lx) - 0.5, z = Lz + CORRIDOR_HALF(Lz) - 0.5;
+  // Bus-stop shelters (Mu: a stop in EVERY sector, not just the west
+  // side): one shelter at every node of the bus route loop — the same
+  // rectangle the buses run in vehicles.js busRouteNodes (dwell nodes
+  // are every 3rd route node, so the shelters sit where buses actually
+  // stop). That covers downtown (the loop surrounds it), commercial +
+  // beach (east edge), port (north-east corner), residential (south +
+  // west edges) and the forest edge (west edge). Same shelter as
+  // before — roof + 2 posts + bench + blue sign — merged into one mesh.
+  const ROUTE_NODES = [
+    [-400, -300], [-200, -400], [0, -400], [200, -400], [400, -400],
+    [400, -200], [400, 0], [400, 200], [400, 400],
+    [200, 400], [0, 400], [-200, 400], [-400, 400],
+    [-400, 200], [-400, 0], [-400, -200],
+  ];
+  for (const [Lx, Lz] of ROUTE_NODES) {
+    const x = Lx + CORRIDOR_HALF(Lx) - 0.5, z = Lz + CORRIDOR_HALF(Lz) - 0.5;
       busStops.push({ x, z });
       const roof = plainBox(3.2, 0.15, 1.6, [0.5, 0.65, 0.85]);
       for (let i = 0; i < roof.pos.length; i += 3) { roof.pos[i] += x; roof.pos[i + 1] += 2.6; roof.pos[i + 2] += z; }
@@ -216,7 +221,6 @@ export function buildLandmarks(city) {
       const sign = plainBox(0.5, 0.7, 0.08, [0.25, 0.45, 0.85]);
       for (let i = 0; i < sign.pos.length; i += 3) { sign.pos[i] += x - 1.7; sign.pos[i + 1] += 2.2; sign.pos[i + 2] += z; }
       add(busStopGeom, sign);
-    }
   }
 
   // ---------- SPBU (gas station) + bengkel (repair shop) in port blocks ----------
