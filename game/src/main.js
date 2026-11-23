@@ -512,7 +512,10 @@ if (params.sim) {
   console.log('[sim]', JSON.stringify(result));
 } else {
   const renderer = createRenderer(canvas, city);
-  const playerMesh = renderer.makePlayerMesh(player.figureGeom());
+  // Activity props (coffee tables, benches): one static mesh from the same
+  // spot lists the activity NPCs sit at. The player is drawn per-part from
+  // buildDynamics (player.partMatrices), not as a static mesh.
+  const activityPropsMesh = renderer.makePlayerMesh(peds.activityPropsGeom());
   const landmarks = renderer.landmarks;
   const plotDressing = renderer.plotDressing; // yard fountain spots (animated water)
   let last = performance.now();
@@ -572,10 +575,30 @@ if (params.sim) {
     }
     const ped = peds.matricesFor(camX, camZ, cull);
     dyn.ped_torso = ped.torso;
-    dyn.ped_legsL = ped.legsL;
-    dyn.ped_legsR = ped.legsR;
+    dyn.ped_armL = ped.armL;
+    dyn.ped_armR = ped.armR;
+    dyn.ped_legsL = ped.legL;
+    dyn.ped_legsR = ped.legR;
+    dyn.ped_skirt = ped.skirt;
     dyn.ped_heads = ped.heads;
-    dyn.ped_hair = ped.hair;
+    dyn.ped_hairS = ped.hairS;
+    dyn.ped_hairL = ped.hairL;
+    dyn.ped_badge = ped.badge;
+    dyn.ped_rod = ped.rod;
+    // The player (Wowok): the same humanoid base model, animated per part
+    // — arms/legs swing on foot, SEATED with hands on the wheel while
+    // driving (partMatrices takes game.driving).
+    {
+      const pp = player.partMatrices(game.driving);
+      dyn.player_torso = pp.torso;
+      dyn.player_armL = pp.armL;
+      dyn.player_armR = pp.armR;
+      dyn.player_legsL = pp.legL;
+      dyn.player_legsR = pp.legR;
+      dyn.player_head = pp.head;
+      dyn.player_hair = pp.hair;
+      dyn.player_backpack = pp.backpack;
+    }
     // Phase E2: hidden coins (spinning gold discs) + stunt ramps (wedges).
     dyn.coins = coins.matrices(game.elapsed);
     dyn.ramps = stunts.matrices();
@@ -809,10 +832,9 @@ if (params.sim) {
     acc += dt * (testMode ? params.timeScale : 1);
     while (acc >= STEP) { stepWorld(STEP); acc -= STEP; }
     const cam = cameraForFrame();
-    const model = mat4TRS(player.state.x, player.state.y, player.state.z, player.state.facing, 1, 1, 1);
     renderer.render({
       eye: cam.eye, center: cam.center,
-      timeHours: game.timeHours, playerMesh: game.driving ? null : playerMesh, playerModel: model,
+      timeHours: game.timeHours, activityPropsMesh,
       elapsed: game.elapsed, dynamics: buildDynamics(), weather: weather.state,
     });
     frames++;
@@ -853,6 +875,7 @@ if (params.sim) {
     count: () => peds.count(),
     zoneCounts: () => peds.zoneCounts(),
     stateMix: () => peds.stateMix(),
+    activityMix: () => peds.activityMix(),
   };
   // Test-only sound counter (?audiodebug=1): which sounds fired + how many
   // voices are live. Audio cannot be heard headless, so the counter is the

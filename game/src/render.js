@@ -14,7 +14,8 @@ import { buildBeachPropMeshes } from './beach.js';
 import { buildLandmarks } from './landmarks.js';
 import { buildMoonGeom, buildStarsSpec, buildSkyDomeGeom, buildCloudSpec, skyColors } from './sky.js';
 import { buildVehicleBodyGeoms, buildVehicleGlassGeoms, headlightGeom, buildWheelGeom, buildWheelGeomFar, buildBikeFrontGeom, beamConeGeom, beamPoolGeom, tailGeom, beaconGeom } from './vehicles.js';
-import { pedTorsoGeom, pedLegGeom, pedHeadGeom, pedHairGeom } from './peds.js';
+import { pedTorsoGeom, pedArmGeom, pedLegGeom, pedSkirtGeom, pedHeadGeom, pedHairShortGeom, pedHairLongGeom, pedBadgeGeom, fishingRodGeom } from './peds.js';
+import { backpackGeom } from './player.js';
 import { buildWetGeoms } from './weather.js';
 import { buildNightLightGeoms } from './nightlights.js';
 import { buildPlotDressing } from './plots.js';
@@ -183,14 +184,34 @@ export function createRenderer(canvas, city) {
     if (!geom.pos.length) continue;
     addDyn(progs.transpInst, geom, type === 'motorbike' ? 100 : type === 'scooter' ? 50 : type === 'car' ? 40 : 30, 'vehglass_' + type);
   }
-  // Peds: 2000 NPCs (Mu) — 5 instanced parts (torso, two swinging legs,
-  // head, hair). Capacity 2000: the 160 m cull keeps the visible count
-  // near ~500 in the busiest view, but the buffer must never clip a crowd.
+  // Peds: 2000 humanoid NPCs (Mu) — one base model, instanced per part
+  // (torso, two swinging arms, two swinging legs, skirt, head, short/long
+  // hair, police badge, fishing rod). Capacity 2000: the 160 m cull keeps
+  // the visible count near ~500 in the busiest view, but the buffer must
+  // never clip a crowd. A part is drawn only for the NPCs that use it, so
+  // the whole crowd costs ~11 instanced draws.
   addDyn(progs.litInst, pedTorsoGeom(), 2000, 'ped_torso');
+  addDyn(progs.litInst, pedArmGeom(-1), 2000, 'ped_armL');
+  addDyn(progs.litInst, pedArmGeom(1), 2000, 'ped_armR');
   addDyn(progs.litInst, pedLegGeom(-1), 2000, 'ped_legsL');
   addDyn(progs.litInst, pedLegGeom(1), 2000, 'ped_legsR');
+  addDyn(progs.litInst, pedSkirtGeom(), 400, 'ped_skirt');
   addDyn(progs.litInst, pedHeadGeom(), 2000, 'ped_heads');
-  addDyn(progs.litInst, pedHairGeom(), 2000, 'ped_hair');
+  addDyn(progs.litInst, pedHairShortGeom(), 2000, 'ped_hairS');
+  addDyn(progs.litInst, pedHairLongGeom(), 800, 'ped_hairL');
+  addDyn(progs.litInst, pedBadgeGeom(), 32, 'ped_badge');
+  addDyn(progs.litInst, fishingRodGeom(), 100, 'ped_rod');
+  // The player (Wowok): the same humanoid base model, animated per part
+  // (one instance each) so his arms/legs swing when he walks and he SITS
+  // in the vehicle when driving. Capacity 1 each.
+  addDyn(progs.litInst, pedTorsoGeom(), 1, 'player_torso');
+  addDyn(progs.litInst, pedArmGeom(-1), 1, 'player_armL');
+  addDyn(progs.litInst, pedArmGeom(1), 1, 'player_armR');
+  addDyn(progs.litInst, pedLegGeom(-1), 1, 'player_legsL');
+  addDyn(progs.litInst, pedLegGeom(1), 1, 'player_legsR');
+  addDyn(progs.litInst, pedHeadGeom(), 1, 'player_head');
+  addDyn(progs.litInst, pedHairShortGeom(), 1, 'player_hair');
+  addDyn(progs.litInst, backpackGeom(), 1, 'player_backpack');
   addDyn(progs.litInst, plainBox(0.06, 1.2, 0.06, [1, 1, 1]), 260, 'rain');
   addDyn(progs.unlitInst, headlightGeom(), 240, 'headlights');
   // Phase F polish: shared spinning/steering wheels, bike steering
@@ -259,7 +280,7 @@ export function createRenderer(canvas, city) {
   }
 
   function render(state) {
-    const { eye, center, timeHours, playerMesh, elapsed } = state;
+    const { eye, center, timeHours, activityPropsMesh, elapsed } = state;
     const w = canvas.clientWidth, h = canvas.clientHeight;
     if (canvas.width !== w || canvas.height !== h) {
       canvas.width = w; canvas.height = h;
@@ -338,9 +359,12 @@ export function createRenderer(canvas, city) {
       calls++;
     };
     for (const entry of meshes) drawEntry(entry);
-    // Player figure.
-    if (playerMesh) {
-      tris += drawMesh(gl, progs.lit, playerMesh, { ...common, uModel: state.playerModel });
+    // Activity props (coffee tables + chairs + cups, benches): one static
+    // mesh built from the same spot lists the activity NPCs use, so props
+    // and sitters always agree. The player figure is drawn per-part from
+    // state.dynamics (player_torso … player_backpack) — see main.js.
+    if (activityPropsMesh) {
+      tris += drawMesh(gl, progs.lit, activityPropsMesh, { ...common, uModel: mat4Identity() });
       calls++;
     }
     // Dynamic instanced meshes, refilled from state.dynamics.
