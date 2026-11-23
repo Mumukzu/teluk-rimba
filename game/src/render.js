@@ -101,6 +101,9 @@ export function createRenderer(canvas, city) {
   addInst(progs.litInst, buildingMeshes.crowns);
   addInst(progs.litInst, buildingMeshes.twists);
   addInst(progs.litInst, buildingMeshes.tapers);
+  // Solid ivory roof caps under the shaped towers' crowns (Mu 23 Nov
+  // 22:12 — closes the hollow "kopong" roofs). (+1 draw.)
+  addInst(progs.litInst, buildingMeshes.caps);
   // Phase F building detail: plinth + cornice bands, entrance kits,
   // shopfronts, balconies, roof clutter — one instanced draw each.
   addInst(progs.litInst, buildingMeshes.plinth);

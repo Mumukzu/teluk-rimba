@@ -29,7 +29,12 @@ export function buildingClass(h) {
 // Mu 23 Nov: freshened with the wall palette — still darker than the walls,
 // but with clear hue identity (slate blue / terracotta / brick / sand / teal / moss).
 const ROOF_COLORS = {
-  downtown: [0.3, 0.42, 0.6],
+  // Mu 23 Nov 22:12 — CBD roofs read as a dark hollow hole from the
+  // air (the slate slab + parapet tray looked kopong/empty). Downtown
+  // roof slabs + decks are ivory now, matching the towers — the roof
+  // reads as a solid finished cap, not a dark void. Other zones keep
+  // their darker roof identity.
+  downtown: [0.86, 0.84, 0.77],
   commercial: [0.6, 0.32, 0.2],
   residential: [0.55, 0.3, 0.28],
   beach: [0.85, 0.72, 0.5],
@@ -132,6 +137,12 @@ export function buildBuildingMeshes(gl, progs, city) {
   // (stacked boxes shrinking to a point, modern tapered silhouette).
   const twistMatrices = [], twistTints = [];
   const taperMatrices = [], taperTints = [];
+  // Mu 23 Nov 22:12 — solid roof CAP under every shaped tower's crown:
+  // a full-footprint closed box at the tower top, so the crown tiers
+  // sit on a solid ivory platform instead of floating over the dark
+  // roof tray (the "kopong" look). 1 m tall, so the roof units
+  // (tank bottom at h+1.25) still sit clear above it.
+  const capMatrices = [], capTints = [];
   const plinthMatrices = [], plinthTints = [];
   const corniceMatrices = [], corniceTints = [];
   const entranceMatrices = [], entranceTints = [];
@@ -247,10 +258,21 @@ export function buildBuildingMeshes(gl, progs, city) {
       roofUnitTints.push([1, 1, 1]);
     }
     if (!b.shape) continue;
+    // Solid roof cap (Mu 23 Nov 22:12): the crown tiers sit on this
+    // full-footprint platform — no dark tray, no floating slabs.
+    // Mu 23 Nov 22:17 — the cap follows the tower tint
+    // (lighten(b.color, 1.05)), so after the tint change back to
+    // lighter pale sky-blue it matches the tower: bright, solid, no
+    // hollow. The roof SLAB underneath stays ivory (see ROOF_COLORS
+    // above) — bright, never a dark hole.
+    capMatrices.push(mat4TRS(b.x, b.h + 0.5, b.z, b.rot, b.w * 0.98, 1.0, b.d * 0.98));
+    capTints.push(lighten(b.color, 1.05));
     if (b.shape === 'tiered' || b.shape === 'glass') {
       tierMatrices.push(mat4TRS(b.x, b.h + b.h * 0.11, b.z, b.rot, b.w * 0.68, b.h * 0.22, b.d * 0.68));
       tierTints.push(darken(b.color, 0.85));
-      tierMatrices.push(mat4TRS(b.x, b.h + b.h * 0.28, b.z, b.rot, b.w * 0.42, b.h * 0.12, b.d * 0.42));
+      // Tier 2 sinks 0.01h into tier 1 (was an exact touch at 0.22h —
+      // zero overlap, one rounding away from a visible slit).
+      tierMatrices.push(mat4TRS(b.x, b.h + b.h * 0.27, b.z, b.rot, b.w * 0.42, b.h * 0.12, b.d * 0.42));
       tierTints.push(darken(b.color, 0.72));
     }
     if (b.shape === 'spire') {
@@ -274,7 +296,12 @@ export function buildBuildingMeshes(gl, progs, city) {
       twistTints.push(darken(b.color, 0.76));
       twistMatrices.push(mat4TRS(b.x, b.h + b.h * 0.25, b.z, b.rot + 0.34, b.w * 0.32, b.h * 0.08, b.d * 0.32));
       twistTints.push(darken(b.color, 0.66));
-      twistMatrices.push(mat4TRS(b.x, b.h + b.h * 0.32, b.z, b.rot + 0.34, 1.2, 10, 1.2));
+      // The pole used to FLOAT: its bottom (0.32h-5) sat 0.25 m above
+      // tier 3's top (0.29h) on the h=175 tower (gap = 0.03h-5 > 0 for
+      // h > 167) — a real see-through slit under the pole. Now the pole
+      // is longer and starts 2 m INSIDE tier 3, keeping the same top
+      // (0.32h+5): height 0.03h+7, centre 0.305h+1.5.
+      twistMatrices.push(mat4TRS(b.x, b.h + b.h * 0.305 + 1.5, b.z, b.rot + 0.34, 1.2, b.h * 0.03 + 7, 1.2));
       twistTints.push([0.3, 0.32, 0.38]);
     }
     if (b.shape === 'taper') {
@@ -285,7 +312,11 @@ export function buildBuildingMeshes(gl, progs, city) {
       taperTints.push(darken(b.color, 0.78));
       taperMatrices.push(mat4TRS(b.x, b.h + b.h * 0.3, b.z, b.rot, b.w * 0.32, b.h * 0.1, b.d * 0.32));
       taperTints.push(darken(b.color, 0.68));
-      taperMatrices.push(mat4TRS(b.x, b.h + b.h * 0.38, b.z, b.rot, 1.4, 12, 1.4));
+      // Same floating-pole guard as the twist: the old pole bottom
+      // (0.38h-6) only overlapped tier 3 (top 0.35h) by 6-0.03h — zero
+      // at h=200. Now it starts 2 m INSIDE tier 3, same top (0.38h+6):
+      // height 0.03h+8, centre 0.365h+2.
+      taperMatrices.push(mat4TRS(b.x, b.h + b.h * 0.365 + 2, b.z, b.rot, 1.4, b.h * 0.03 + 8, 1.4));
       taperTints.push([0.9, 0.75, 0.4]);
     }
   }
@@ -303,6 +334,9 @@ export function buildBuildingMeshes(gl, progs, city) {
     crowns: part(unitBox, crownMatrices, crownTints),
     twists: part(unitBox, twistMatrices, twistTints),
     tapers: part(unitBox, taperMatrices, taperTints),
+    // Solid ivory roof caps under every shaped tower's crown (Mu 23 Nov
+    // 22:12 — closes the hollow "kopong" roof). One instanced draw.
+    caps: part(unitBox, capMatrices, capTints),
     plinth: part(unitBox, plinthMatrices, plinthTints),
     cornice: part(unitBox, corniceMatrices, corniceTints),
     entrance: part(buildEntranceKitGeom(), entranceMatrices, entranceTints),

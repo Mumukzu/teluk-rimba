@@ -168,23 +168,23 @@ check('bridges are the 4 whitelisted crossings',
     meshes.bases.reduce((a, s) => a + s.matrices.length, 0)
     + meshes.glassBases.reduce((a, s) => a + s.matrices.length, 0) === 1000
     && meshes.glassBases.reduce((a, s) => a + s.matrices.length, 0) === 21);
-  // Curtain-wall glass is ivory-white on every cell (Mu 23 Nov
-  // 22:10 — pale sky-blue still read as "kurang": the geometry carries
-  // ivory-white / bright ivory / warm glass, with a soft warm-grey
-  // mullion grid).
+  // Curtain-wall glass is lighter pale sky-blue on every cell (Mu 23 Nov
+  // 22:17 — ivory still read as "kurang": the geometry carries
+  // lighter pale sky-blue / bright near-white-blue / warm glass, with a
+  // soft light blue-grey mullion grid).
   {
     const curtain = subdividedBox(1, 1, 1, 8, 12, 6, true);
-    const glassCols = new Set(['0.84,0.82,0.74', '0.96,0.94,0.88', '1,0.95,0.75']);
+    const glassCols = new Set(['0.76,0.86,0.95', '0.86,0.92,0.98', '1,0.95,0.75']);
     let glassVerts = 0, mullionVerts = 0;
     for (let i = 0; i < curtain.col.length; i += 3) {
       const key = curtain.col[i] + ',' + curtain.col[i + 1] + ',' + curtain.col[i + 2];
       if (glassCols.has(key)) { glassVerts++; continue; }
       const [r, g, b] = [curtain.col[i], curtain.col[i + 1], curtain.col[i + 2]];
-      // Soft warm-grey mullion: warm (r > b), all channels in
-      // the soft band (front 0.55/0.53/0.48, side x0.94, band rows x0.85).
-      if (r > b && r >= 0.43 && r <= 0.56 && g >= 0.42 && g <= 0.54 && b >= 0.38 && b <= 0.49) mullionVerts++;
+      // Soft light blue-grey mullion: blue (b > r), all channels in
+      // the soft band (front 0.58/0.63/0.68, side x0.94, band rows x0.85).
+      if (b > r && r >= 0.48 && r <= 0.59 && g >= 0.52 && g <= 0.64 && b >= 0.56 && b <= 0.69) mullionVerts++;
     }
-    check('curtain-wall geometry: ivory-white glass on every cell + soft warm-grey mullions',
+    check('curtain-wall geometry: lighter pale sky-blue glass on every cell + soft light blue-grey mullions',
       glassVerts > 0 && mullionVerts > 0, glassVerts + ' glass verts, ' + mullionVerts + ' mullion verts');
   }
   // Mu 23 Nov 21:21 — NON-CBD: exactly ONE wall colour per zone
@@ -201,18 +201,56 @@ check('bridges are the 4 whitelisted crossings',
     }
     check('non-CBD zones: one uniform wall colour each (cream / white / sand-white / blue-grey / wood-brown)', uniformOk);
     const downtownCols = new Set(city.buildings.filter((b) => b.zone === 'downtown').map((b) => b.color.join(',')));
-    // Every downtown tint is ivory-white (all channels bright, warm
-    // r > g > b) — the only exception is the white hospital
-    // landmark. No blue, no silver left.
-    check('downtown stays ivory-white (no blue / silver left)',
+    // Every downtown tint is lighter pale sky-blue (all channels bright,
+    // blue b > g > r) — the only exception is the white hospital
+    // landmark. No ivory, no dark blue left.
+    check('downtown stays lighter pale sky-blue (no ivory / dark blue left)',
       [...downtownCols].every((c) => {
         if (c === '0.95,0.95,0.95') return true; // hospital landmark
         const [r, g, bl] = c.split(',').map(Number);
-        return r >= 0.80 && g >= 0.78 && bl >= 0.70 && r > g && g > bl;
+        return r >= 0.78 && g >= 0.87 && bl >= 0.94 && bl > g && g > r;
       }));
   }
   const distinctRoofTints = new Set(meshes.roofs.tints.map((t) => t.join(','))).size;
   check('roof tints vary by zone (not one grey)', distinctRoofTints > 10);
+  // Mu 23 Nov 22:12 — CBD roofs must be CLOSED, never hollow/kopong:
+  // (a) downtown roof slabs are ivory, not the old dark slate that
+  // read as a black hole from the air; (b) one solid ivory cap sits
+  // under every shaped tower's crown; (c) every crown stack chains
+  // without gaps (poles sink into the tier below, tier 2 into tier 1).
+  {
+    const dtIdx = city.buildings.map((b, i) => (b.zone === 'downtown' ? i : -1)).filter((i) => i >= 0);
+    const slabIvory = dtIdx.every((i) => {
+      const [r, g, bl] = meshes.roofs.tints[i];
+      return r >= 0.78 && r > g && g > bl;
+    });
+    check('downtown roof slabs are ivory (no dark hollow roof)', slabIvory);
+    check('solid roof cap on every shaped CBD tower (10)', meshes.caps.matrices.length === 10);
+    // Mu 23 Nov 22:17 — caps follow the tower tint (lighten(b.color,
+    // 1.05) in buildings.js), so after the tint change they are bright
+    // pale sky-blue, not ivory: still bright (every channel >= 0.82)
+    // and still a solid closed platform. The "no hollow" property is
+    // covered by the slab check above + the 10-caps + stack checks.
+    const capBrightBlue = meshes.caps.tints.every(([r, g, bl]) => r >= 0.82 && g >= 0.90 && bl >= 0.98 && bl > g && g > r);
+    check('roof caps are bright pale sky-blue (match tower tint)', capBrightBlue);
+    let stackOk = true, worst = '';
+    for (const b of city.buildings.filter((x) => x.zone === 'downtown' && x.shape)) {
+      const h = b.h;
+      const tiers = [];
+      if (b.shape === 'tiered' || b.shape === 'glass') tiers.push([0, 0.22 * h], [0.21 * h, 0.33 * h]);
+      else if (b.shape === 'spire') tiers.push([0, 18], [16.5, 21.5]);
+      else if (b.shape === 'crown') tiers.push([0, 0.1 * h], [0, 12]);
+      else if (b.shape === 'twist') tiers.push([0, 0.14 * h], [0.12 * h, 0.22 * h], [0.21 * h, 0.29 * h], [0.29 * h - 2, 0.32 * h + 5]);
+      else if (b.shape === 'taper') tiers.push([0, 0.16 * h], [0.14 * h, 0.26 * h], [0.25 * h, 0.35 * h], [0.35 * h - 2, 0.38 * h + 6]);
+      tiers.sort((a, c) => a[0] - c[0]);
+      let top = 1; // the solid cap covers [0, 1] above the roof line
+      for (const [lo, hi] of tiers) {
+        if (lo > top + 0.001) { stackOk = false; worst = b.shape + ' h=' + h + ' gap ' + (lo - top).toFixed(2) + 'm'; }
+        top = Math.max(top, hi);
+      }
+    }
+    check('CBD crown stacks chain without gaps (poles sink into tiers)', stackOk, worst);
+  }
   check('plinth + cornice on every building', meshes.plinth.matrices.length === 1000 && meshes.cornice.matrices.length === 1000);
   check('entrance kit or shopfront on every building', meshes.entrance.matrices.length + meshes.shopfront.matrices.length === 1000);
   check('balconies placed (multi-storey fronts)', meshes.balconies.matrices.length > 500);

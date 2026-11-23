@@ -212,14 +212,17 @@ const ZONE_SIZE = {
 // Mu 23 Nov 22:10 — biru langit pucat MASIH KURANG: kaca jadi PUTIH
 // GADING (ivory white) — paling nyambung dengan gedung krem/putih sekitar,
 // hangat, terang, tetap terbaca sebagai kaca lewat variasi selnya.
+// Mu 23 Nov 22:17 — ivory KURANG: balik ke BIRU LANGIT PUCAT seperti
+// a6c2f8d, tapi LEBIH MUDA lagi — nyaris putih-biru, birunya tetap terasa
+// (b > g > r), nyambung dengan langit + krem sekitar.
 // Mu 23 Nov 21:21 — NON-CBD: SATU warna seragam per zona (opsi 1):
 // komersial krem hangat, perumahan putih, pantai putih pasir, pelabuhan
 // abu-biru, hutan coklat kayu. (Tint = warna dinding; kaca jendela tetap
 // gelap.) Landmark overrides (hospital/police/school) still apply after.
 const ZONE_COLORS = {
-  downtown: [ // menara kaca PUTIH GADING: ivory hangat, variasi tipis antar tower (r > g > b)
-    [0.92, 0.90, 0.82], [0.94, 0.92, 0.85], [0.88, 0.86, 0.78],
-    [0.90, 0.88, 0.80], [0.96, 0.94, 0.88], [0.84, 0.82, 0.74],
+  downtown: [ // menara kaca BIRU LANGIT PUCAT — lebih muda dari a6c2f8d, nyaris putih-biru (b > g > r)
+    [0.82, 0.90, 0.97], [0.85, 0.91, 0.98], [0.80, 0.89, 0.96],
+    [0.88, 0.93, 0.99], [0.90, 0.94, 0.99], [0.84, 0.91, 0.98],
   ],
   commercial: [ // SATU warna: krem hangat
     [0.96, 0.88, 0.72],
@@ -442,7 +445,7 @@ export function generateCity(seed = SEED) {
       b.d = Math.min(56, Math.round(b.d * 1.6));
       b.floors = Math.max(1, Math.round(b.h / 3.2));
       b.shape = shapes[i % shapes.length];
-      if (b.shape === 'glass') b.color = [0.92, 0.90, 0.83]; // ivory-white glass (Mu 23 Nov 22:10)
+      if (b.shape === 'glass') b.color = [0.84, 0.91, 0.98]; // lighter pale sky-blue glass (Mu 23 Nov 22:17)
       // No facade flush against a road — the grown tower must sit back
       // from its block edge like every other building. Shrink the
       // footprint to fit the SETBACK_M margin, centre stays: shrinking
