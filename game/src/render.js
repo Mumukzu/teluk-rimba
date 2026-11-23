@@ -11,7 +11,7 @@ import { buildRoadMesh, buildLampMeshes, buildTrafficLightMesh } from './roads.j
 import { buildBeachPropMeshes } from './beach.js';
 import { buildLandmarks } from './landmarks.js';
 import { buildMoonGeom, buildStarsSpec } from './sky.js';
-import { buildVehicleGeoms, buildVehicleGlassGeoms, headlightGeom } from './vehicles.js';
+import { buildVehicleBodyGeoms, buildVehicleGlassGeoms, headlightGeom, buildWheelGeom, buildBikeFrontGeom, beamConeGeom, tailGeom, beaconGeom } from './vehicles.js';
 import { pedTorsoGeom, pedLegsGeom, pedHeadGeom, pedHairGeom } from './peds.js';
 import { buildWetGeoms } from './weather.js';
 import { buildNightLightGeoms } from './nightlights.js';
@@ -43,7 +43,7 @@ export function createRenderer(canvas, city) {
   const wet = buildWetGeoms();
   const nightPools = buildNightLightGeoms(city, landmarks);
   const plotDressing = buildPlotDressing(city);
-  const vehicleGeoms = buildVehicleGeoms();
+  const vehicleGeoms = buildVehicleBodyGeoms(); // no wheels: the shared wheel mesh supplies them
   const vehicleGlassGeoms = buildVehicleGlassGeoms();
 
   const meshes = [];
@@ -119,8 +119,10 @@ export function createRenderer(canvas, city) {
   addStatic(progs.transp, wet.overlay, mat4Identity(), { transparent: true, alpha: 0.35, wetOnly: true });
   addStatic(progs.transp, wet.puddles, mat4Identity(), { transparent: true, alpha: 0.3, wetOnly: true });
   // Night light pools (transparent, only at night): warm glow on the
-  // streets around lamps, market, plaza, pier and shopfronts.
-  addStatic(progs.transp, nightPools.pools, mat4Identity(), { transparent: true, alpha: 0.38, nightOnly: true });
+  // streets around lamps, market, plaza, pier and shopfronts. Alpha 0.2:
+  // a soft glow the road shows through — 0.38 washed the whole avenue
+  // into a solid tan sheet from street level.
+  addStatic(progs.transp, nightPools.pools, mat4Identity(), { transparent: true, alpha: 0.2, nightOnly: true });
   // Clouds drift: three separate static meshes sharing one geometry.
   const cloudMesh = createMesh(gl, progs.lit, world.clouds);
   const cloudModels = [
@@ -145,6 +147,14 @@ export function createRenderer(canvas, city) {
   addDyn(progs.litInst, pedHairGeom(), 340, 'ped_hair');
   addDyn(progs.litInst, plainBox(0.06, 1.2, 0.06, [1, 1, 1]), 260, 'rain');
   addDyn(progs.unlitInst, headlightGeom(), 240, 'headlights');
+  // Phase F polish: shared spinning/steering wheels, bike steering
+  // assemblies, live taillights, bike lights, beam cones, police beacons.
+  addDyn(progs.litInst, buildWheelGeom(), 1200, 'wheels');
+  addDyn(progs.litInst, buildBikeFrontGeom(), 130, 'bikeFront');
+  addDyn(progs.unlitInst, tailGeom(), 320, 'taillights');
+  addDyn(progs.unlitInst, headlightGeom(), 240, 'bikelights');
+  addDyn(progs.transpInst, beamConeGeom(), 260, 'beamcones');
+  addDyn(progs.unlitInst, beaconGeom(), 8, 'beacons');
   addDyn(progs.transpInst, landmarks.beamGeom, 1, 'beam');
   // Aircraft: police helicopter (body + spinning rotor), daytime plane,
   // heli spotlight cone (night only), mission marker column.
@@ -212,10 +222,16 @@ export function createRenderer(canvas, city) {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     const proj = mat4Perspective((55 * Math.PI) / 180, canvas.width / canvas.height, 0.5, 4000);
     const view = mat4LookAt(eye, center, [0, 1, 0]);
+    const spot = state.dynamics && state.dynamics.playerSpot;
     const common = {
       uProj: proj, uView: view,
       uSunDir: light.sun, uSunColor: light.sunColor, uAmbient: light.ambient,
       uFogColor: light.sky, uFogNear: 500, uFogFar: 2600,
+      // Player headlight spotlight (the one real light): off by default.
+      uSpotPos: spot ? spot.pos : [0, 0, 0],
+      uSpotDir: spot ? spot.dir : [0, 1, 0],
+      uSpotColor: spot ? spot.color : [0, 0, 0],
+      uSpotOn: spot && spot.on ? 1 : 0,
     };
     calls = 0; tris = 0;
     const drawEntry = (entry) => {
@@ -248,11 +264,14 @@ export function createRenderer(canvas, city) {
       if (name === 'heliBeam' && light.isDay) continue;
       if (name === 'headlights' && light.isDay) continue;
       if (name === 'headbeams' && light.isDay) continue;
+      if (name === 'taillights' && light.isDay) continue;
+      if (name === 'beamcones' && light.isDay) continue;
+      if (name === 'beacons' && light.isDay) continue;
       if (name === 'rain' && rainAmt < 0.05) continue;
       updateDynamicInstancedMesh(gl, entry.mesh, spec.matrices, spec.tints);
       const uniforms = { ...common, uModel: mat4Identity() };
       const blendAlpha = name.startsWith('vehglass_') ? 0.42
-        : { beam: 0.12, headbeams: 0.14, flow: 0.3, heliBeam: 0.15 }[name];
+        : { beam: 0.12, headbeams: 0.14, flow: 0.3, heliBeam: 0.15, beamcones: 0.18 }[name];
       if (blendAlpha !== undefined) {
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);

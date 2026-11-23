@@ -93,11 +93,12 @@ const FOG_FS = `
 const LIT_VS = `
   attribute vec3 aPos; attribute vec3 aNormal; attribute vec3 aColor;
   uniform mat4 uProj; uniform mat4 uView; uniform mat4 uModel;
-  varying vec3 vColor; varying vec3 vNormal; varying float vDist;
+  varying vec3 vColor; varying vec3 vNormal; varying float vDist; varying vec3 vWorldPos;
   void main() {
     vec4 wp = uModel * vec4(aPos, 1.0);
     vColor = aColor;
     vNormal = mat3(uModel) * aNormal;
+    vWorldPos = wp.xyz;
     vec4 vp = uView * wp;
     vDist = -vp.z;
     gl_Position = uProj * vp;
@@ -109,12 +110,13 @@ const LIT_INST_VS = `
   attribute vec4 aMat0; attribute vec4 aMat1; attribute vec4 aMat2; attribute vec4 aMat3;
   attribute vec3 aTint;
   uniform mat4 uProj; uniform mat4 uView;
-  varying vec3 vColor; varying vec3 vNormal; varying float vDist;
+  varying vec3 vColor; varying vec3 vNormal; varying float vDist; varying vec3 vWorldPos;
   void main() {
     mat4 m = mat4(aMat0, aMat1, aMat2, aMat3);
     vec4 wp = m * vec4(aPos, 1.0);
     vColor = aColor * aTint;
     vNormal = mat3(m) * aNormal;
+    vWorldPos = wp.xyz;
     vec4 vp = uView * wp;
     vDist = -vp.z;
     gl_Position = uProj * vp;
@@ -122,12 +124,24 @@ const LIT_INST_VS = `
 `;
 
 const LIT_FS = FOG_FS + `
-  varying vec3 vNormal;
+  varying vec3 vNormal; varying vec3 vWorldPos;
   uniform vec3 uSunDir; uniform vec3 uSunColor; uniform vec3 uAmbient;
+  uniform vec3 uSpotPos; uniform vec3 uSpotDir; uniform vec3 uSpotColor; uniform float uSpotOn;
   void main() {
     vec3 n = normalize(vNormal);
     float diff = max(dot(n, -uSunDir), 0.0);
     vec3 col = vColor * (uAmbient + uSunColor * diff);
+    // Player headlight spotlight (the one real light): a warm cone that
+    // genuinely lights the road and walls ahead of the player car at
+    // night. uSpotOn is 0 whenever the player is not driving at night.
+    if (uSpotOn > 0.5) {
+      vec3 toF = vWorldPos - uSpotPos;
+      float sDist = length(toF);
+      float sCos = dot(toF / max(sDist, 0.001), normalize(uSpotDir));
+      float sCone = smoothstep(0.80, 0.92, sCos);
+      float sAtt = clamp(1.0 - sDist / 22.0, 0.0, 1.0);
+      col += vColor * uSpotColor * sCone * sAtt * 1.6;
+    }
     gl_FragColor = vec4(applyFog(col), 1.0);
   }
 `;

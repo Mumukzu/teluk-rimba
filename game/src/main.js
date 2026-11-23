@@ -16,7 +16,7 @@ import { createPlayer } from './player.js';
 import { createHud } from './hud.js';
 import { createRenderer } from './render.js';
 import { parseShotParams, timeForShot } from './shots.js';
-import { createTraffic } from './vehicles.js';
+import { createTraffic, stepWheelState } from './vehicles.js';
 import { createPeds } from './peds.js';
 import { createWanted } from './police.js';
 import { createWeather } from './weather.js';
@@ -147,6 +147,7 @@ if (params.drive && VEHICLES[params.drive]) {
     heading: 0, y: Math.max(0, terrainHeight(player.state.x, player.state.z)),
     parked: true, driven: false, dwell: 0, mode: 'parked',
     color: [0.88, 0.66, 0.6], route: null, routeIdx: 0,
+    spin: 0, steerVis: 0, lean: 0, prevHeading: 0, braking: false,
   };
   traffic.vehicles.push(fresh);
   traffic.enter(fresh);
@@ -181,6 +182,9 @@ function driveStep(v, dt, inp) {
   if (spd > 0.1 && steer !== 0) {
     v.heading += steer * tune.turn * (spd / tune.maxSpeed) * dt * Math.sign(v.speed);
   }
+  // Brake lights + wheel spin / steer / bike lean for the driven vehicle.
+  v.braking = fwd < 0 && v.speed > 0.5;
+  stepWheelState(v, dt, steer);
   const nx = v.x + Math.sin(v.heading) * v.speed * dt;
   const nz = v.z + Math.cos(v.heading) * v.speed * dt;
   const radius = Math.max(1.0, tune.len / 2 - 0.4);
@@ -570,12 +574,21 @@ if (params.sim) {
     // Phase E2: hidden coins (spinning gold discs) + stunt ramps (wedges).
     dyn.coins = coins.matrices(game.elapsed);
     dyn.ramps = stunts.matrices();
-    // Headlights at night: two dots at the front of each moving vehicle,
-    // plus a soft beam pool on the road ahead (Mu: all vehicle lights on).
+    // Wheels (shared unit-wheel mesh: spin + steer) and the bike steering
+    // assemblies, refilled every frame from the traffic state.
+    dyn.wheels = traffic.wheelMatricesFor(camX, camZ, cull);
+    dyn.bikeFront = traffic.bikeFrontMatricesFor(camX, camZ, cull);
+    // Headlights at night: two dots at the front of each moving car,
+    // plus a soft beam pool on the road ahead (Mu: all vehicle lights on),
+    // a fading transparent beam cone, and taillights that flare when the
+    // vehicle brakes. Bikes get one centre headlight + one taillight
+    // (bike-lights mesh, day and night — see below).
     const isNight = game.timeHours < 6 || game.timeHours >= 18;
     if (isNight) {
       const hl = { matrices: [], tints: [] };
       const hb = { matrices: [], tints: [] };
+      const bc = { matrices: [], tints: [] };
+      const tl = { matrices: [], tints: [] };
       for (const v of traffic.vehicles) {
         if (v.parked || v.speed < 0.5) continue;
         if (v.type === 'boat' || v.type === 'fishingboat' || v.type === 'sailboat') continue;
@@ -584,18 +597,33 @@ if (params.sim) {
         const tune = VEHICLES[v.type];
         const fx = Math.sin(v.heading), fz = Math.cos(v.heading);
         const rx = Math.cos(v.heading), rz = -Math.sin(v.heading);
-        for (const side of [-1, 1]) {
-          const hx = v.x + fx * (tune.len / 2) + rx * side * (tune.w / 2 - 0.3);
-          const hz = v.z + fz * (tune.len / 2) + rz * side * (tune.w / 2 - 0.3);
-          hl.matrices.push(mat4TRS(hx, v.y + 0.6, hz, v.heading, 1, 1, 1));
-          hl.tints.push([1, 1, 1]);
-        }
         const isBike = v.type === 'motorbike' || v.type === 'scooter' || v.type === 'bajaj';
-        const beamLen = isBike ? 7 : 10, beamW = isBike ? 1.3 : 2.4;
+        if (!isBike) {
+          for (const side of [-1, 1]) {
+            const hx = v.x + fx * (tune.len / 2) + rx * side * (tune.w / 2 - 0.3);
+            const hz = v.z + fz * (tune.len / 2) + rz * side * (tune.w / 2 - 0.3);
+            hl.matrices.push(mat4TRS(hx, v.y + 0.6, hz, v.heading, 1, 1, 1));
+            hl.tints.push([1, 1, 1]);
+          }
+          // Taillights: dim red at night, bright red when braking.
+          for (const side of [-1, 1]) {
+            const tx = v.x - fx * (tune.len / 2 + 0.03) + rx * side * (tune.w / 2 - 0.42);
+            const tz = v.z - fz * (tune.len / 2 + 0.03) + rz * side * (tune.w / 2 - 0.42);
+            tl.matrices.push(mat4TRS(tx, v.y + 0.72, tz, v.heading, 1, 1, 1));
+            tl.tints.push(v.braking ? [1, 0.08, 0.08] : [0.45, 0.05, 0.05]);
+          }
+        }
+        // Beam pool (the bright patch on the asphalt) + fading cone.
+        const beamLen = isBike ? 9 : 12, beamW = isBike ? 1.0 : 2.4;
         hb.matrices.push(mat4TRS(
           v.x + fx * (tune.len / 2 + beamLen / 2), 0.13, v.z + fz * (tune.len / 2 + beamLen / 2),
           v.heading, beamW, 1, beamLen));
         hb.tints.push([1, 0.93, 0.75]);
+        const coneLen = isBike ? 12 : 15;
+        bc.matrices.push(mat4TRS(
+          v.x + fx * (tune.len / 2), v.y + 0.65, v.z + fz * (tune.len / 2),
+          v.heading - Math.PI / 2, coneLen / 15, isBike ? 0.7 : 1, isBike ? 0.7 : 1));
+        bc.tints.push([1, 1, 1]);
       }
       // Boat lamps: one warm dot above each boat, so boats read against
       // the dark sea at night (a dark-blue boat on dark-blue water was
@@ -608,12 +636,67 @@ if (params.sim) {
       }
       dyn.headlights = hl;
       dyn.headbeams = hb;
+      if (bc.matrices.length) dyn.beamcones = bc;
+      if (tl.matrices.length) dyn.taillights = tl;
+      // Police beacons: red/blue flash, ONLY while a pursuit (siren) is
+      // active — the static roof bar stays dark otherwise.
+      if (wanted.state.police.length > 0) {
+        const ph = Math.floor(game.elapsed * 4) % 2;
+        const bn = { matrices: [], tints: [] };
+        for (const v of wanted.state.police) {
+          const d = Math.hypot(v.x - camX, v.z - camZ);
+          if (d > cull) continue;
+          const fx = Math.sin(v.heading), fz = Math.cos(v.heading);
+          bn.matrices.push(mat4TRS(v.x - fx * 0.28, v.y + 1.82, v.z - fz * 0.28, v.heading, 1, 1, 1));
+          bn.tints.push(ph === 0 ? [1, 0.08, 0.08] : [0.1, 0.1, 0.3]);
+          bn.matrices.push(mat4TRS(v.x + fx * 0.28, v.y + 1.82, v.z + fz * 0.28, v.heading, 1, 1, 1));
+          bn.tints.push(ph === 0 ? [0.1, 0.1, 0.3] : [0.15, 0.3, 1]);
+        }
+        if (bn.matrices.length) dyn.beacons = bn;
+      }
+      // Player headlight spotlight (the one real light in the scene):
+      // position + direction for the lit shader, player vehicle only.
+      if (game.driving) {
+        const v = game.driving;
+        const isBoat = v.type === 'boat' || v.type === 'fishingboat' || v.type === 'sailboat';
+        if (!isBoat) {
+          const tune = VEHICLES[v.type];
+          const fx = Math.sin(v.heading), fz = Math.cos(v.heading);
+          dyn.playerSpot = {
+            pos: [v.x + fx * (tune.len / 2), v.y + 0.7, v.z + fz * (tune.len / 2)],
+            dir: [fx, -0.15, fz],
+            color: [1.0, 0.88, 0.66],
+            on: 1,
+          };
+        }
+      }
       // Lighthouse beam sweeps the sea at night.
       const beamAngle = game.elapsed * 0.5;
       dyn.beam = {
         matrices: [mat4TRS(landmarks.lighthouse.x, landmarks.lighthouse.lampY, landmarks.lighthouse.z, beamAngle, 1, 1, 1)],
         tints: [[1, 0.95, 0.75]],
       };
+    }
+    // Bike lights, day and night: one centre headlight (dim by day,
+    // bright at night) and a small taillight at night (bright when
+    // braking). Parked bikes stay dark.
+    {
+      const bl = { matrices: [], tints: [] };
+      for (const v of traffic.vehicles) {
+        if (v.type !== 'motorbike' && v.type !== 'scooter' && v.type !== 'bajaj') continue;
+        if (v.parked) continue;
+        const d = Math.hypot(v.x - camX, v.z - camZ);
+        if (d > cull) continue;
+        const tune = VEHICLES[v.type];
+        const fx = Math.sin(v.heading), fz = Math.cos(v.heading);
+        bl.matrices.push(mat4TRS(v.x + fx * (tune.len / 2 + 0.02), v.y + 0.95, v.z + fz * (tune.len / 2 + 0.02), v.heading, 1, 1, 1));
+        bl.tints.push(isNight ? [1, 0.95, 0.7] : [0.4, 0.38, 0.3]);
+        if (isNight && v.speed >= 0.5) {
+          bl.matrices.push(mat4TRS(v.x - fx * (tune.len / 2 + 0.02), v.y + 0.7, v.z - fz * (tune.len / 2 + 0.02), v.heading, 1.2, 0.8, 0.7));
+          bl.tints.push(v.braking ? [1, 0.08, 0.08] : [0.45, 0.05, 0.05]);
+        }
+      }
+      if (bl.matrices.length) dyn.bikelights = bl;
     }
     // River flow streaks + beach wave lines (light animation, always on).
     {
