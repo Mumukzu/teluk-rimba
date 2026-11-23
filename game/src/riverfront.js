@@ -282,30 +282,50 @@ export function buildRiverfront(city) {
     const nx = -dz / len, nz = dx / len; // unit normal
     const segM = len;
     for (const side of [1, -1]) {
+      // Mu: a bank structure must never cross a road. The 14 m skip
+      // around each bridge crossing is measured from the river centre,
+      // but the wall (rd 11.5), promenade (rd 13-16.5) and fence (rd
+      // 17.5) sit 15-23 m from the crossing point along the road, so
+      // they used to pave/fence straight across every bridge approach
+      // (51 pieces city-wide — e.g. the pale slab + fence across the
+      // (0,-100) bridge road in view-08). Skip each structure whose
+      // midpoint lands on or beside a road; the path meets the road
+      // and resumes after it.
+      const midAt = (off) => [mx + nx * off * side, mz + nz * off * side];
+      // A piece is ~8 m long, so its midpoint can sit clear of the road
+      // while an end still pokes onto it — test the ends (and the
+      // middle) of each piece, not just its midpoint.
+      const touchesRoad = (pts) => pts.some(([wx, wz]) => nearRoad(wx, wz, 11));
       const pA = [ax + nx * 11.5 * side, az + nz * 11.5 * side];
       const pB = [bx + nx * 11.5 * side, bz + nz * 11.5 * side];
       // Embankment wall: a clear stone lip (top y 0.35) so the sunken
       // channel reads as a real river, not a blue sheet on the grass.
-      wallQuad(hard, pA[0], pA[1], pB[0], pB[1], -1.0, 0.35, WALL_COL);
-      counts.wallM += segM;
+      if (!touchesRoad([pA, pB, midAt(11.5)])) {
+        wallQuad(hard, pA[0], pA[1], pB[0], pB[1], -1.0, 0.35, WALL_COL);
+        counts.wallM += segM;
+      }
       // Promenade: 3.5 m wide strip, rd 13-16.5.
       const prA = [ax + nx * 13 * side, az + nz * 13 * side];
       const prB = [bx + nx * 13 * side, bz + nz * 13 * side];
       const prC = [bx + nx * 16.5 * side, bz + nz * 16.5 * side];
       const prD = [ax + nx * 16.5 * side, az + nz * 16.5 * side];
-      quadBoth(hard, [prA, prB, prC, prD], 0.06, PROM_COL);
-      counts.promenadeM += segM;
+      if (!touchesRoad([prA, prB, prC, prD, midAt(14.75)])) {
+        quadBoth(hard, [prA, prB, prC, prD], 0.06, PROM_COL);
+        counts.promenadeM += segM;
+      }
       // Fence at rd 17.5: posts every ~4 m + TWO rails, so it reads as a
       // fence from the air — not one thin stray black line on the grass.
       const fA = [ax + nx * 17.5 * side, az + nz * 17.5 * side];
       const fB = [bx + nx * 17.5 * side, bz + nz * 17.5 * side];
       const rot = Math.atan2(-(fB[0] - fA[0]), fB[1] - fA[1]);
-      addPart(hard, plainBox(0.1, 0.1, len + 0.1, FENCE_COL), (fA[0] + fB[0]) / 2, 0.62, (fA[1] + fB[1]) / 2, rot);
-      addPart(hard, plainBox(0.1, 0.1, len + 0.1, FENCE_COL), (fA[0] + fB[0]) / 2, 0.35, (fA[1] + fB[1]) / 2, rot);
-      counts.fenceM += segM;
-      // One post per step (8 m) + a midpoint post (4 m spacing).
-      addPart(hard, plainBox(0.09, 0.75, 0.09, FENCE_COL), fA[0], 0.38, fA[1], 0);
-      addPart(hard, plainBox(0.09, 0.75, 0.09, FENCE_COL), (fA[0] + fB[0]) / 2, 0.38, (fA[1] + fB[1]) / 2, 0);
+      if (!touchesRoad([fA, fB, midAt(17.5)])) {
+        addPart(hard, plainBox(0.1, 0.1, len + 0.1, FENCE_COL), (fA[0] + fB[0]) / 2, 0.62, (fA[1] + fB[1]) / 2, rot);
+        addPart(hard, plainBox(0.1, 0.1, len + 0.1, FENCE_COL), (fA[0] + fB[0]) / 2, 0.35, (fA[1] + fB[1]) / 2, rot);
+        counts.fenceM += segM;
+        // One post per step (8 m) + a midpoint post (4 m spacing).
+        addPart(hard, plainBox(0.09, 0.75, 0.09, FENCE_COL), fA[0], 0.38, fA[1], 0);
+        addPart(hard, plainBox(0.09, 0.75, 0.09, FENCE_COL), (fA[0] + fB[0]) / 2, 0.38, (fA[1] + fB[1]) / 2, 0);
+      }
     }
   }
 
