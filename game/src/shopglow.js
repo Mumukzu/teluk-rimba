@@ -17,19 +17,21 @@ function mulberry32(a) {
   };
 }
 
-// Warm shopfront tints (Mu's refs: mostly warm yellow-white, some pink,
-// a few cool white) with a per-shop brightness jitter.
+// Warm shopfront tints (Mu's refs: ALL warm — yellow-white, pink, amber;
+// the cool-white variant made some ground floors read cold blue instead
+// of glowing warm, so it is gone) with a per-shop brightness jitter.
 const GLOW_TINTS = [
   [1.0, 0.85, 0.60], // warm yellow-white
   [1.0, 0.85, 0.60],
   [1.0, 0.85, 0.60],
   [1.0, 0.72, 0.70], // warm pink
-  [0.92, 0.95, 1.0], // cool white
+  [1.0, 0.78, 0.45], // warm amber
 ];
 
 export function buildShopGlow(city) {
   const rand = mulberry32(20261123);
   const matrices = [], tints = [];
+  const spillMatrices = [], spillTints = [];
   for (const b of city.buildings) {
     if (b.zone !== 'commercial' && b.zone !== 'downtown') continue;
     const nx = Math.sin(b.rot), nz = Math.cos(b.rot);
@@ -45,11 +47,18 @@ export function buildShopGlow(city) {
     matrices.push(mat4TRS(fx, 1.35, fz, b.rot, w, h, 1));
     const base = GLOW_TINTS[Math.floor(rand() * GLOW_TINTS.length)];
     const j = 0.85 + rand() * 0.15;
-    tints.push([base[0] * j, base[1] * j, base[2] * j]);
+    const tint = [base[0] * j, base[1] * j, base[2] * j];
+    tints.push(tint);
+    // Warm spill on the ground in front of the shop (Mu's refs: warm
+    // light on the sidewalk) — a flat wash 2.2 m out from the facade,
+    // dimmer than the panel, same warm tint.
+    spillMatrices.push(mat4TRS(b.x + nx * (b.d / 2 + 2.2), 0.18, b.z + nz * (b.d / 2 + 2.2), b.rot, w * 0.8, 1, 3));
+    spillTints.push([tint[0] * 0.45, tint[1] * 0.45, tint[2] * 0.45]);
   }
   return {
     geom: plainBox(1, 1, 0.06, [1, 1, 1]),
     matrices, tints,
-    counts: { panels: matrices.length },
+    spill: { geom: plainBox(1, 0.02, 1, [1, 1, 1]), matrices: spillMatrices, tints: spillTints },
+    counts: { panels: matrices.length, spills: spillMatrices.length },
   };
 }

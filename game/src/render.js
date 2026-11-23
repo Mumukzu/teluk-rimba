@@ -172,8 +172,10 @@ export function createRenderer(canvas, city) {
   // Night sky: lit windows + moon + stars, drawn only at night.
   addInst(progs.unlitInst, litWindows, { nightOnly: true });
   // Night shopfront glow (Mu's night refs): warm-lit ground floors on
-  // every shop, drawn only at night (+1 draw at night, 0 by day).
+  // every shop, drawn only at night (+1 draw at night, 0 by day), plus
+  // the warm spill on the ground in front of each shop (+1 more at night).
   addInst(progs.unlitInst, shopGlow, { nightOnly: true });
+  addInst(progs.unlitInst, shopGlow.spill, { nightOnly: true });
   addInst(progs.unlitInst, { geom: buildMoonGeom(), matrices: [mat4TRS(MOON_POS[0], MOON_POS[1], MOON_POS[2], 0, 1, 1, 1)], tints: [[1, 1, 1]] }, { nightOnly: true });
   addInst(progs.unlitInst, stars, { nightOnly: true });
   // Wet roads (transparent, only while wet) + puddles.
