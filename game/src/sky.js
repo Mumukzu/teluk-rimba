@@ -37,7 +37,7 @@ export function buildSkyDomeGeom() {
 // carries the time-of-day colour (day white, sunset warm, rain grey,
 // night dark moonlit).
 export function buildCloudPuffGeom() {
-  const SIDE = [0.8, 0.8, 0.83], TOP = [1, 1, 1];
+  const SIDE = [0.88, 0.88, 0.9], TOP = [1, 1, 1];
   const blob = (w, h, d, x, y, z) => {
     const g = plainBox(w, h, d, SIDE, TOP);
     for (let i = 0; i < g.pos.length; i += 3) {
@@ -46,20 +46,20 @@ export function buildCloudPuffGeom() {
     return g;
   };
   return mergeGeoms([
-    blob(42, 6, 18, 0, 0, 0),       // main body
-    blob(24, 5, 14, -10, 4, 1),     // left hump
-    blob(20, 4.5, 13, 11, 3.5, -1), // right hump
-    blob(13, 3.5, 10, 1, 4.5, -4),  // top tuft
+    blob(36, 10, 16, 0, 0, 0),      // main body
+    blob(20, 8, 12, -8, 5, 0),      // left hump
+    blob(18, 7, 11, 9, 4.5, -1),    // right hump
+    blob(12, 6, 9, 0, 7, -2),       // top tuft
   ]);
 }
 
-// Cloud placement: 14 puffs, varied sizes/heights, spread over the whole
+// Cloud placement: 18 puffs, varied sizes/heights, spread over the whole
 // map and the sea — never in neat rows, never at one height. Drift is a
 // slow wind (0.3–0.8 m/s); the renderer wraps x across [-1100, 1100].
 export function buildCloudSpec() {
   const rand = mulberry32(20261130);
   const clouds = [];
-  for (let k = 0; k < 14; k++) {
+  for (let k = 0; k < 18; k++) {
     clouds.push({
       x: -1000 + rand() * 2000,
       y: 175 + rand() * 90,
