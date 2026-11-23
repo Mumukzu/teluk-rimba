@@ -563,7 +563,13 @@ if (params.sim) {
 
   function buildDynamics() {
     const dyn = {};
-    const camX = player.state.x, camZ = player.state.z;
+    // Cull around the RENDER camera, not the player: in normal play the
+    // camera follows the player so this is identical, but in shot/test
+    // mode the camera can be hundreds of metres from the player (pier,
+    // plaza) and the NPCs/vehicles near the lens must still render —
+    // culling by player position made them vanish from every far shot.
+    const cam = cameraForFrame();
+    const camX = cam.eye[0], camZ = cam.eye[2];
     // Detail toggle (settings menu): Low halves the draw distance.
     const cull = settings && settings.detail === 'low' ? 90 : CULL_DIST;
     const veh = traffic.matricesFor(camX, camZ, cull);
