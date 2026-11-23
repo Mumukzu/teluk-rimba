@@ -27,7 +27,12 @@ const MAX_P_PER_LOT = 10; // cap P symbols per lot (bounds the atlas)
 const PAD_COL = [0.32, 0.32, 0.34];   // dark asphalt pad
 const LINE_COL = [0.92, 0.92, 0.9];   // white paint
 const PAD_Y = 0.08, LINE_Y = 0.09, SYM_Y = 0.1;
-const TARGET_LOTS = 20;
+const TARGET_LOTS = 80;
+// Downtown towers get a lot on EVERY side that fits (left, right,
+// behind) — Mu: CBD parking was far too scarce. Other buildings keep
+// one lot each. Downtown towers are the largest buildings, so the
+// largest-first order fills the CBD before the other zones.
+const DOWNTOWN_LOTS_PER_BUILDING = 3;
 
 // Atlas: 2 cells of 256x256 — "P" (pad-dark bg, white letter) and the
 // wheelchair pictogram (blue bg, white icon drawn with canvas paths).
@@ -230,30 +235,52 @@ export function buildParking(city) {
     if (lots.length >= TARGET_LOTS) break;
     const blk = blockOf.get(b);
     if (!blk) continue;
-    const fw = b.rot ? b.d : b.w, fd = b.rot ? b.w : b.d; // visual extents
+    const fw = b.w, fd = b.d; // visual extents: w runs ACROSS the front
+    // (local +x maps to the across direction), d runs ALONG the front
+    // normal (local +z maps to the normal) — true for any rot, because
+    // the building's front face is at local +z. (An earlier version
+    // swapped these for rot=PI/2 and placed side lots 1 m too close
+    // to the tower, failing the 1.5 m clearance check.)
     const nx = Math.sin(b.rot), nz = Math.cos(b.rot); // front normal
     const ax = Math.cos(b.rot), az = -Math.sin(b.rot); // across
     const sibs = city.buildings.filter((s) => s.x >= blk.x0 && s.x <= blk.x1 && s.z >= blk.z0 && s.z <= blk.z1);
     // Candidate lot sides: both sides (v axis along the across
     // direction, R = rot - PI/2) and behind (v axis along the front
-    // normal, R = rot). Never in front of the door.
+    // normal, R = rot). Never in front of the door. The FRONT side is
+    // also tried, shifted sideways clear of the door strip (door is
+    // |across| < 2.2, +1 m margin): two candidates, one each side of
+    // the entrance — useful on towers whose side yards are too thin.
     const sides = [
       { dir: [ax, az], gap: fw / 2, R: b.rot - Math.PI / 2 },
       { dir: [-ax, -az], gap: fw / 2, R: b.rot - Math.PI / 2 },
       { dir: [-nx, -nz], gap: fd / 2, R: b.rot },
+      { dir: [nx, nz], gap: fd / 2, R: b.rot, lat: (W) => W / 2 + 3.5 },
+      { dir: [nx, nz], gap: fd / 2, R: b.rot, lat: (W) => -(W / 2 + 3.5) },
     ];
     // Adaptive sizing: try the LARGEST lot first (2 rows, most columns)
     // and shrink until one fits the yard — wider yards get more bay
     // columns, deeper yards get the second row, small yards get a
     // small lot. The clearance checks below are the measuring tape.
-    let placed = null;
+    // A downtown tower tries EVERY side (up to 3 lots); other
+    // buildings stop after their first lot.
+    const maxLots = b.zone === 'downtown' ? DOWNTOWN_LOTS_PER_BUILDING : 1;
+    let placedHere = 0;
     for (const s of sides) {
+      if (placedHere >= maxLots) break;
+      if (lots.length >= TARGET_LOTS) break;
+      let placed = null;
+      // Downtown lots run WIDER along the tower front (up to 60 m) so
+      // one CBD lot holds far more bays; other zones keep the 40 m cap.
+      const maxCols = b.zone === 'downtown' ? 24 : MAX_COLS;
       for (const rows of [2, 1]) {
         const depth = rows * BAY_D + LANE_W; // 16 m or 11 m
-        for (let cols = MAX_COLS; cols >= MIN_COLS; cols--) {
+        for (let cols = maxCols; cols >= MIN_COLS; cols--) {
           const width = cols * BAY_W;
-          const cx = b.x + s.dir[0] * (s.gap + 2 + depth / 2);
-          const cz = b.z + s.dir[1] * (s.gap + 2 + depth / 2);
+          // Lateral offset for front-side lots (clears the door strip);
+          // 0 for side/behind lots.
+          const lat = s.lat ? s.lat(width) : 0;
+          const cx = b.x + s.dir[0] * (s.gap + 2 + depth / 2) + ax * lat;
+          const cz = b.z + s.dir[1] * (s.gap + 2 + depth / 2) + az * lat;
           // World axis-aligned rect (rot is 0 or PI/2, so the lot is
           // axis-aligned) — computed from the lot's local corners.
           const corners = [
@@ -283,10 +310,8 @@ export function buildParking(city) {
         }
         if (placed) break;
       }
-      if (placed) break;
+      if (placed) { lots.push(placed); placedHere++; }
     }
-    if (!placed) continue;
-    lots.push(placed);
   }
 
   // --- Build the geometry for every placed lot. ---
