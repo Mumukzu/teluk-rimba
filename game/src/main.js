@@ -514,6 +514,7 @@ if (params.sim) {
   const renderer = createRenderer(canvas, city);
   const playerMesh = renderer.makePlayerMesh(player.figureGeom());
   const landmarks = renderer.landmarks;
+  const plotDressing = renderer.plotDressing; // yard fountain spots (animated water)
   let last = performance.now();
   let acc = 0;
   let frames = 0, fpsTime = 0, fps = 0;
@@ -720,6 +721,19 @@ if (params.sim) {
         const wx = 632 + k * 8 + 5 * Math.sin(game.elapsed * 0.35 + k * 1.7);
         fl.matrices.push(mat4TRS(wx, -0.7, 0, 0, 2.5, 1, 1400));
         fl.tints.push([0.95, 0.98, 1]);
+      }
+      // Yard fountains (Phase I): shimmering water discs in the basins.
+      // Same 'flow' dynamic mesh, no new draw call; only fountains near
+      // the camera shimmer, so instances stay far under the 96 capacity
+      // (42 river/wave + <=24 fountains).
+      if (plotDressing && plotDressing.fountainSpots) {
+        for (let k = 0; k < plotDressing.fountainSpots.length; k++) {
+          const f = plotDressing.fountainSpots[k];
+          if (Math.hypot(f.x - camX, f.z - camZ) > 200) continue;
+          const pulse = 1 + 0.05 * Math.sin(game.elapsed * 1.5 + k * 1.3);
+          fl.matrices.push(mat4TRS(f.x, 0.48, f.z, k * 0.7, 2.0 * pulse, 1, 2.0 * pulse));
+          fl.tints.push([0.8, 0.92, 1]);
+        }
       }
       // Sea ripples: long pale bands drifting slowly toward the shore.
       // Own mesh ('sea', alpha 0.45) so they read clearly against the
