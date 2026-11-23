@@ -141,7 +141,8 @@ function addBoxAt(g, w, h, d, color, cx, cy, cz, rotY) {
 
 // One panel quad in world space, facing normal n (unit, horizontal),
 // w wide x h tall, with atlas UV rect [u0, vBottom, u1, vTop].
-function addPanelQuad(geom, cx, cy, cz, n, w, h, uv) {
+// Exported: the shop signs (shopsigns.js) reuse it for their name boards.
+export function addPanelQuad(geom, cx, cy, cz, n, w, h, uv) {
   const r = [n[2], 0, -n[0]]; // panel's right vector (local +x)
   const p = (sr, sy) => [cx + r[0] * sr * w / 2, cy + sy * h / 2, cz + r[2] * sr * w / 2];
   const bl = p(-1, -1), br = p(1, -1), tr = p(1, 1), tl = p(-1, 1);

@@ -9,6 +9,7 @@ import { buildWorldGeoms } from './world.js';
 import { buildBuildingMeshes, buildTreeMesh, buildPalmMesh, buildLitWindows } from './buildings.js';
 import { buildRoadMesh, buildLampMeshes, buildTrafficLightMesh } from './roads.js';
 import { buildDirectionSigns } from './signs.js';
+import { buildShopSigns } from './shopsigns.js';
 import { buildBeachPropMeshes } from './beach.js';
 import { buildLandmarks } from './landmarks.js';
 import { buildMoonGeom, buildStarsSpec, buildSkyDomeGeom, buildCloudSpec, skyColors } from './sky.js';
@@ -42,6 +43,8 @@ export function createRenderer(canvas, city) {
   const landmarks = buildLandmarks(city);
   const signs = buildDirectionSigns(city);
   const signTexture = createCanvasTexture(gl, signs.atlasCanvas);
+  const shopSigns = buildShopSigns(city);
+  const shopSignTexture = createCanvasTexture(gl, shopSigns.atlasCanvas);
   const stars = buildStarsSpec();
   const wet = buildWetGeoms();
   const nightPools = buildNightLightGeoms(city, landmarks);
@@ -107,6 +110,14 @@ export function createRenderer(canvas, city) {
   {
     const panelMesh = createTexturedMesh(gl, progs.textured, signs.panelGeom);
     meshes.push({ mesh: panelMesh, prog: progs.textured, model: mat4Identity(), textured: true, texture: signTexture });
+  }
+  // Shop signs + canopies (Phase I): pastel awnings on every ground
+  // floor (1 instanced draw) and the name boards on the sign bands
+  // (1 textured draw, shared atlas).
+  addInst(progs.litInst, shopSigns.canopy);
+  {
+    const shopPanelMesh = createTexturedMesh(gl, progs.textured, shopSigns.panelGeom);
+    meshes.push({ mesh: shopPanelMesh, prog: progs.textured, model: mat4Identity(), textured: true, texture: shopSignTexture });
   }
   addStatic(progs.lit, beachMeshes.poles, mat4Identity());
   addInst(progs.litInst, beachMeshes.umbrella);

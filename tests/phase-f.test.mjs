@@ -170,8 +170,12 @@ check('bridges are the 4 whitelisted crossings',
   check('balconies placed (multi-storey fronts)', meshes.balconies.matrices.length > 500);
   check('roof units on some but not all buildings', meshes.roofUnits.matrices.length > 100 && meshes.roofUnits.matrices.length < 1000);
   const tris = (g) => g.pos.length / 9;
-  check('detail geometries are lean (entrance 48, shopfront 48, balcony 24, roof units 36 tris)',
-    tris(buildEntranceKitGeom()) === 48 && tris(buildShopfrontGeom()) === 48 && tris(buildBalconyGeom()) === 24 && tris(buildRoofUnitGeom()) === 36);
+  // Shopfront is 36 tris since Phase I: its canopy moved out to the
+  // shared soft-pastel awning instanced mesh (shopsigns.js) that covers
+  // every building; the entrance kit keeps 48 (canopy replaced by a
+  // sign band of the same tri count).
+  check('detail geometries are lean (entrance 48, shopfront 36, balcony 24, roof units 36 tris)',
+    tris(buildEntranceKitGeom()) === 48 && tris(buildShopfrontGeom()) === 36 && tris(buildBalconyGeom()) === 24 && tris(buildRoofUnitGeom()) === 36);
 }
 
 if (fails) { console.error(fails + ' PHASE F CHECK(S) FAILED'); process.exit(1); }

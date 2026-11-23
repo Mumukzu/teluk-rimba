@@ -47,24 +47,28 @@ function addPartAt(g, part, x, y, z) {
   g.pos.push(...part.pos); g.nrm.push(...part.nrm); g.col.push(...part.col);
 }
 
-// Entrance kit (local space, door faces +z): canopy + 2 pillars + door.
+// Entrance kit (local space, door faces +z): sign band + 2 pillars + door.
 // Instanced at each building's front face, tinted with the facade colour.
+// The canopy moved out to the shared pastel awning mesh (shopsigns.js,
+// Phase I) so every ground floor gets a soft-pastel awning; the band
+// (3.6 m, wider than the 3.0 m name sign) carries the shop/place name.
 export function buildEntranceKitGeom() {
   const g = emptyGeom();
-  addPartAt(g, plainBox(3.2, 0.12, 1.1, [0.85, 0.85, 0.83]), 0, 2.6, 0.55); // canopy
+  addPartAt(g, plainBox(3.6, 0.5, 0.14, [1, 1, 1]), 0, 2.7, 0.07); // sign band
   for (const px of [-1.4, 1.4]) addPartAt(g, plainBox(0.18, 2.6, 0.18, [0.9, 0.9, 0.88]), px, 1.3, 1.0); // pillars
   addPartAt(g, plainBox(1.2, 2.2, 0.1, [0.2, 0.2, 0.22]), 0, 1.1, 0.05); // door
   return g;
 }
 // Shopfront kit (local space, faces +z): wide glass band + sign band +
-// door + canopy. Instanced with a per-building accent tint, so each shop
+// door. Instanced with a per-building accent tint, so each shop
 // reads as its own brand colour (the white sign band takes the tint).
+// The canopy moved out to the shared pastel awning mesh (shopsigns.js,
+// Phase I). (36 tris since Phase I — the phase-f test pins this.)
 export function buildShopfrontGeom() {
   const g = emptyGeom();
   addPartAt(g, plainBox(6.0, 1.8, 0.12, [0.3, 0.4, 0.5]), 0, 1.5, 0.06); // shop glass
   addPartAt(g, plainBox(6.0, 0.5, 0.14, [1, 1, 1]), 0, 2.7, 0.07); // sign band
   addPartAt(g, plainBox(1.2, 2.2, 0.1, [0.2, 0.2, 0.22]), 0, 1.1, 0.12); // door
-  addPartAt(g, plainBox(6.4, 0.12, 1.0, [0.85, 0.85, 0.83]), 0, 3.0, 0.5); // canopy
   return g;
 }
 // Balcony (local space, extends +z from the facade): slab + front rail.
