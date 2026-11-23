@@ -150,7 +150,7 @@ function closestRiverPoint(x, z) {
 export function buildRiverfront(city) {
   const hard = emptyGeom();
   const green = emptyGeom();
-  const counts = { caps: 0, spurPaths: 0, promenadeM: 0, wallM: 0, fenceM: 0, docks: 0, steps: 0, parks: 0, clusters: 0, trees: 0, benches: 0, flowers: 0 };
+  const counts = { caps: 0, spurPaths: 0, bridges: 0, promenadeM: 0, wallM: 0, fenceM: 0, docks: 0, steps: 0, parks: 0, clusters: 0, trees: 0, benches: 0, flowers: 0 };
   const rand = mulberry32(20261123);
 
   // --- road edges for clearance checks (point must stay > 10 m off asphalt)
@@ -225,7 +225,32 @@ export function buildRiverfront(city) {
     }
   }
 
-  // --- 2. Embankment: wall + promenade + fence along both banks.
+  // --- 1b. Bridge railings + support pillars (the 4 bridge decks).
+  // The road mesh draws the deck itself; the railing (posts + top rail on
+  // both sides) and the pillars under the deck close the bridge visually.
+  for (const e of city.edges.filter((e) => e.bridge)) {
+    const a = nodeById.get(e.a), b = nodeById.get(e.b);
+    const dx = b.x - a.x, dz = b.z - a.z, len = Math.hypot(dx, dz);
+    const ux = dx / len, uz = dz / len, nx = -uz, nz = ux;
+    const ah = ASPHALT_HALF(a.x === b.x ? a.x : a.z) + 1;
+    for (const side of [1, -1]) {
+      const ox = nx * ah * side, oz = nz * ah * side;
+      // Top rail: one long thin box along the deck edge.
+      const rot = Math.atan2(-ux, uz);
+      addPart(hard, plainBox(0.09, 0.09, len, FENCE_COL), (a.x + b.x) / 2 + ox, 0.95, (a.z + b.z) / 2 + oz, rot);
+      // Posts every ~5 m.
+      const nPosts = Math.max(2, Math.round(len / 5));
+      for (let i = 0; i <= nPosts; i++) {
+        const t = i / nPosts;
+        addPart(hard, plainBox(0.1, 0.95, 0.1, FENCE_COL), a.x + dx * t + ox, 0.5, a.z + dz * t + oz, 0);
+      }
+    }
+    // Two support pillars in the water under the deck.
+    for (const t of [1 / 3, 2 / 3]) {
+      addPart(hard, plainBox(1.6, 1.4, 1.6, WALL_COL), a.x + dx * t, -0.6, a.z + dz * t, 0);
+    }
+    counts.bridges++;
+  }
   // Walk the river polyline in ~8 m steps; skip ~14 m around each bridge.
   const pts = [];
   for (let i = 0; i < RIVER_POINTS.length - 1; i++) {
