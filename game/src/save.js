@@ -1,6 +1,6 @@
 // Teluk Rimba — save / load (localStorage, no server, no account).
-// Saves money, completed missions and the active mission (id + step), plus
-// the shop inventory, coins, stunts and courier jobs (Phase E2), so a
+// Saves the player name (Wowok), money, completed missions and the active
+// mission (id + step), plus the shop inventory, coins, stunts and courier
 // player keeps progress across sessions. Pure storage logic: safe to import
 // from Node tests with a localStorage stub.
 export const SAVE_KEY = 'teluk-rimba-save-v1';
@@ -8,6 +8,7 @@ export const SAVE_KEY = 'teluk-rimba-save-v1';
 export function saveGame(data) {
   try {
     const payload = {
+      name: data.name || 'Wowok', // the protagonist's name, defaults to Wowok
       money: data.money || 0,
       done: Array.isArray(data.done) ? data.done.slice() : [],
       active: data.active || null, // {id, step} or null
@@ -31,6 +32,7 @@ export function loadGame() {
     const data = JSON.parse(raw);
     if (typeof data !== 'object' || data === null) return null;
     return {
+      name: typeof data.name === 'string' && data.name ? data.name : 'Wowok',
       money: typeof data.money === 'number' ? data.money : 0,
       done: Array.isArray(data.done) ? data.done.filter((n) => Number.isInteger(n)) : [],
       active: data.active && Number.isInteger(data.active.id) && Number.isInteger(data.active.step)

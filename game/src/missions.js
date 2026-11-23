@@ -2,9 +2,9 @@
 // DOM): the game loop drives it, the HUD shows it, the autopilot follows it.
 // All in-game text is English; the city name stays Teluk Rimba.
 //
-// Story: you are a new courier in Teluk Rimba. A fixer at Rimba Plaza
-// hands you jobs — deliver, meet, chase, climb, sail, escape. Money is the
-// reward; the shop (later phase) spends it. Each mission has a time limit
+// Story: you are Wowok, a new courier in Teluk Rimba. Bang Darman, a
+// fixer at Rimba Plaza, hands you jobs — deliver, meet, chase, climb,
+// sail, escape. Money is the reward; the shop (later phase) spends it. Each mission has a time limit
 // and fail conditions (timeout, busted by the police, target escaped).
 // Mission state (money, completed missions, active mission + step) is saved
 // on every mission event (see save.js).
@@ -27,7 +27,7 @@ export const MISSIONS = [
   {
     id: 1, name: 'Parcel Run', reward: 150, timeLimit: 240, night: false, wanted: 0,
     start: { x: 0, z: 120 },
-    intro: 'New courier job: pick up a parcel at Rimba Market and deliver it to Coral Beach.',
+    intro: 'Bang Darman has a job for you, Wowok: pick up a parcel at Rimba Market and deliver it to Coral Beach.',
     steps: [
       { type: 'drive', label: 'Get on the scooter' },
       { type: 'goto', x: 51, z: -51, radius: 6, label: 'Pick up the parcel at Rimba Market' },
@@ -37,25 +37,25 @@ export const MISSIONS = [
   {
     id: 2, name: 'Black Market', reward: 300, timeLimit: 300, night: true, wanted: 0,
     start: { x: 60, z: -60 },
-    intro: 'Night job: meet the contact at Rimba Market, then run the package to Rimba Harbor.',
+    intro: 'Night job: meet Sari at Rimba Market, then run the package to Rimba Harbor.',
     steps: [
-      { type: 'onfoot', x: 70, z: -70, radius: 4, label: 'Meet the contact at Rimba Market' },
+      { type: 'onfoot', x: 70, z: -70, radius: 4, label: 'Meet Sari at Rimba Market' },
       { type: 'goto', x: 400, z: 400, radius: 8, label: 'Deliver the package to Rimba Harbor', heat: 1 },
     ],
   },
   {
     id: 3, name: 'Forest Chase', reward: 400, timeLimit: 180, night: false, wanted: 0,
     start: { x: -580, z: -390 },
-    intro: 'A getaway jeep is running the forest road. Catch it before it escapes.',
+    intro: 'Joko is running the forest road in a getaway jeep. Catch him before he escapes.',
     steps: [
       { type: 'drive', label: 'Get in a car to chase the jeep' },
-      { type: 'chase', label: 'Catch the getaway jeep' },
+      { type: 'chase', label: "Catch Joko's getaway jeep" },
     ],
   },
   {
     id: 4, name: 'Glass Tower', reward: 500, timeLimit: 300, night: false, wanted: 0,
     start: { x: 0, z: 120 },
-    intro: 'A briefcase waits at the top of the tallest glass tower downtown. Get it, get out.',
+    intro: 'Bang Darman needs a briefcase from the top of the tallest glass tower downtown. Get it, get out, Wowok.',
     steps: [
       { type: 'goto', x: null, z: null, radius: 10, label: 'Drive to the glass tower downtown', tower: true },
       { type: 'onfoot', x: null, z: null, radius: 3, label: 'Enter the tower on foot', tower: true, heat: 2 },
@@ -65,7 +65,7 @@ export const MISSIONS = [
   {
     id: 5, name: 'Night Port', reward: 600, timeLimit: 360, night: true, wanted: 0,
     start: { x: 600, z: 380 },
-    intro: 'Night escape: reach the harbor, board the boat, sail out past the lighthouse.',
+    intro: 'Night escape, Wowok: reach the harbor, board the boat, sail out past the lighthouse.',
     steps: [
       { type: 'goto', x: 620, z: 380, radius: 10, label: 'Reach Rimba Harbor at night' },
       { type: 'board', label: 'Board the boat at the pier' },
@@ -75,7 +75,7 @@ export const MISSIONS = [
   {
     id: 6, name: 'Mountain Road', reward: 1000, timeLimit: 420, night: false, wanted: 0,
     start: { x: -390, z: -290 },
-    intro: 'The final job: climb the mountain road to the summit lookout, then lose the police at the beach.',
+    intro: 'The final job, Wowok: climb the mountain road to the summit lookout, then lose the police at the beach.',
     steps: [
       { type: 'drive', label: 'Get the jeep at the forest road' },
       { type: 'goto', x: -600, z: -600, radius: 10, label: 'Drive to the mountain base' },
@@ -300,7 +300,7 @@ export function createMissions(ctx) {
       if (next && game.started) {
         const d = Math.hypot(player.state.x - MISSION_BOARD.x, player.state.z - MISSION_BOARD.z);
         if (d < 6 && !game.driving) {
-          hud.showHint('Press E to take the next job: ' + next.name, 2);
+          hud.showHint("Press E to take Bang Darman's next job: " + next.name, 2);
           if (boardCooldown <= 0 && (actions & ACTION_ENTER)) start(next.id);
         }
       } else if (ctx.couriers && game.started) {
@@ -309,7 +309,7 @@ export function createMissions(ctx) {
         const d = Math.hypot(player.state.x - MISSION_BOARD.x, player.state.z - MISSION_BOARD.z);
         if (d < 6 && !game.driving) {
           const job = ctx.couriers.nextJob();
-          hud.showHint('Press E for a courier job: ' + job.name + ' ($' + job.reward + ')', 2);
+          hud.showHint("Press E for a courier job from Bang Darman: " + job.name + ' ($' + job.reward + ')', 2);
           if (boardCooldown <= 0 && (actions & ACTION_ENTER)) ctx.couriers.start(job.id);
         }
       }
@@ -330,8 +330,8 @@ export function createMissions(ctx) {
       return;
     }
     if (s.type === 'chase') {
-      if (!chaseJeep) { fail('The getaway car is gone'); return; }
-      if (chaseJeep.escaped) { fail('The getaway jeep escaped'); return; }
+      if (!chaseJeep) { fail("Joko's jeep is gone"); return; }
+      if (chaseJeep.escaped) { fail('Joko escaped'); return; }
       // Catch radius 4 m: the player has to actually ram the jeep, not just
       // sweep past it — a 7 m radius let a glancing head-on pass count.
       if (Math.hypot(chaseJeep.x - px, chaseJeep.z - pz) < 4) advanceStep();

@@ -145,6 +145,7 @@ export function createShopUI(shop, game) {
     if (!panel) return;
     const rank = shop.rank ? shop.rank() : 0;
     let html = '<div style="font-weight:700;font-size:18px;margin-bottom:2px;">RIMBA MARKET — SHOP</div>'
+      + '<div style="opacity:.85;font-size:13px;margin-bottom:2px;">Pak Slamet\'s shop — welcome, ' + (game.playerName || 'Wowok') + '!</div>'
       + '<div style="opacity:.85;font-size:13px;margin-bottom:10px;">Money: $' + game.money.toLocaleString('en-US')
       + ' &nbsp;·&nbsp; Rank: ' + rank + ' (' + rank + ' mission' + (rank === 1 ? '' : 's') + ' done)</div>';
     for (const item of SHOP_ITEMS) {
@@ -453,7 +454,7 @@ export function createCouriers(ctx) {
     state.timeLeft = job.timeLimit;
     state.failReason = '';
     lastJobId = id;
-    if (hud) hud.showHint('Courier job: ' + job.name + ' — ' + job.from.label, 6);
+    if (hud) hud.showHint('Courier job for Bang Darman: ' + job.name + ' — ' + job.from.label, 6);
     if (audio) audio.missionStart();
     onSave();
     return true;

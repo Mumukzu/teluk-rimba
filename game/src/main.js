@@ -64,9 +64,10 @@ window.__CITY_STATS__ = {
 
 const game = {
   money: 0,
+  playerName: 'Wowok', // the protagonist; saved + restored with the save
   timeHours: timeForShot(params.shot, START_TIME),
   wanted: 0,
-  objective: 'Explore Teluk Rimba — WASD to walk, drag mouse for camera',
+  objective: 'Wowok — explore Teluk Rimba · WASD to walk, drag mouse for camera',
   elapsed: 0,
   started: false,
   speedKmh: 0,
@@ -85,6 +86,7 @@ const aircraft = createAircraft(city);
 // Missions + autopilot (tests only) + save/load + shop/extras (Phase E2).
 let missions, shop, coins, stunts, couriers;
 const doSave = () => saveGame({
+  name: game.playerName || 'Wowok',
   money: game.money, done: missions.doneIds(), active: missions.saveState(),
   shop: shop.saveState(), coins: coins.saveState(), stunts: stunts.saveState(),
   courier: couriers.saveState(),
@@ -102,6 +104,7 @@ const autopilot = params.autopilot ? createAutopilot(city) : null;
 // from the mission's start point.
 const saved = loadGame();
 if (saved && !params.mission) {
+  if (saved.name) game.playerName = saved.name;
   missions.restore(saved);
   shop.restore(saved.shop);
   coins.restore(saved.coins);
@@ -367,7 +370,7 @@ function stepWorld(dt) {
       game.money -= fine;
       audio.busted();
       hud.showHint('Busted! The police fined you $' + fine + '. Wanted level cleared.');
-      game.objective = 'Explore Teluk Rimba — WASD to walk, drag mouse for camera';
+      game.objective = 'Wowok — explore Teluk Rimba · WASD to walk, drag mouse for camera';
       if (missions.active) missions.fail('Busted by the police');
       if (couriers.active) couriers.fail('Busted by the police');
     }
