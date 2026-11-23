@@ -54,6 +54,8 @@ export function createRenderer(canvas, city) {
     ? createCanvasTexture(gl, rooftopSigns.atlasCanvas) : null;
   const shopGlow = buildShopGlow(city);
   const lively = buildLivelyMeshes(city); // varied shapes, facades, neon, street life, used roofs
+  const muralTexture = lively.muralAtlasCanvas
+    ? createCanvasTexture(gl, lively.muralAtlasCanvas) : null;
   const stars = buildStarsSpec();
   const wet = buildWetGeoms();
   const nightPools = buildNightLightGeoms(city, landmarks);
@@ -113,6 +115,17 @@ export function createRenderer(canvas, city) {
   // tall blocks, pitched roofs on low houses. (+2 draws.)
   addInst(progs.litInst, lively.stepped);
   addInst(progs.litInst, lively.pitched);
+  // Livelier facades (Mu): AC boxes + balcony planters + laundry lines
+  // (one merged static draw) and curtains inside real window frames
+  // (one instanced draw). (+2 draws.)
+  addStatic(progs.lit, lively.clutter, mat4Identity());
+  addInst(progs.litInst, lively.curtains);
+  // Geometric murals on tall walls (Mu): code-made canvas patterns, one
+  // shared atlas, one textured draw. (+1 draw.)
+  if (muralTexture) {
+    const muralMesh = createTexturedMesh(gl, progs.textured, lively.muralGeom);
+    meshes.push({ mesh: muralMesh, prog: progs.textured, model: mat4Identity(), textured: true, texture: muralTexture });
+  }
   addInst(progs.litInst, buildingMeshes.roofDeck);
   addInst(progs.litInst, buildingMeshes.parapetNS);
   addInst(progs.litInst, buildingMeshes.parapetEW);

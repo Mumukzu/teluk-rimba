@@ -127,9 +127,187 @@ export function buildLivelyMeshes(city) {
     }
   }
 
+  // ---- Feature 2: livelier facades ----
+  // Window cells: the SAME grid subdividedBox() draws (same class, same
+  // cell (i,j), same centre) — copied from buildLitWindows in buildings.js
+  // so curtains sit precisely inside real window frames.
+  const windowCells = (cls) => {
+    const cells = [];
+    for (let j = 2; j < cls.segRows - 1; j += 2) {
+      for (let i = 0; i < cls.segFront; i += 2) cells.push({ face: 0, i, j, nx: cls.segFront });
+      for (let i = 0; i < cls.segFront; i += 2) cells.push({ face: 1, i, j, nx: cls.segFront });
+      for (let i = 0; i < cls.sideCols; i += 2) cells.push({ face: 2, i, j, nx: cls.sideCols });
+      for (let i = 0; i < cls.sideCols; i += 2) cells.push({ face: 3, i, j, nx: cls.sideCols });
+    }
+    return cells;
+  };
+  // Cell centre in world space (proud = fraction of the face depth the
+  // quad sits in front of the wall — glass 0.005, curtains 0.008, lit
+  // windows 0.012 — so the layers never z-fight).
+  const cellToWorld = (b, cls, c, proud) => {
+    const u = (c.i + 0.5) / c.nx - 0.5;
+    const v = (c.j + 0.5) / cls.segRows - 0.5;
+    const faceW = c.face < 2 ? b.w : b.d;
+    const cellW = faceW / c.nx, cellH = b.h / cls.segRows;
+    let lx, lz, rotY;
+    if (c.face === 0) { lx = u * b.w; lz = b.d / 2 + proud * b.d; rotY = b.rot; }
+    else if (c.face === 1) { lx = -u * b.w; lz = -(b.d / 2 + proud * b.d); rotY = b.rot + Math.PI; }
+    else if (c.face === 2) { lx = b.w / 2 + proud * b.w; lz = -u * b.d; rotY = b.rot + Math.PI / 2; }
+    else { lx = -(b.w / 2 + proud * b.w); lz = u * b.d; rotY = b.rot - Math.PI / 2; }
+    const cr = Math.cos(b.rot), sr = Math.sin(b.rot);
+    return {
+      x: b.x + lx * cr + lz * sr, y: b.h / 2 + v * b.h, z: b.z - lx * sr + lz * cr,
+      rotY, cellW, cellH,
+    };
+  };
+  const CURTAIN_TINTS = [
+    [0.95, 0.75, 0.7], [0.7, 0.8, 0.95], [0.95, 0.9, 0.75],
+    [0.8, 0.9, 0.75], [0.9, 0.75, 0.9], [0.98, 0.95, 0.88],
+  ];
+  const CLOTH_TINTS = [
+    [0.95, 0.7, 0.65], [0.7, 0.85, 0.95], [0.95, 0.9, 0.7],
+    [0.75, 0.9, 0.75], [0.9, 0.75, 0.9], [1, 1, 1],
+  ];
+  const curtainQuad = (() => {
+    const g = { pos: [], nrm: [], col: [] };
+    const white = [1, 1, 1], n = [0, 0, 1];
+    g.pos.push(-0.9, -0.65, 0, 0.9, -0.65, 0, 0.9, 0.65, 0, -0.9, -0.65, 0, 0.9, 0.65, 0, -0.9, 0.65, 0);
+    for (let k = 0; k < 6; k++) g.nrm.push(...n);
+    for (let k = 0; k < 6; k++) g.col.push(...white);
+    return g;
+  })();
+  const curtainMatrices = [], curtainTints = [];
+  const clutter = emptyGeom(); // AC boxes + balcony planters + laundry lines (1 merged draw)
+  const laundryPieces = []; // cloth pieces (dynamic, feature 6)
+  const AC_COL = [0.72, 0.72, 0.74];
+  for (const b of city.buildings) {
+    const cls = BUILDING_CLASSES[buildingClass(b.h)];
+    // Curtains: a random SUBSET of the building's own window cells
+    // (per-building seeded RNG, different seed offset from the lit
+    // windows so curtains do not always coincide with lit cells),
+    // drawn at 0.008 proud — between the glass (0.005) and the lit
+    // quads (0.012) — 70% of the cell, inside the 78% glass frame.
+    {
+      const cells = windowCells(cls);
+      const perZone = { residential: 6, beach: 5, commercial: 3, downtown: 2, port: 1, forest: 1 };
+      const n = Math.min(perZone[b.zone] || 1, cells.length);
+      const rand = mulberry32(Math.floor(Math.abs(b.x) * 131 + Math.abs(b.z) * 17 + 1009));
+      for (let k = 0; k < n; k++) {
+        const pick = k + Math.floor(rand() * (cells.length - k));
+        const tmp = cells[k]; cells[k] = cells[pick]; cells[pick] = tmp;
+      }
+      for (let k = 0; k < n; k++) {
+        const w = cellToWorld(b, cls, cells[k], 0.008);
+        curtainMatrices.push(mat4TRS(w.x, w.y, w.z, w.rotY, 0.70 * w.cellW / 1.8, 0.70 * w.cellH / 1.3, 1));
+        curtainTints.push(CURTAIN_TINTS[Math.floor(rand() * CURTAIN_TINTS.length)]);
+      }
+    }
+    // AC boxes on a side face of mid/tall buildings (1-2 per building),
+    // grey, sticking 0.22 m out of the wall.
+    if (b.h >= 12) {
+      const nAC = hash01(b.x + 2, b.z + 8) < 0.5 ? 2 : 1;
+      for (let a = 0; a < nAC; a++) {
+        const side = hash01(b.x + a * 3, b.z) < 0.5 ? 1 : -1;
+        const lx = side * (b.w / 2 + 0.22);
+        const lz = (hash01(b.x, b.z + a * 5) - 0.5) * b.d * 0.5;
+        const y = 3.5 + hash01(b.x + a, b.z + a) * (b.h - 7);
+        addLocalBox(clutter, b, lx, y, lz, 0.45, 0.5, 0.7, AC_COL);
+      }
+    }
+    // Balconies (same placement as buildings.js): planters on half of
+    // them, laundry lines on ~30% (clothes are dynamic — feature 6).
+    if (b.h >= 8 && (b.zone === 'residential' || b.zone === 'commercial' || b.zone === 'downtown' || b.zone === 'beach')) {
+      const nB = Math.max(0, Math.min(3, Math.floor((b.h - 1) / 3.2) - 1));
+      for (let k = 0; k < nB; k++) {
+        const fy = (k + 2) * 3.2;
+        const along = (k % 2 === 0 ? -1 : 1) * b.w * 0.22;
+        const r = hash01(b.x + k * 13, b.z + k * 7);
+        if (r < 0.5) {
+          // Planter box + one leaf blob on the balcony slab.
+          addLocalBox(clutter, b, along - 0.6, fy + 0.18, b.d / 2 + 0.45, 0.55, 0.22, 0.3, [0.25, 0.5, 0.22]);
+          addLocalBox(clutter, b, along - 0.6, fy + 0.42, b.d / 2 + 0.45, 0.35, 0.25, 0.25, [0.3, 0.58, 0.26]);
+        } else if (r < 0.56 && laundryPieces.length < 180) {
+          // Laundry line across the balcony + 2-3 cloth pieces.
+          // Narrow band + hard cap: the dynamic laundry mesh holds 200.
+          addLocalBox(clutter, b, along, fy + 1.7, b.d / 2 + 0.5, 2.0, 0.04, 0.04, [0.25, 0.25, 0.28]);
+          const nCl = hash01(b.x + k, b.z) < 0.5 ? 3 : 2;
+          const cr = Math.cos(b.rot), sr = Math.sin(b.rot);
+          for (let c = 0; c < nCl; c++) {
+            const lx = along - 0.6 + c * 0.6, lz = b.d / 2 + 0.5;
+            laundryPieces.push({
+              x: b.x + lx * cr + lz * sr, y: fy + 1.7, z: b.z - lx * sr + lz * cr,
+              rotY: b.rot, phase: hash01(b.x + k * 3 + c, b.z) * 6.28,
+              tint: CLOTH_TINTS[Math.floor(hash01(b.x + c, b.z + k) * CLOTH_TINTS.length)],
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // ---- Murals (feature 2): geometric wall art on 12 tall walls ----
+  // Five code-made geometric patterns (stripes, chevrons, sun, waves,
+  // diamonds) on one shared canvas atlas — never an outside image.
+  // Panels 3 x 6 m on the side face of tall downtown/commercial/beach
+  // buildings, centre y 8 m. Picks are deterministic (hash-sorted).
+  const MURAL_NAMES = ['stripes', 'chevrons', 'sun', 'waves', 'diamonds'];
+  const MURAL_CELL_W = 256, MURAL_CELL_H = 512;
+  const drawMuralAtlas = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = MURAL_NAMES.length * MURAL_CELL_W;
+    canvas.height = MURAL_CELL_H;
+    const ctx = canvas.getContext('2d');
+    const pats = [
+      // diagonal stripes
+      (x0, c) => { c.fillStyle = '#123f5e'; c.fillRect(x0, 0, 256, 512); c.fillStyle = '#ff9e4f'; for (let k = -4; k < 8; k++) { c.save(); c.translate(x0 + k * 64, 0); c.rotate(Math.PI / 4); c.fillRect(0, -100, 28, 800); c.restore(); } },
+      // chevrons
+      (x0, c) => { c.fillStyle = '#3a1c5e'; c.fillRect(x0, 0, 256, 512); c.strokeStyle = '#5fe3c0'; c.lineWidth = 18; for (let k = 0; k < 6; k++) { const y = 40 + k * 80; c.beginPath(); c.moveTo(x0 + 30, y); c.lineTo(x0 + 128, y + 36); c.lineTo(x0 + 226, y); c.stroke(); } },
+      // sun / concentric circles
+      (x0, c) => { c.fillStyle = '#0e4d3a'; c.fillRect(x0, 0, 256, 512); const cols = ['#ffd23e', '#ff9e4f', '#ff6b6b', '#fff3cf']; for (let k = 0; k < 4; k++) { c.fillStyle = cols[k]; c.beginPath(); c.arc(x0 + 128, 256, 150 - k * 32, 0, Math.PI * 2); c.fill(); } },
+      // waves
+      (x0, c) => { c.fillStyle = '#123f5e'; c.fillRect(x0, 0, 256, 512); const cols = ['#5fe3c0', '#4fb3ff', '#ffd23e']; for (let k = 0; k < 3; k++) { c.fillStyle = cols[k]; c.beginPath(); for (let x = 0; x <= 256; x += 8) { const y = 120 + k * 130 + Math.sin((x / 256) * Math.PI * 2) * 34; if (x === 0) c.moveTo(x0 + x, y); else c.lineTo(x0 + x, y); } c.lineTo(x0 + 256, 512); c.lineTo(x0, 512); c.closePath(); c.fill(); } },
+      // diamonds
+      (x0, c) => { c.fillStyle = '#5e1c1c'; c.fillRect(x0, 0, 256, 512); c.fillStyle = '#ffd23e'; for (let r = 0; r < 6; r++) for (let q = 0; q < 3; q++) { const cx = x0 + 42 + q * 86 + (r % 2) * 43, cy = 42 + r * 86; c.beginPath(); c.moveTo(cx, cy - 30); c.lineTo(cx + 30, cy); c.lineTo(cx, cy + 30); c.lineTo(cx - 30, cy); c.closePath(); c.fill(); } },
+    ];
+    MURAL_NAMES.forEach((_, i) => pats[i](i * MURAL_CELL_W, ctx));
+    return canvas;
+  };
+  const muralGeom = { pos: [], uv: [] };
+  const muralPicks = [];
+  {
+    const want = { downtown: 6, commercial: 4, beach: 2 };
+    for (const [zone, n] of Object.entries(want)) {
+      const cands = city.buildings
+        .filter((b) => b.zone === zone && b.h >= 20)
+        .sort((a, b2) => hash01(a.x + 21, a.z) - hash01(b2.x + 21, b2.z));
+      for (const b of cands.slice(0, n)) muralPicks.push(b);
+    }
+    const atlasW = MURAL_NAMES.length * MURAL_CELL_W, atlasH = MURAL_CELL_H;
+    muralPicks.forEach((b, k) => {
+      const pat = k % MURAL_NAMES.length;
+      // Side face (+w local): normal (cos rot, 0, -sin rot), centre
+      // local (w/2 + 0.12, 8, 0).
+      const cr = Math.cos(b.rot), sr = Math.sin(b.rot);
+      const lx = b.w / 2 + 0.12, lz = 0;
+      const cx = b.x + lx * cr + lz * sr, cz = b.z - lx * sr + lz * cr;
+      const n = [cr, 0, -sr];
+      const u0 = (pat * MURAL_CELL_W) / atlasW, u1 = ((pat + 1) * MURAL_CELL_W) / atlasW;
+      addPanelQuad(muralGeom, cx, 8, cz, n, 3.0, 6.0, [u0, 0, u1, 1]);
+    });
+  }
+
   return {
     stepped: { geom: unitBox, matrices: steppedMatrices, tints: steppedTints },
     pitched: { geom: pitchedRoofGeom(), matrices: pitchedMatrices, tints: pitchedTints },
-    counts: { stepped: steppedMatrices.length, pitched: pitchedMatrices.length },
+    clutter,
+    curtains: { geom: curtainQuad, matrices: curtainMatrices, tints: curtainTints },
+    muralGeom, muralAtlasCanvas: typeof document === 'undefined' ? null : drawMuralAtlas(),
+    laundryPieces,
+    counts: {
+      stepped: steppedMatrices.length, pitched: pitchedMatrices.length,
+      curtains: curtainMatrices.length, laundry: laundryPieces.length,
+      murals: muralPicks.length,
+      clutterTris: clutter.pos.length / 9,
+    },
   };
 }
