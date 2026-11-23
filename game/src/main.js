@@ -877,6 +877,24 @@ if (params.sim) {
     stateMix: () => peds.stateMix(),
     activityMix: () => peds.activityMix(),
   };
+  // Test-only manual stepping (?shot / ?mission / ?autopilot / ?sim):
+  // advance the simulation N fixed steps and re-render once, so probes
+  // can move the world deterministically even when headless rAF is
+  // throttled to ~0.4 fps and the sim never advances on its own
+  // (elapsed stays 0 between BeginFrames). Never used in normal play
+  // (testMode is false there); same family as __PERF__ / __PEDS__.
+  if (testMode) {
+    window.__STEP__ = (steps = 60) => {
+      for (let i = 0; i < steps; i++) stepWorld(STEP);
+      const cam = cameraForFrame();
+      renderer.render({
+        eye: cam.eye, center: cam.center,
+        timeHours: game.timeHours, activityPropsMesh,
+        elapsed: game.elapsed, dynamics: buildDynamics(), weather: weather.state,
+      });
+      return { elapsed: +game.elapsed.toFixed(2), timeHours: +game.timeHours.toFixed(2) };
+    };
+  }
   // Test-only sound counter (?audiodebug=1): which sounds fired + how many
   // voices are live. Audio cannot be heard headless, so the counter is the
   // check. Never shown in normal play.
