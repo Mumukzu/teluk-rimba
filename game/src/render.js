@@ -177,7 +177,7 @@ export function createRenderer(canvas, city) {
   // Headlight beam pool: subdivided strip whose colours fade with
   // distance, so the pool is a soft glow — never a hard washed-out patch.
   addDyn(progs.transpInst, beamPoolGeom(), 220, 'headbeams');
-  addDyn(progs.transpInst, flatQuadGeom, 48, 'flow');
+  addDyn(progs.transpInst, flatQuadGeom, 96, 'flow'); // river + surf + sea ripples
 
   let calls = 0, tris = 0;
 

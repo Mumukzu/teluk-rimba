@@ -7,6 +7,7 @@
 // plinth + cornice bands, entrance kits (houses) / shopfronts (shops),
 // balconies on multi-storey fronts, and roof clutter (tank + AC + antenna).
 import { subdividedBox, plainBox, mat4TRS, emptyGeom } from './gl.js';
+import { mulberry32 } from './rng.js';
 
 export const BUILDING_CLASSES = {
   short: { segFront: 6, segRows: 4, sideCols: 4 },
@@ -249,12 +250,22 @@ export function buildLitWindows(city) {
   const perZone = { downtown: 24, commercial: 15, residential: 7, beach: 12, port: 6, forest: 3 };
   for (const b of city.buildings) {
     const n = perZone[b.zone] || 3;
+    // Grid-snapped random placement: each lit window picks a random
+    // column and a random floor row on one of the four faces, from a
+    // per-building RNG. Column and row are drawn INDEPENDENTLY, so the
+    // windows scatter like real lit windows in neat rows/columns —
+    // never a diagonal function of row+column (the old linear hash
+    // marched both together and drew staircase diagonals).
+    const rand = mulberry32(Math.floor(Math.abs(b.x) * 131 + Math.abs(b.z) * 17 + 7));
+    const rows = Math.max(1, Math.floor((b.h - 4) / 3));
     for (let k = 0; k < n; k++) {
-      const h = (k * 2654435761) % 1000 / 1000;
-      // Four faces: 0:+d, 1:-d, 2:+w, 3:-w — windows wrap the building.
-      const face = k % 4;
-      const along = ((k * 40503) % 100) / 100 - 0.5;
-      const y = 2.5 + h * Math.max(2, b.h - 5);
+      const face = k % 4; // 0:+d, 1:-d, 2:+w, 3:-w — windows wrap the building
+      const faceW = face < 2 ? b.w : b.d;
+      const cols = Math.max(2, Math.round(faceW / 3));
+      const col = Math.floor(rand() * cols);
+      const row = Math.floor(rand() * rows);
+      const along = (col + 0.5) / cols - 0.5;
+      const y = Math.min(3.5 + row * 3, b.h - 1.5);
       const sr = Math.sin(b.rot), cr = Math.cos(b.rot);
       let fx, fz, rotY;
       if (face === 0) { // +d face
@@ -275,9 +286,9 @@ export function buildLitWindows(city) {
         rotY = b.rot - Math.PI / 2;
       }
       matrices.push(mat4TRS(fx, y, fz, rotY, 1, 1, 1));
-      const warm = ((k * 7 + b.x) % 10) < 8; // ~80% warm yellow, rest cool white
+      const warm = rand() < 0.8; // ~80% warm yellow, rest cool white
       const pal = warm ? WARM : COOL;
-      tints.push(pal[(k + Math.floor(Math.abs(b.x))) % pal.length]);
+      tints.push(pal[Math.floor(rand() * pal.length)]);
     }
   }
   return { geom: quad, matrices, tints };

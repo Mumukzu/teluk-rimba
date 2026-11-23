@@ -716,10 +716,22 @@ if (params.sim) {
         fl.matrices.push(mat4TRS(pt.x, -0.7, pt.z, Math.atan2(pt.dx, pt.dz), 0.5, 1, 3.2));
         fl.tints.push([0.9, 0.97, 1]);
       }
-      for (let k = 0; k < 4; k++) {
+      for (let k = 0; k < 6; k++) {
         const wx = 632 + k * 8 + 5 * Math.sin(game.elapsed * 0.35 + k * 1.7);
         fl.matrices.push(mat4TRS(wx, -0.7, 0, 0, 2.5, 1, 1400));
         fl.tints.push([0.95, 0.98, 1]);
+      }
+      // Sea ripples: long pale bands drifting slowly toward the shore
+      // across the whole sea (x 620..2100), wrapping at the beach. They
+      // share the flow mesh (no extra draw call) and make the sea read
+      // as moving water instead of one flat blue plane.
+      for (let k = 0; k < 36; k++) {
+        const x = 2100 - ((game.elapsed * 3 + k * 47) % 1480);
+        const z = -850 + ((k * 173) % 1700);
+        const len = 40 + ((k * 37) % 50);
+        const wdt = 1.2 + ((k * 13) % 10) / 10;
+        fl.matrices.push(mat4TRS(x, -1.05, z, 0, wdt, 1, len));
+        fl.tints.push([0.85, 0.93, 1]);
       }
       dyn.flow = fl;
     }

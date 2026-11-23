@@ -3,7 +3,7 @@
 // scattered on a dome overhead. Positions sit inside the fog range so the
 // fog does not wash them out.
 import { mulberry32 } from './rng.js';
-import { emptyGeom, mat4TRS, plainBox, mergeGeoms } from './gl.js';
+import { emptyGeom, mat4TRS } from './gl.js';
 
 // Sky dome: a unit hemisphere (y 0..1) centred on the camera, scaled to
 // radius ~1600 by the model matrix. The gradient lives in the sky shader
@@ -30,27 +30,50 @@ export function buildSkyDomeGeom() {
   return g;
 }
 
-// One cloud puff: 4 overlapping flattened boxes, low-poly and soft.
-// The top faces are bright white, the sides slightly grey, the bottom
-// faces clearly greyer — a baked underside shadow so the puff reads as
-// thick, not a flat cutout. Base colour is white: the per-instance tint
-// carries the time-of-day colour (day white, sunset warm, rain grey,
-// night dark moonlit).
+// One cloud puff: 5 overlapping flattened low-poly spheres — real
+// rounded volume from every angle, never a flat slab. Vertex colours
+// shade smoothly from bright white on top to grey underneath, so the
+// puff reads thick and soft. Base colour is white: the per-instance
+// tint carries the time-of-day colour (day white, sunset warm, rain
+// grey, night dark moonlit).
 export function buildCloudPuffGeom() {
-  const SIDE = [0.88, 0.88, 0.9], TOP = [1, 1, 1];
-  const blob = (w, h, d, x, y, z) => {
-    const g = plainBox(w, h, d, SIDE, TOP);
-    for (let i = 0; i < g.pos.length; i += 3) {
-      g.pos[i] += x; g.pos[i + 1] += y; g.pos[i + 2] += z;
+  const g = emptyGeom();
+  const GREY = [0.7, 0.7, 0.74], WHITE = [1, 1, 1];
+  const blob = (r, sy, cx, cy, cz) => {
+    const SEGS = 8, RINGS = 5;
+    const pt = (ring, seg) => {
+      const el = (ring / RINGS) * Math.PI - Math.PI / 2; // -90..+90
+      const a = (seg / SEGS) * Math.PI * 2;
+      const ce = Math.cos(el);
+      return [cx + r * ce * Math.cos(a), cy + r * Math.sin(el) * sy, cz + r * ce * Math.sin(a)];
+    };
+    const nAt = (ring, seg) => {
+      const el = (ring / RINGS) * Math.PI - Math.PI / 2;
+      const a = (seg / SEGS) * Math.PI * 2;
+      return [Math.cos(el) * Math.cos(a), Math.sin(el), Math.cos(el) * Math.sin(a)];
+    };
+    const colAt = (ring, seg) => {
+      const ny = Math.sin((ring / RINGS) * Math.PI - Math.PI / 2);
+      const t = Math.min(1, Math.max(0, (ny + 0.2) / 0.7));
+      return GREY.map((c, i) => c * (1 - t) + WHITE[i] * t);
+    };
+    for (let ri = 0; ri < RINGS; ri++) {
+      for (let s = 0; s < SEGS; s++) {
+        const a = pt(ri, s), b = pt(ri, s + 1), d = pt(ri + 1, s + 1), e = pt(ri + 1, s);
+        const na = nAt(ri, s), nb = nAt(ri, s + 1), nd = nAt(ri + 1, s + 1), ne = nAt(ri + 1, s);
+        const ca = colAt(ri, s), cb = colAt(ri, s + 1), cd = colAt(ri + 1, s + 1), ce = colAt(ri + 1, s);
+        g.pos.push(...a, ...b, ...d, ...a, ...d, ...e, ...a, ...d, ...b, ...a, ...e, ...d);
+        g.nrm.push(...na, ...nb, ...nd, ...na, ...nd, ...ne, ...na, ...nd, ...nb, ...na, ...ne, ...nd);
+        g.col.push(...ca, ...cb, ...cd, ...ca, ...cd, ...ce, ...ca, ...cd, ...cb, ...ca, ...ce, ...cd);
+      }
     }
-    return g;
   };
-  return mergeGeoms([
-    blob(36, 10, 16, 0, 0, 0),      // main body
-    blob(20, 8, 12, -8, 5, 0),      // left hump
-    blob(18, 7, 11, 9, 4.5, -1),    // right hump
-    blob(12, 6, 9, 0, 7, -2),       // top tuft
-  ]);
+  blob(20, 0.5, 0, 0, 0);       // main body
+  blob(13, 0.55, -11, 4, 1);    // left hump
+  blob(12, 0.55, 11, 3.5, -1);  // right hump
+  blob(9, 0.6, 1, 7, -2);       // top tuft
+  blob(8, 0.5, -3, 3, 7);       // front puff
+  return g;
 }
 
 // Cloud placement: 18 puffs, varied sizes/heights, spread over the whole
