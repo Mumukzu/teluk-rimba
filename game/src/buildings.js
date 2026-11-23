@@ -57,6 +57,19 @@ const GLASS_GLOW_TINTS = [
   [1.0, 0.85, 0.60], [1.0, 0.85, 0.60], [1.0, 0.85, 0.60],
   [1.0, 0.72, 0.70], [1.0, 0.78, 0.45],
 ];
+// Mu 23 Nov 23:31 — the CBD lobby glow read PALE WHITE at night, not warm:
+// root cause is the layer stack, not one number. The glow core (unlit,
+// night only) sits BEHIND the clear glass, and the glass is drawn over it
+// with alpha 0.32 in a near-white tint [0.93,0.97,1.0]. Composite =
+// 0.32 x pale glass + 0.68 x glow: with the old glow [1.0,0.85,0.60] that
+// lands at about [1.0,0.95,0.78] — r-b only ~0.2, i.e. white-pale, not
+// amber. The lobby glow therefore needs a MUCH deeper amber + a brighter
+// jitter, so that after the 0.32 glass veil the composite still reads
+// warm amber (r-b >= ~0.45). Downtown lobby ONLY — the other tall
+// buildings keep GLASS_GLOW_TINTS.
+const LOBBY_GLOW_TINTS = [
+  [1.0, 0.58, 0.20], [1.0, 0.62, 0.25], [1.0, 0.55, 0.18],
+];
 const hash01 = (x, z) => {
   const s = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453;
   return s - Math.floor(s);
@@ -216,11 +229,14 @@ export function buildBuildingMeshes(gl, progs, city) {
         glassBandTallTints.push([0.93, 0.97, 1.0]);
         // Warm glow core BEHIND the glass (+0.05 proud, glass at +0.08),
         // so at night the whole lobby glows through the glass instead of
-        // the core hiding it as a flat panel. Brighter than the old core
-        // (jitter 1.0-1.15), full lobby height, all four faces.
+        // the core hiding it as a flat panel. Mu 23 Nov 23:31 — the old
+        // pale glow read white through the 0.32-alpha glass, so the lobby
+        // uses the deep-amber LOBBY_GLOW_TINTS with a brighter jitter
+        // (1.15-1.5): the composite through the glass still reads warm
+        // amber. Full lobby height, all four faces.
         glassGlowMatrices.push(mat4TRS(b.x, lobbyH / 2, b.z, b.rot, b.w + 0.10, lobbyH, b.d + 0.10));
-        const gt = GLASS_GLOW_TINTS[Math.floor(hash01(b.x + 5, b.z + 9) * GLASS_GLOW_TINTS.length)];
-        const gj = 1.0 + hash01(b.x, b.z + 4) * 0.15;
+        const gt = LOBBY_GLOW_TINTS[Math.floor(hash01(b.x + 5, b.z + 9) * LOBBY_GLOW_TINTS.length)];
+        const gj = 1.15 + hash01(b.x, b.z + 4) * 0.35;
         glassGlowTints.push([gt[0] * gj, gt[1] * gj, gt[2] * gj]);
         // Big pillars + dark frames on all four faces (into the plinth
         // mesh — same unitBox, same lit program, +0 draw calls).

@@ -83,14 +83,22 @@ export function buildShopGlow(city) {
       }
       // Warm spill on the ground in front of the shop (Mu's refs: warm
       // light on the sidewalk) — downtown: a wider, deeper, stronger wash
-      // (5 m deep, 3 m out, 0.62x the panel tint); commercial keeps the
-      // old 3 m / 2.2 m / 0.45x spill.
-      const spillOut = b.zone === 'downtown' ? out + 3.0 : out + 2.2;
+      // (7 m deep, 3.5 m out, 0.95x the tint); commercial keeps the
+      // old 3 m / 2.2 m / 0.45x spill. Mu 23 Nov 23:31 — the old downtown
+      // spill (0.62x the pale [1.0,0.85,0.60] tint) read washed-out on the
+      // sidewalk, so downtown spills now use a deeper amber base with a
+      // brighter factor, matching the lobby glow core.
+      const spillOut = b.zone === 'downtown' ? out + 3.5 : out + 2.2;
       const spillW = b.zone === 'downtown' ? w : w * 0.8;
-      const spillD = b.zone === 'downtown' ? 5 : 3;
-      const spillF = b.zone === 'downtown' ? 0.62 : 0.45;
+      const spillD = b.zone === 'downtown' ? 7 : 3;
+      const spillF = b.zone === 'downtown' ? 0.95 : 0.45;
       spillMatrices.push(mat4TRS(b.x + nx * spillOut, 0.18, b.z + nz * spillOut, rot, spillW, 1, spillD));
-      spillTints.push([tint[0] * spillF, tint[1] * spillF, tint[2] * spillF]);
+      if (b.zone === 'downtown') {
+        const sj = 1.0 + rand() * 0.2;
+        spillTints.push([1.0 * sj * spillF, 0.62 * sj * spillF, 0.25 * sj * spillF]);
+      } else {
+        spillTints.push([tint[0] * spillF, tint[1] * spillF, tint[2] * spillF]);
+      }
       // Lit amber sign band above the awning, front face only, on every
       // OTHER downtown tower (11 of 21) — a second warm strip so the base
       // reads as two lit layers, not one thin line.

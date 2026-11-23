@@ -58,6 +58,28 @@ check('glass + glow matrices and tints are finite',
   check('21 full-height lobby glow cores (downtown glassGlow)',
     meshes.glassGlow.matrices.filter(tall).length === downtown.length,
     meshes.glassGlow.matrices.filter(tall).length + ' tall glows');
+  // Mu 23 Nov 23:31 — the lobby glow read PALE WHITE at night: the old
+  // [1.0,0.85,0.60] core behind the 0.32-alpha near-white glass lands at
+  // ~[1.0,0.95,0.78], i.e. white. The lobby cores now use a deep amber
+  // with a brighter jitter, so the composite through the glass still
+  // reads warm amber (r-b >= 0.35 after the 0.32 glass veil).
+  {
+    const lobbyIdx = meshes.glassGlow.matrices
+      .map((m, i) => (tall(m) ? i : -1)).filter((i) => i >= 0);
+    const deepAmber = lobbyIdx.every((i) => {
+      const t = meshes.glassGlow.tints[i];
+      return t[0] >= 1.0 && t[1] >= 0.6 && t[1] <= 1.0 && t[2] <= 0.45;
+    });
+    check('lobby glow cores are deep amber + bright (Mu 23:31)', deepAmber,
+      lobbyIdx.length + ' cores');
+    const warmComposite = lobbyIdx.every((i) => {
+      const g = meshes.glassGlow.tints[i];
+      const r = Math.min(1, 0.32 * 0.93 + 0.68 * g[0]);
+      const b = 0.32 * 1.0 + 0.68 * g[2];
+      return r - b >= 0.35;
+    });
+    check('lobby glow reads warm amber through the 0.32 glass (r-b >= 0.35)', warmComposite);
+  }
   check('lobby pillars + frames on every downtown tower (plinth mesh, tall parts)',
     meshes.plinth.matrices.filter(tall).length >= downtown.length * 30,
     meshes.plinth.matrices.filter(tall).length + ' tall plinth parts');
@@ -81,6 +103,19 @@ check('glass + glow matrices and tints are finite',
   check('shop glow: 327 panels (316 commercial + 11 sign bands, no flat downtown panel — glass lobby instead)', sg.counts.panels === 327, sg.counts.panels + ' panels');
   check('shop glow: 11 amber sign bands on downtown towers', sg.counts.bands === 11, sg.counts.bands + ' bands');
   check('shop glow: 400 ground spills (one per ground panel face)', sg.counts.spills === 400, sg.counts.spills + ' spills');
+  // Mu 23 Nov 23:31 — downtown spills are deeper (7 m, was 5) and use a
+  // deeper amber base at 0.95x (was 0.62x the pale tint), so the sidewalk
+  // wash reads warm, not washed-out: 84 downtown spills (21 towers x 4
+  // faces) at depth 7 with a bright red channel; commercial stays 3 m.
+  {
+    const depth = (m) => Math.hypot(m[8], m[9], m[10]);
+    const deepSpills = sg.spill.matrices.filter((m) => Math.abs(depth(m) - 7) < 1e-6);
+    check('84 downtown spills are 7 m deep (Mu 23:31)', deepSpills.length === 84,
+      deepSpills.length + ' deep spills');
+    const brightSpills = sg.spill.tints.filter((t) => t[0] >= 0.9).length;
+    check('downtown spills are bright warm (red >= 0.9)', brightSpills >= 84,
+      brightSpills + ' bright spills');
+  }
   check('shop glow panels + spills are finite',
     allFin(sg.matrices) && allFinT(sg.tints) && allFin(sg.spill.matrices) && allFinT(sg.spill.tints));
   const lw = buildLitWindows(city);
