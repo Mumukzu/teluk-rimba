@@ -216,13 +216,19 @@ function pushQuad(g, a, b, c, d, n, col) {
   pushTri(g, a, c, d, n, col, col, col);
 }
 
-// Box with subdivided faces; front/back faces carry a window grid pattern
-// (dark glass cells), roof is dark, sides are plain wall with slight variation.
-export function subdividedBox(w, h, d, segFront = 6, segRows = 10) {
+// Box with subdivided faces; front/back/side faces carry a window grid
+// pattern — windows on EVERY face now (not just front/back), in varied
+// shades (dark glass / sky reflection / warm lit) picked deterministically
+// per cell, never on the ground floor (shop fronts stay plain) or the top
+// floor under the roof. sideCols sizes the side-face grid (the sides are
+// d deep, so they need their own column count, not the front's).
+export function subdividedBox(w, h, d, segFront = 6, segRows = 10, sideCols = 2) {
   const g = emptyGeom();
   const hw = w / 2, hh = h / 2, hd = d / 2;
   const wall = [1, 1, 1];
-  const glass = [0.42, 0.48, 0.56]; // soft dark glass, not a black checkerboard
+  const glassDark = [0.3, 0.34, 0.42];
+  const glassReflect = [0.7, 0.8, 0.95]; // sky reflection
+  const glassWarm = [0.95, 0.8, 0.5]; // lit / curtained window
   const roof = [0.42, 0.42, 0.46];
   const face = (corners, normal, nx, ny, colorFn) => {
     const [o, u, v] = corners;
@@ -236,15 +242,18 @@ export function subdividedBox(w, h, d, segFront = 6, segRows = 10) {
       }
     }
   };
-  // Windows: small soft-glass cells on every other column/row, never on the
+  // Windows: small glass cells on every other column/row, never on the
   // ground floor (shop fronts stay plain) — tidy, not a checkerboard.
-  const winFn = (i, j) => (j > 0 && j < segRows - 1 && i % 2 === 0 && j % 2 === 0 ? glass : wall);
-  const sideFn = () => wall;
+  const winFn = (i, j) => {
+    if (!(j > 0 && j < segRows - 1 && i % 2 === 0 && j % 2 === 0)) return wall;
+    const hv = ((i * 31 + j * 17 + segFront * 7) % 100 + 100) % 100;
+    return hv < 60 ? glassDark : hv < 85 ? glassReflect : glassWarm;
+  };
   // +z front, -z back, +x right, -x left, +y roof, -y floor
   face([[-hw, -hh, hd], [w, 0, 0], [0, h, 0]], [0, 0, 1], segFront, segRows, winFn);
   face([[hw, -hh, -hd], [-w, 0, 0], [0, h, 0]], [0, 0, -1], segFront, segRows, winFn);
-  face([[hw, -hh, hd], [0, 0, -d], [0, h, 0]], [1, 0, 0], 2, segRows, sideFn);
-  face([[-hw, -hh, -hd], [0, 0, d], [0, h, 0]], [-1, 0, 0], 2, segRows, sideFn);
+  face([[hw, -hh, hd], [0, 0, -d], [0, h, 0]], [1, 0, 0], sideCols, segRows, winFn);
+  face([[-hw, -hh, -hd], [0, 0, d], [0, h, 0]], [-1, 0, 0], sideCols, segRows, winFn);
   face([[-hw, hh, hd], [w, 0, 0], [0, 0, -d]], [0, 1, 0], 1, 1, () => roof);
   face([[-hw, -hh, -hd], [w, 0, 0], [0, 0, d]], [0, -1, 0], 1, 1, () => [0.3, 0.3, 0.3]);
   return g;

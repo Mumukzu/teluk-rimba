@@ -1,12 +1,88 @@
-// Teluk Rimba — buildings as instanced meshes (one draw call for all 1000).
-// Base geometry is a subdivided box with a window-grid pattern; per-instance
-// matrices scale it to each building and tints colour it by zone.
-import { subdividedBox, plainBox, mat4TRS } from './gl.js';
+// Teluk Rimba — buildings as instanced meshes.
+// Height classes: the window grid is sized per class so the window cells
+// stay ~2-3 m (not giant dark rectangles on tall towers). Cell height is
+// h/segRows; the tallest tower (100 m) gets 8.3 m rows — still big, but
+// that is one skyline landmark, not every building.
+// Architectural detail is instanced too (one draw call per part type):
+// plinth + cornice bands, entrance kits (houses) / shopfronts (shops),
+// balconies on multi-storey fronts, and roof clutter (tank + AC + antenna).
+import { subdividedBox, plainBox, mat4TRS, emptyGeom } from './gl.js';
+
+export const BUILDING_CLASSES = {
+  short: { segFront: 6, segRows: 4, sideCols: 4 },
+  mid: { segFront: 8, segRows: 8, sideCols: 6 },
+  tall: { segFront: 8, segRows: 12, sideCols: 6 },
+};
+export function buildingClass(h) {
+  return h < 12 ? 'short' : h < 30 ? 'mid' : 'tall';
+}
+// Roof colours by zone (varied a touch per building by hash).
+const ROOF_COLORS = {
+  downtown: [0.25, 0.28, 0.35],
+  commercial: [0.45, 0.3, 0.22],
+  residential: [0.4, 0.28, 0.26],
+  beach: [0.75, 0.7, 0.6],
+  port: [0.3, 0.32, 0.3],
+  forest: [0.25, 0.3, 0.25],
+};
+const SHOP_ACCENTS = [
+  [0.9, 0.3, 0.25], [0.2, 0.6, 0.9], [0.95, 0.7, 0.15], [0.3, 0.7, 0.35], [0.85, 0.4, 0.6],
+];
+const hash01 = (x, z) => {
+  const s = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453;
+  return s - Math.floor(s);
+};
+const darken = (c, f) => [c[0] * f, c[1] * f, c[2] * f];
+const lighten = (c, f) => [Math.min(1, c[0] * f), Math.min(1, c[1] * f), Math.min(1, c[2] * f)];
+function addPartAt(g, part, x, y, z) {
+  for (let i = 0; i < part.pos.length; i += 3) { part.pos[i] += x; part.pos[i + 1] += y; part.pos[i + 2] += z; }
+  g.pos.push(...part.pos); g.nrm.push(...part.nrm); g.col.push(...part.col);
+}
+
+// Entrance kit (local space, door faces +z): canopy + 2 pillars + door.
+// Instanced at each building's front face, tinted with the facade colour.
+export function buildEntranceKitGeom() {
+  const g = emptyGeom();
+  addPartAt(g, plainBox(3.2, 0.12, 1.1, [0.85, 0.85, 0.83]), 0, 2.6, 0.55); // canopy
+  for (const px of [-1.4, 1.4]) addPartAt(g, plainBox(0.18, 2.6, 0.18, [0.9, 0.9, 0.88]), px, 1.3, 1.0); // pillars
+  addPartAt(g, plainBox(1.2, 2.2, 0.1, [0.2, 0.2, 0.22]), 0, 1.1, 0.05); // door
+  return g;
+}
+// Shopfront kit (local space, faces +z): wide glass band + sign band +
+// door + canopy. Instanced with a per-building accent tint, so each shop
+// reads as its own brand colour (the white sign band takes the tint).
+export function buildShopfrontGeom() {
+  const g = emptyGeom();
+  addPartAt(g, plainBox(6.0, 1.8, 0.12, [0.3, 0.4, 0.5]), 0, 1.5, 0.06); // shop glass
+  addPartAt(g, plainBox(6.0, 0.5, 0.14, [1, 1, 1]), 0, 2.7, 0.07); // sign band
+  addPartAt(g, plainBox(1.2, 2.2, 0.1, [0.2, 0.2, 0.22]), 0, 1.1, 0.12); // door
+  addPartAt(g, plainBox(6.4, 0.12, 1.0, [0.85, 0.85, 0.83]), 0, 3.0, 0.5); // canopy
+  return g;
+}
+// Balcony (local space, extends +z from the facade): slab + front rail.
+export function buildBalconyGeom() {
+  const g = emptyGeom();
+  addPartAt(g, plainBox(2.2, 0.15, 0.9, [0.85, 0.85, 0.83]), 0, 0, 0.45); // slab
+  addPartAt(g, plainBox(2.2, 0.9, 0.06, [0.25, 0.25, 0.28]), 0, 0.45, 0.88); // front rail
+  return g;
+}
+// Roof clutter (local space, base at y=0): water tank + AC box + antenna.
+export function buildRoofUnitGeom() {
+  const g = emptyGeom();
+  addPartAt(g, plainBox(1.2, 1.2, 1.2, [0.55, 0.55, 0.5]), 0, 1.1, 0); // water tank
+  addPartAt(g, plainBox(0.9, 0.6, 0.9, [0.7, 0.7, 0.68]), 1.2, 0.3, 0.5); // AC box
+  addPartAt(g, plainBox(0.12, 3.5, 0.12, [0.4, 0.4, 0.42]), -1.0, 1.75, -0.5); // antenna
+  return g;
+}
 
 export function buildBuildingMeshes(gl, progs, city) {
-  const base = subdividedBox(1, 1, 1, 4, 8);
-  const matrices = [];
-  const tints = [];
+  const bases = {};
+  for (const [name, cfg] of Object.entries(BUILDING_CLASSES)) {
+    bases[name] = {
+      geom: subdividedBox(1, 1, 1, cfg.segFront, cfg.segRows, cfg.sideCols),
+      matrices: [], tints: [], prog: progs.litInst,
+    };
+  }
   const roofMatrices = [];
   const roofTints = [];
   // Iconic CBD towers (b.shape): stepped tiers, a spire, or a crown on top,
@@ -14,14 +90,59 @@ export function buildBuildingMeshes(gl, progs, city) {
   const tierMatrices = [], tierTints = [];
   const spireMatrices = [], spireTints = [];
   const crownMatrices = [], crownTints = [];
-  const darken = (c, f) => [c[0] * f, c[1] * f, c[2] * f];
-  const lighten = (c, f) => [Math.min(1, c[0] * f), Math.min(1, c[1] * f), Math.min(1, c[2] * f)];
+  const plinthMatrices = [], plinthTints = [];
+  const corniceMatrices = [], corniceTints = [];
+  const entranceMatrices = [], entranceTints = [];
+  const shopfrontMatrices = [], shopfrontTints = [];
+  const balconyMatrices = [], balconyTints = [];
+  const roofUnitMatrices = [], roofUnitTints = [];
+  const unitBox = plainBox(1, 1, 1, [1, 1, 1]);
   for (const b of city.buildings) {
     // Base box is centred; lift so its bottom sits on the ground.
-    matrices.push(mat4TRS(b.x, b.h / 2, b.z, b.rot, b.w, b.h, b.d));
-    tints.push(b.color);
+    const cls = buildingClass(b.h);
+    bases[cls].matrices.push(mat4TRS(b.x, b.h / 2, b.z, b.rot, b.w, b.h, b.d));
+    bases[cls].tints.push(b.color);
+    // Roof slab, coloured by zone (varied a touch per building).
     roofMatrices.push(mat4TRS(b.x, b.h + 0.25, b.z, b.rot, b.w + 0.7, 0.5, b.d + 0.7));
-    roofTints.push([0.32, 0.32, 0.34]);
+    const rv = 0.92 + hash01(b.x, b.z) * 0.16;
+    const rc = ROOF_COLORS[b.zone] || ROOF_COLORS.residential;
+    roofTints.push([rc[0] * rv, rc[1] * rv, rc[2] * rv]);
+    // Plinth (base band, darker facade) + cornice (top band, lighter).
+    plinthMatrices.push(mat4TRS(b.x, 0.3, b.z, b.rot, b.w + 0.6, 0.6, b.d + 0.6));
+    plinthTints.push(darken(b.color, 0.7));
+    corniceMatrices.push(mat4TRS(b.x, b.h - 0.2, b.z, b.rot, b.w + 0.5, 0.4, b.d + 0.5));
+    corniceTints.push(lighten(b.color, 1.15));
+    // Front face centre (local +z after rotY is the outward normal).
+    const fx = b.x + Math.sin(b.rot) * (b.d / 2);
+    const fz = b.z + Math.cos(b.rot) * (b.d / 2);
+    const kitScale = Math.min(1.6, Math.max(0.8, b.w / 14));
+    if (b.zone === 'commercial' || b.zone === 'downtown') {
+      shopfrontMatrices.push(mat4TRS(fx, 0, fz, b.rot, kitScale, 1, 1));
+      shopfrontTints.push(SHOP_ACCENTS[Math.floor(hash01(b.x + 3, b.z) * SHOP_ACCENTS.length)]);
+    } else {
+      entranceMatrices.push(mat4TRS(fx, 0, fz, b.rot, kitScale, 1, 1));
+      entranceTints.push(darken(b.color, 0.9));
+    }
+    // Balconies on the front face, floors 2..4, for multi-storey blocks —
+    // only where the balcony sits below the roof (y < h - 1).
+    if (b.h >= 8 && (b.zone === 'residential' || b.zone === 'commercial' || b.zone === 'downtown' || b.zone === 'beach')) {
+      const nB = Math.max(0, Math.min(3, Math.floor((b.h - 1) / 3.2) - 1));
+      for (let k = 0; k < nB; k++) {
+        const fy = (k + 2) * 3.2;
+        const along = (k % 2 === 0 ? -1 : 1) * b.w * 0.22;
+        const bx = fx + Math.cos(b.rot) * along;
+        const bz = fz - Math.sin(b.rot) * along;
+        balconyMatrices.push(mat4TRS(bx, fy, bz, b.rot, 1, 1, 1));
+        balconyTints.push(darken(b.color, 0.85));
+      }
+    }
+    // Roof clutter on about half the buildings tall enough to carry it.
+    if (b.h >= 6 && hash01(b.x + 11, b.z + 5) < 0.5) {
+      const ox = (hash01(b.x, b.z + 1) - 0.5) * b.w * 0.4;
+      const oz = (hash01(b.x + 2, b.z) - 0.5) * b.d * 0.4;
+      roofUnitMatrices.push(mat4TRS(b.x + ox, b.h + 0.5, b.z + oz, b.rot, 1, 1, 1));
+      roofUnitTints.push([1, 1, 1]);
+    }
     if (!b.shape) continue;
     if (b.shape === 'tiered' || b.shape === 'glass') {
       tierMatrices.push(mat4TRS(b.x, b.h + b.h * 0.11, b.z, b.rot, b.w * 0.68, b.h * 0.22, b.d * 0.68));
@@ -42,14 +163,19 @@ export function buildBuildingMeshes(gl, progs, city) {
       crownTints.push([0.3, 0.32, 0.38]);
     }
   }
-  const roofBase = plainBox(1, 1, 1, [1, 1, 1]);
-  const part = (matrices, tints) => ({ geom: roofBase, matrices, tints, prog: progs.litInst });
+  const part = (geom, matrices, tints) => ({ geom, matrices, tints, prog: progs.litInst });
   return {
-    buildings: { geom: base, matrices, tints, prog: progs.litInst },
-    roofs: { geom: roofBase, matrices: roofMatrices, tints: roofTints, prog: progs.litInst },
-    tiers: part(tierMatrices, tierTints),
-    spires: part(spireMatrices, spireTints),
-    crowns: part(crownMatrices, crownTints),
+    bases: [bases.short, bases.mid, bases.tall],
+    roofs: part(unitBox, roofMatrices, roofTints),
+    tiers: part(unitBox, tierMatrices, tierTints),
+    spires: part(unitBox, spireMatrices, spireTints),
+    crowns: part(unitBox, crownMatrices, crownTints),
+    plinth: part(unitBox, plinthMatrices, plinthTints),
+    cornice: part(unitBox, corniceMatrices, corniceTints),
+    entrance: part(buildEntranceKitGeom(), entranceMatrices, entranceTints),
+    shopfront: part(buildShopfrontGeom(), shopfrontMatrices, shopfrontTints),
+    balconies: part(buildBalconyGeom(), balconyMatrices, balconyTints),
+    roofUnits: part(buildRoofUnitGeom(), roofUnitMatrices, roofUnitTints),
   };
 }
 

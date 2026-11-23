@@ -4,6 +4,8 @@ import { generateCity, riverDistance, ASPHALT_HALF } from '../game/src/city.js';
 import { zebraSpots } from '../game/src/roads.js';
 import { buildVehicleGeoms, buildVehicleGlassGeoms } from '../game/src/vehicles.js';
 import { VEHICLES } from '../game/src/config.js';
+import { buildingClass, BUILDING_CLASSES, buildBuildingMeshes, buildEntranceKitGeom, buildShopfrontGeom, buildBalconyGeom, buildRoofUnitGeom } from '../game/src/buildings.js';
+import { subdividedBox } from '../game/src/gl.js';
 
 let fails = 0;
 function check(name, ok) {
@@ -124,6 +126,52 @@ check('bridges are the 4 whitelisted crossings',
     }
   }
   check('every glass mesh sits inside its body silhouette (plan view)', inside);
+}
+
+// Job B: realistic buildings — height classes, windows on all faces,
+// zone roof colours, entrance/shopfront kits, balconies, roof clutter.
+{
+  const counts = { short: 0, mid: 0, tall: 0 };
+  for (const b of city.buildings) counts[buildingClass(b.h)]++;
+  check('building classes: 611 short / 306 mid / 83 tall', counts.short === 611 && counts.mid === 306 && counts.tall === 83);
+  // Window cells stay small: max cell height/width per class.
+  const maxH = { short: 0, mid: 0, tall: 0 }, maxW = { short: 0, mid: 0, tall: 0 };
+  for (const b of city.buildings) {
+    const c = buildingClass(b.h);
+    maxH[c] = Math.max(maxH[c], b.h); maxW[c] = Math.max(maxW[c], b.w, b.d);
+  }
+  let cellsOk = true;
+  for (const [name, cfg] of Object.entries(BUILDING_CLASSES)) {
+    if (maxH[name] / cfg.segRows > 8.5 || maxW[name] / cfg.segFront > 5.5) cellsOk = false;
+  }
+  check('window cells bounded (max 8.5 m tall, 5.5 m wide)', cellsOk);
+  // Windows on all four faces: glass-coloured vertices with ±x and ±z normals.
+  const base = subdividedBox(1, 1, 1, 8, 12, 6);
+  const glassCols = new Set(['0.3,0.34,0.42', '0.7,0.8,0.95', '0.95,0.8,0.5']);
+  const dirs = new Set();
+  for (let i = 0; i < base.col.length; i += 3) {
+    const key = base.col[i] + ',' + base.col[i + 1] + ',' + base.col[i + 2];
+    if (!glassCols.has(key)) continue;
+    if (base.nrm[i] === 1) dirs.add('+x');
+    if (base.nrm[i] === -1) dirs.add('-x');
+    if (base.nrm[i + 2] === 1) dirs.add('+z');
+    if (base.nrm[i + 2] === -1) dirs.add('-z');
+  }
+  check('windows on all four faces', dirs.size === 4);
+  // Detail meshes (buildBuildingMeshes is pure geometry — no GL calls —
+  // so it runs in Node with a stubbed progs object).
+  const meshes = buildBuildingMeshes(null, { litInst: 'LIT' }, city);
+  check('3 base geometries cover all 1000 buildings',
+    meshes.bases[0].matrices.length + meshes.bases[1].matrices.length + meshes.bases[2].matrices.length === 1000);
+  const distinctRoofTints = new Set(meshes.roofs.tints.map((t) => t.join(','))).size;
+  check('roof tints vary by zone (not one grey)', distinctRoofTints > 10);
+  check('plinth + cornice on every building', meshes.plinth.matrices.length === 1000 && meshes.cornice.matrices.length === 1000);
+  check('entrance kit or shopfront on every building', meshes.entrance.matrices.length + meshes.shopfront.matrices.length === 1000);
+  check('balconies placed (multi-storey fronts)', meshes.balconies.matrices.length > 500);
+  check('roof units on some but not all buildings', meshes.roofUnits.matrices.length > 100 && meshes.roofUnits.matrices.length < 1000);
+  const tris = (g) => g.pos.length / 9;
+  check('detail geometries are lean (entrance 48, shopfront 48, balcony 24, roof units 36 tris)',
+    tris(buildEntranceKitGeom()) === 48 && tris(buildShopfrontGeom()) === 48 && tris(buildBalconyGeom()) === 24 && tris(buildRoofUnitGeom()) === 36);
 }
 
 if (fails) { console.error(fails + ' PHASE F CHECK(S) FAILED'); process.exit(1); }

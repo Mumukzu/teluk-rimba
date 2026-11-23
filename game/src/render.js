@@ -70,11 +70,19 @@ export function createRenderer(canvas, city) {
   addStatic(progs.lit, world.volcano, mat4Identity());
   addStatic(progs.lit, world.dirtTrack, mat4Identity()); // mountain road (mission 6)
   addStatic(progs.lit, buildRoadMesh(city), mat4Identity());
-  addInst(progs.litInst, buildingMeshes.buildings);
+  for (const spec of buildingMeshes.bases) addInst(progs.litInst, spec);
   addInst(progs.litInst, buildingMeshes.roofs);
   addInst(progs.litInst, buildingMeshes.tiers);
   addInst(progs.litInst, buildingMeshes.spires);
   addInst(progs.litInst, buildingMeshes.crowns);
+  // Phase F building detail: plinth + cornice bands, entrance kits,
+  // shopfronts, balconies, roof clutter — one instanced draw each.
+  addInst(progs.litInst, buildingMeshes.plinth);
+  addInst(progs.litInst, buildingMeshes.cornice);
+  addInst(progs.litInst, buildingMeshes.entrance);
+  addInst(progs.litInst, buildingMeshes.shopfront);
+  addInst(progs.litInst, buildingMeshes.balconies);
+  addInst(progs.litInst, buildingMeshes.roofUnits);
   // Plot dressing: light-grey paving + parked cars, fences, flowers,
   // benches in dense and residential blocks (Mu: no plain green yards).
   addStatic(progs.lit, plotDressing.paving, mat4Identity());
