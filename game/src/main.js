@@ -604,10 +604,13 @@ if (params.sim) {
         const isBike = v.type === 'motorbike' || v.type === 'scooter' || v.type === 'bajaj';
         if (!isBike) {
           for (const side of [-1, 1]) {
-            const hx = v.x + fx * (tune.len / 2) + rx * side * (tune.w / 2 - 0.3);
-            const hz = v.z + fz * (tune.len / 2) + rz * side * (tune.w / 2 - 0.3);
-            hl.matrices.push(mat4TRS(hx, v.y + 0.6, hz, v.heading, 1, 1, 1));
-            hl.tints.push([1, 1, 1]);
+            // Lens sits PROUD of the fascia (+0.06 past the nose) at the
+            // lamp height (0.72), so the solid fascia never buries it —
+            // the lens must read as clearly ON at night.
+            const hx = v.x + fx * (tune.len / 2 + 0.06) + rx * side * (tune.w / 2 - 0.3);
+            const hz = v.z + fz * (tune.len / 2 + 0.06) + rz * side * (tune.w / 2 - 0.3);
+            hl.matrices.push(mat4TRS(hx, v.y + 0.72, hz, v.heading, 1, 1, 1));
+            hl.tints.push([1.3, 1.2, 0.9]);
           }
           // Taillights: dim red at night, bright red when braking.
           for (const side of [-1, 1]) {
@@ -693,8 +696,8 @@ if (params.sim) {
         if (d > cull) continue;
         const tune = VEHICLES[v.type];
         const fx = Math.sin(v.heading), fz = Math.cos(v.heading);
-        bl.matrices.push(mat4TRS(v.x + fx * (tune.len / 2 + 0.02), v.y + 0.95, v.z + fz * (tune.len / 2 + 0.02), v.heading, 1, 1, 1));
-        bl.tints.push(isNight ? [1, 0.95, 0.7] : [0.4, 0.38, 0.3]);
+        bl.matrices.push(mat4TRS(v.x + fx * (tune.len / 2 + 0.06), v.y + 0.95, v.z + fz * (tune.len / 2 + 0.06), v.heading, 1, 1, 1));
+        bl.tints.push(isNight ? [1.3, 1.2, 0.9] : [0.4, 0.38, 0.3]);
         if (isNight && v.speed >= 0.5) {
           bl.matrices.push(mat4TRS(v.x - fx * (tune.len / 2 + 0.02), v.y + 0.7, v.z - fz * (tune.len / 2 + 0.02), v.heading, 1.2, 0.8, 0.7));
           bl.tints.push(v.braking ? [1, 0.08, 0.08] : [0.45, 0.05, 0.05]);

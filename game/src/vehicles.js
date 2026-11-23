@@ -1555,10 +1555,11 @@ export function buildWheelGeomFar() {
 // opening to ~1.4 m radius; vertex colours fade apex -> base so the beam
 // dissolves into the dark instead of ending in a hard ring. Each wall
 // triangle is emitted twice (both windings) so the cone reads from every
-// angle with backface culling on.
+// angle with backface culling on. Base stays warm (not near-black) so the
+// beam is actually visible in the air, not just a pool on the ground.
 export function beamConeGeom() {
   const g = emptyGeom();
-  const SEG = 10, LEN = 15, R = 1.0;
+  const SEG = 10, LEN = 15, R = 1.15;
   const apex = [0, 0, 0];
   const ring = [];
   for (let k = 0; k < SEG; k++) {
@@ -1571,8 +1572,41 @@ export function beamConeGeom() {
     g.pos.push(...apex, ...b1, ...b0, ...apex, ...b0, ...b1);
     for (let j = 0; j < 6; j++) g.nrm.push(...n);
     g.col.push(
-      1, 0.95, 0.75, 0.12, 0.1, 0.08, 0.12, 0.1, 0.08,
-      1, 0.95, 0.75, 0.12, 0.1, 0.08, 0.12, 0.1, 0.08);
+      1, 0.95, 0.75, 0.42, 0.36, 0.26, 0.42, 0.36, 0.26,
+      1, 0.95, 0.75, 0.42, 0.36, 0.26, 0.42, 0.36, 0.26);
+  }
+  return g;
+}
+
+// Headlight beam pool (replaces the flat quad): a subdivided strip whose
+// vertex colours fade with distance from the car AND toward the side
+// edges, so the pool is a soft glow that dissolves into the road —
+// never a hard-edged washed-out patch. Local space: x +/-0.5 across,
+// z -0.5 (at the bumper) .. +0.5 (far end); the instance matrix scales
+// it to (beamW, 1, beamLen) and puts it ahead of the car.
+export function beamPoolGeom() {
+  const g = emptyGeom();
+  const n = [0, 1, 0];
+  const NZ = 5, NX = 3; // segments along length / across width
+  const WARM = [1, 0.93, 0.75];
+  const colAt = (x, z) => {
+    const t = z + 0.5; // 0 at the car, 1 at the far end
+    const s = Math.abs(x) * 2; // 0 centre, 1 at the side edge
+    const b = Math.pow(1 - t, 1.6) * (1 - 0.65 * s * s);
+    return WARM.map((c) => c * Math.max(0, b));
+  };
+  const quad = (ax, az, bx, bz, cx, cz, dx, dz) => {
+    const P = (x, z) => [x, 0, z];
+    g.pos.push(...P(ax, az), ...P(bx, bz), ...P(cx, cz), ...P(ax, az), ...P(cx, cz), ...P(dx, dz));
+    for (let k = 0; k < 6; k++) g.nrm.push(...n);
+    g.col.push(...colAt(ax, az), ...colAt(bx, bz), ...colAt(cx, cz), ...colAt(ax, az), ...colAt(cx, cz), ...colAt(dx, dz));
+  };
+  for (let j = 0; j < NZ; j++) {
+    for (let i = 0; i < NX; i++) {
+      const x0 = -0.5 + i / NX, x1 = -0.5 + (i + 1) / NX;
+      const z0 = -0.5 + j / NZ, z1 = -0.5 + (j + 1) / NZ;
+      quad(x0, z0, x1, z0, x1, z1, x0, z1);
+    }
   }
   return g;
 }
@@ -1610,7 +1644,9 @@ export function parkedCarGeom(color) {
   return g;
 }
 
-// Headlight dots (unlit, drawn only at night): two per vehicle.
+// Headlight dots (unlit, drawn only at night): two per vehicle. Bigger
+// than the fascia lamp plate so the lens reads as clearly ON — a bright
+// warm-white glow, not a dark rectangle.
 export function headlightGeom() {
-  return plainBox(0.3, 0.18, 0.12, [1.0, 0.95, 0.7]);
+  return plainBox(0.4, 0.24, 0.12, [1.0, 0.95, 0.7]);
 }

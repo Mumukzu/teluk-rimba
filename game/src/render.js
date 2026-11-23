@@ -10,8 +10,8 @@ import { buildBuildingMeshes, buildTreeMesh, buildPalmMesh, buildLitWindows } fr
 import { buildRoadMesh, buildLampMeshes, buildTrafficLightMesh } from './roads.js';
 import { buildBeachPropMeshes } from './beach.js';
 import { buildLandmarks } from './landmarks.js';
-import { buildMoonGeom, buildStarsSpec } from './sky.js';
-import { buildVehicleBodyGeoms, buildVehicleGlassGeoms, headlightGeom, buildWheelGeom, buildWheelGeomFar, buildBikeFrontGeom, beamConeGeom, tailGeom, beaconGeom } from './vehicles.js';
+import { buildMoonGeom, buildStarsSpec, buildSkyDomeGeom, buildCloudSpec, skyColors } from './sky.js';
+import { buildVehicleBodyGeoms, buildVehicleGlassGeoms, headlightGeom, buildWheelGeom, buildWheelGeomFar, buildBikeFrontGeom, beamConeGeom, beamPoolGeom, tailGeom, beaconGeom } from './vehicles.js';
 import { pedTorsoGeom, pedLegsGeom, pedHeadGeom, pedHairGeom } from './peds.js';
 import { buildWetGeoms } from './weather.js';
 import { buildNightLightGeoms } from './nightlights.js';
@@ -123,13 +123,12 @@ export function createRenderer(canvas, city) {
   // a soft glow the road shows through — 0.38 washed the whole avenue
   // into a solid tan sheet from street level.
   addStatic(progs.transp, nightPools.pools, mat4Identity(), { transparent: true, alpha: 0.2, nightOnly: true });
-  // Clouds drift: three separate static meshes sharing one geometry.
-  const cloudMesh = createMesh(gl, progs.lit, world.clouds);
-  const cloudModels = [
-    { x: -300, y: 190, z: -200, dx: 0.6 },
-    { x: 200, y: 210, z: 300, dx: 0.4 },
-    { x: -100, y: 175, z: 500, dx: 0.5 },
-  ];
+  // Living sky: gradient dome (1 draw) + drifting cloud puffs, one
+  // dynamic instanced mesh (1 draw) — replaces the old 3 static cloud
+  // meshes. Net: 2 sky draws instead of 3.
+  const skyDomeMesh = createMesh(gl, progs.sky, buildSkyDomeGeom());
+  const cloudSpec = buildCloudSpec();
+  const cloudMesh = createDynamicInstancedMesh(gl, progs.unlitInst, cloudSpec.geom, cloudSpec.clouds.length);
   // Dynamic instanced meshes: one per vehicle type + peds (3 parts) +
   // rain streaks + headlights + the lighthouse beam.
   for (const [type, geom] of Object.entries(vehicleGeoms)) {
@@ -175,7 +174,9 @@ export function createRenderer(canvas, city) {
     for (let k = 0; k < 6; k++) { g.nrm.push(...n); g.col.push(...white); }
     return g;
   })();
-  addDyn(progs.transpInst, flatQuadGeom, 220, 'headbeams');
+  // Headlight beam pool: subdivided strip whose colours fade with
+  // distance, so the pool is a soft glow — never a hard washed-out patch.
+  addDyn(progs.transpInst, beamPoolGeom(), 220, 'headbeams');
   addDyn(progs.transpInst, flatQuadGeom, 48, 'flow');
 
   let calls = 0, tris = 0;
@@ -219,6 +220,7 @@ export function createRenderer(canvas, city) {
     const rainAmt = state.weather ? state.weather.rain : 0;
     const wetAmt = state.weather ? state.weather.wet : 0;
     const light = lightFor(timeHours, rainAmt);
+    const sky = skyColors(timeHours, rainAmt);
     gl.clearColor(light.sky[0], light.sky[1], light.sky[2], 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     const proj = mat4Perspective((55 * Math.PI) / 180, canvas.width / canvas.height, 0.5, 4000);
@@ -235,6 +237,36 @@ export function createRenderer(canvas, city) {
       uSpotOn: spot && spot.on ? 1 : 0,
     };
     calls = 0; tris = 0;
+    // Sky dome first (1 draw): a unit hemisphere centred on the camera,
+    // scaled to radius 1600. It is far behind everything, so the depth
+    // test lets the city draw over it normally.
+    {
+      const domeModel = mat4Identity();
+      domeModel[0] = 1600; domeModel[5] = 1600; domeModel[10] = 1600;
+      domeModel[12] = eye[0]; domeModel[13] = 0; domeModel[14] = eye[2];
+      tris += drawMesh(gl, progs.sky, skyDomeMesh, {
+        uProj: proj, uView: view, uModel: domeModel,
+        uTopColor: sky.top, uHorizonColor: sky.horizon,
+        uSunDirTo: sky.sunDirTo, uSunGlow: sky.sunGlow,
+      });
+      calls++;
+    }
+    // Clouds (1 draw): drift slowly with the wind, wrap across the map;
+    // tint + size follow the time of day and the rain (thicker, greyer,
+    // slightly lower when it rains; thin and dark at night).
+    {
+      const matrices = [], tints = [];
+      for (const c of cloudSpec.clouds) {
+        let x = c.x + elapsed * c.drift;
+        x = ((x + 1100) % 2200 + 2200) % 2200 - 1100;
+        const s = c.scale * sky.rainScale;
+        matrices.push(mat4TRS(x, c.y - rainAmt * 18, c.z, 0, s, s, s));
+        tints.push(sky.cloudTint.map((v) => v * c.shade));
+      }
+      updateDynamicInstancedMesh(gl, cloudMesh, matrices, tints);
+      tris += drawMesh(gl, progs.unlitInst, cloudMesh, { uProj: proj, uView: view, uFogColor: light.sky, uFogNear: 500, uFogFar: 2600 });
+      calls++;
+    }
     const drawEntry = (entry) => {
       if (entry.nightOnly && light.isDay) return;
       if (entry.wetOnly && wetAmt < 0.05) return;
@@ -272,7 +304,7 @@ export function createRenderer(canvas, city) {
       updateDynamicInstancedMesh(gl, entry.mesh, spec.matrices, spec.tints);
       const uniforms = { ...common, uModel: mat4Identity() };
       const blendAlpha = name.startsWith('vehglass_') ? 0.42
-        : { beam: 0.12, headbeams: 0.14, flow: 0.3, heliBeam: 0.15, beamcones: 0.18 }[name];
+        : { beam: 0.12, headbeams: 0.09, flow: 0.3, heliBeam: 0.15, beamcones: 0.24 }[name];
       if (blendAlpha !== undefined) {
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -282,14 +314,6 @@ export function createRenderer(canvas, city) {
       } else {
         tris += drawMesh(gl, entry.prog, entry.mesh, uniforms);
       }
-      calls++;
-    }
-    // Clouds drift slowly with time.
-    for (const c of cloudModels) {
-      const model = mat4Identity();
-      model[12] = c.x + ((elapsed * c.dx) % 1400) - 700;
-      model[13] = c.y; model[14] = c.z;
-      tris += drawMesh(gl, progs.lit, cloudMesh, { ...common, uModel: model });
       calls++;
     }
   }

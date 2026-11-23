@@ -175,8 +175,36 @@ export function createPrograms(gl) {
     unlitInst: compileProgram(gl, UNLIT_INST_VS, UNLIT_FS),
     transp: compileProgram(gl, TRANSP_VS, TRANSP_FS),
     transpInst: compileProgram(gl, TRANSP_INST_VS, TRANSP_FS),
+    sky: compileProgram(gl, SKY_VS, SKY_FS),
   };
 }
+
+// Sky dome: vertical gradient (horizon -> zenith) + a soft warm glow
+// around the sun at dawn/dusk. No fog, no lighting — the dome IS the sky.
+const SKY_VS = `
+  attribute vec3 aPos; attribute vec3 aColor;
+  uniform mat4 uProj; uniform mat4 uView; uniform mat4 uModel;
+  varying vec3 vLocal;
+  void main() {
+    vLocal = aPos;
+    gl_Position = uProj * uView * uModel * vec4(aPos, 1.0);
+  }
+`;
+
+const SKY_FS = `
+  precision mediump float;
+  varying vec3 vLocal;
+  uniform vec3 uTopColor; uniform vec3 uHorizonColor;
+  uniform vec3 uSunDirTo; uniform vec3 uSunGlow;
+  void main() {
+    vec3 dir = normalize(vLocal);
+    float h = clamp(dir.y, 0.0, 1.0);
+    vec3 col = mix(uHorizonColor, uTopColor, pow(h, 0.6));
+    float g = max(dot(dir, uSunDirTo), 0.0);
+    col += uSunGlow * (pow(g, 24.0) * 0.7 + pow(g, 6.0) * 0.18);
+    gl_FragColor = vec4(col, 1.0);
+  }
+`;
 
 const TRANSP_VS = `
   attribute vec3 aPos; attribute vec3 aColor;

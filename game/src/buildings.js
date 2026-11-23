@@ -230,7 +230,9 @@ export function buildPalmMesh(city) {
 export function buildLitWindows(city) {
   // Warm lit windows: small bright quads on building facades, drawn with
   // the unlit program ONLY at night, so the city glitters after dark while
-  // the sky and horizon stay dark. One instanced draw call.
+  // the sky and horizon stay dark. One instanced draw call, ~10,500
+  // windows (was ~3,300): every face of every building carries lights,
+  // warm yellow mostly, some white, some windows left dark for contrast.
   const quad = (() => {
     const g = { pos: [], nrm: [], col: [] };
     const white = [1, 1, 1];
@@ -242,21 +244,38 @@ export function buildLitWindows(city) {
     return g;
   })();
   const matrices = [], tints = [];
-  const WARM = [[1, 0.85, 0.55], [1, 0.78, 0.45], [0.95, 0.9, 0.65]];
+  const WARM = [[1, 0.85, 0.55], [1, 0.78, 0.45], [0.95, 0.9, 0.65], [1, 0.95, 0.8]];
   const COOL = [[0.7, 0.85, 1], [0.8, 0.9, 1]];
-  const perZone = { downtown: 8, commercial: 5, residential: 2, beach: 4, port: 2, forest: 1 };
+  const perZone = { downtown: 24, commercial: 15, residential: 7, beach: 12, port: 6, forest: 3 };
   for (const b of city.buildings) {
-    const n = perZone[b.zone] || 2;
+    const n = perZone[b.zone] || 3;
     for (let k = 0; k < n; k++) {
       const h = (k * 2654435761) % 1000 / 1000;
-      const face = k % 2 === 0 ? 1 : -1;
+      // Four faces: 0:+d, 1:-d, 2:+w, 3:-w — windows wrap the building.
+      const face = k % 4;
       const along = ((k * 40503) % 100) / 100 - 0.5;
       const y = 2.5 + h * Math.max(2, b.h - 5);
-      const fx = b.x + Math.sin(b.rot) * (b.d / 2 + 0.08) * face + Math.cos(b.rot) * along * b.w * 0.7;
-      const fz = b.z + Math.cos(b.rot) * (b.d / 2 + 0.08) * face - Math.sin(b.rot) * along * b.w * 0.7;
-      const rotY = b.rot + (face > 0 ? 0 : Math.PI);
+      const sr = Math.sin(b.rot), cr = Math.cos(b.rot);
+      let fx, fz, rotY;
+      if (face === 0) { // +d face
+        fx = b.x + sr * (b.d / 2 + 0.08) + cr * along * b.w * 0.7;
+        fz = b.z + cr * (b.d / 2 + 0.08) - sr * along * b.w * 0.7;
+        rotY = b.rot;
+      } else if (face === 1) { // -d face
+        fx = b.x - sr * (b.d / 2 + 0.08) + cr * along * b.w * 0.7;
+        fz = b.z - cr * (b.d / 2 + 0.08) - sr * along * b.w * 0.7;
+        rotY = b.rot + Math.PI;
+      } else if (face === 2) { // +w face
+        fx = b.x + cr * (b.w / 2 + 0.08) + sr * along * b.d * 0.7;
+        fz = b.z - sr * (b.w / 2 + 0.08) + cr * along * b.d * 0.7;
+        rotY = b.rot + Math.PI / 2;
+      } else { // -w face
+        fx = b.x - cr * (b.w / 2 + 0.08) + sr * along * b.d * 0.7;
+        fz = b.z + sr * (b.w / 2 + 0.08) + cr * along * b.d * 0.7;
+        rotY = b.rot - Math.PI / 2;
+      }
       matrices.push(mat4TRS(fx, y, fz, rotY, 1, 1, 1));
-      const warm = ((k * 7 + b.x) % 10) < 7;
+      const warm = ((k * 7 + b.x) % 10) < 8; // ~80% warm yellow, rest cool white
       const pal = warm ? WARM : COOL;
       tints.push(pal[(k + Math.floor(Math.abs(b.x))) % pal.length]);
     }
