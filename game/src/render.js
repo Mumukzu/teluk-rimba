@@ -12,6 +12,7 @@ import { buildDirectionSigns } from './signs.js';
 import { buildShopSigns } from './shopsigns.js';
 import { buildRooftopSigns } from './rooftopsigns.js';
 import { buildShopGlow } from './shopglow.js';
+import { buildLivelyMeshes } from './lively.js';
 import { buildBeachPropMeshes } from './beach.js';
 import { buildLandmarks } from './landmarks.js';
 import { buildMoonGeom, buildStarsSpec, buildSkyDomeGeom, buildCloudSpec, skyColors } from './sky.js';
@@ -52,6 +53,7 @@ export function createRenderer(canvas, city) {
   const rooftopSignTexture = rooftopSigns.atlasCanvas
     ? createCanvasTexture(gl, rooftopSigns.atlasCanvas) : null;
   const shopGlow = buildShopGlow(city);
+  const lively = buildLivelyMeshes(city); // varied shapes, facades, neon, street life, used roofs
   const stars = buildStarsSpec();
   const wet = buildWetGeoms();
   const nightPools = buildNightLightGeoms(city, landmarks);
@@ -101,6 +103,16 @@ export function createRenderer(canvas, city) {
   // Phase H building detail: ground-floor glass bands + roof decks +
   // parapet walls — one instanced draw each.
   addInst(progs.litInst, buildingMeshes.glassBand);
+  // Tall-building ground-floor glass (Mu): the warm interior core
+  // (night only) is drawn FIRST, then the transparent pale glass in
+  // front of it — glass writes depth, so the reverse order would hide
+  // the core behind it. (+1 draw by day, +2 at night.)
+  addInst(progs.unlitInst, buildingMeshes.glassGlow, { nightOnly: true });
+  addInst(progs.transpInst, buildingMeshes.glassBandTall, { transparent: true, alpha: 0.32 });
+  // Lively city (Mu): varied building shapes — stepped/setback tiers on
+  // tall blocks, pitched roofs on low houses. (+2 draws.)
+  addInst(progs.litInst, lively.stepped);
+  addInst(progs.litInst, lively.pitched);
   addInst(progs.litInst, buildingMeshes.roofDeck);
   addInst(progs.litInst, buildingMeshes.parapetNS);
   addInst(progs.litInst, buildingMeshes.parapetEW);
@@ -427,6 +439,7 @@ export function createRenderer(canvas, city) {
     get tris() { return tris; },
     dayLength: DAY_LENGTH,
     landmarks,
+    lively, // smoke spots / neon glow bases / laundry pieces (main.js buildDynamics)
     plotDressing, // yard fountain spots (animated water rides the flow mesh)
   };
 }

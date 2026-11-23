@@ -36,6 +36,12 @@ const GLASS_BAND = {
   residential: [0.45, 0.42, 0.38], beach: [0.45, 0.42, 0.38],
   port: [0.4, 0.4, 0.38], forest: [0.4, 0.4, 0.38],
 };
+// Warm interior glow tints for tall buildings (Mu: ground floors must
+// glow bright from INSIDE at night) — same warm palette as the shop glow.
+const GLASS_GLOW_TINTS = [
+  [1.0, 0.85, 0.60], [1.0, 0.85, 0.60], [1.0, 0.85, 0.60],
+  [1.0, 0.72, 0.70], [1.0, 0.78, 0.45],
+];
 const hash01 = (x, z) => {
   const s = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453;
   return s - Math.floor(s);
@@ -111,6 +117,12 @@ export function buildBuildingMeshes(gl, progs, city) {
   // Phase H: ground-floor glass band on every building, roof deck +
   // parapet walls on mid/tall buildings.
   const glassBandMatrices = [], glassBandTints = [];
+  // Mu (lively city): on TALL buildings (h >= 12, tower/mid-rise, every
+  // zone) the ground floor is REAL glass — a transparent pale band, not
+  // the dark solid panel — with a warm glowing interior core behind it
+  // that lights up at night from INSIDE the glass frame.
+  const glassBandTallMatrices = [], glassBandTallTints = [];
+  const glassGlowMatrices = [], glassGlowTints = [];
   const roofDeckMatrices = [], roofDeckTints = [];
   const parapetNSMatrices = [], parapetNSTints = [];
   const parapetEWMatrices = [], parapetEWTints = [];
@@ -136,8 +148,20 @@ export function buildBuildingMeshes(gl, progs, city) {
     // 0.06 proud of the facade (depth-safe at aerial range). The plinth
     // (0.3 proud) covers its bottom 0.6 m; the shopfront/entrance kits
     // sit proud of it, so the band reads around them, never through them.
-    glassBandMatrices.push(mat4TRS(b.x, 1.1, b.z, b.rot, b.w + 0.12, 2.2, b.d + 0.12));
-    glassBandTints.push(GLASS_BAND[b.zone] || [0.4, 0.42, 0.4]);
+    // Tall buildings get the transparent pale band + warm interior core
+    // (drawn with the transparent / night-only programs in render.js);
+    // low houses keep the dark lit band.
+    if (b.h >= 12) {
+      glassBandTallMatrices.push(mat4TRS(b.x, 1.1, b.z, b.rot, b.w + 0.14, 2.2, b.d + 0.14));
+      glassBandTallTints.push([0.85, 0.92, 1.0]); // pale blue-white glass
+      glassGlowMatrices.push(mat4TRS(b.x, 1.05, b.z, b.rot, b.w + 0.02, 1.9, b.d + 0.02));
+      const gt = GLASS_GLOW_TINTS[Math.floor(hash01(b.x + 5, b.z + 9) * GLASS_GLOW_TINTS.length)];
+      const gj = 0.85 + hash01(b.x, b.z + 4) * 0.15;
+      glassGlowTints.push([gt[0] * gj, gt[1] * gj, gt[2] * gj]);
+    } else {
+      glassBandMatrices.push(mat4TRS(b.x, 1.1, b.z, b.rot, b.w + 0.12, 2.2, b.d + 0.12));
+      glassBandTints.push(GLASS_BAND[b.zone] || [0.4, 0.42, 0.4]);
+    }
     // Roof deck + parapet walls on mid/tall buildings: a slab on the roof
     // (0.6 of the footprint) ringed by low walls at the roof-slab edge.
     if (b.h >= 12) {
@@ -221,6 +245,12 @@ export function buildBuildingMeshes(gl, progs, city) {
     balconies: part(buildBalconyGeom(), balconyMatrices, balconyTints),
     roofUnits: part(buildRoofUnitGeom(), roofUnitMatrices, roofUnitTints),
     glassBand: part(unitBox, glassBandMatrices, glassBandTints),
+    // Tall-building ground-floor glass (transparent, pale) + its warm
+    // interior glow core (night only). The glow is drawn BEFORE the
+    // glass in render.js: glass writes depth, so the reverse order
+    // would hide the core behind it.
+    glassBandTall: part(unitBox, glassBandTallMatrices, glassBandTallTints),
+    glassGlow: part(unitBox, glassGlowMatrices, glassGlowTints),
     roofDeck: part(unitBox, roofDeckMatrices, roofDeckTints),
     parapetNS: { geom: parapetNSGeom, matrices: parapetNSMatrices, tints: parapetNSTints, prog: progs.litInst },
     parapetEW: { geom: parapetEWGeom, matrices: parapetEWMatrices, tints: parapetEWTints, prog: progs.litInst },
