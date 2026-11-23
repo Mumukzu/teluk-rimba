@@ -13,6 +13,29 @@ import { emptyGeom, plainBox, prismY, mat4TRS, mat4Multiply } from './gl.js';
 
 const SEED = 20261123;
 
+// Distinct colour per vehicle (Mu: every car colourful, no two the same).
+// Golden-angle hues spread the palette as far apart as possible, and
+// three lightness steps keep even near hues visually apart. Deterministic:
+// the same spawn order always yields the same fleet.
+export function hsl(h, s, l) { // h 0..360, s/l 0..1 -> [r, g, b] 0..1
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  let r, g, b;
+  if (h < 60) [r, g, b] = [c, x, 0];
+  else if (h < 120) [r, g, b] = [x, c, 0];
+  else if (h < 180) [r, g, b] = [0, c, x];
+  else if (h < 240) [r, g, b] = [0, x, c];
+  else if (h < 300) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+  return [r + m, g + m, b + m];
+}
+export function distinctColor(i) {
+  const hue = (i * 137.508) % 360;
+  const light = [0.5, 0.58, 0.44][i % 3];
+  return hsl(hue, 0.62, light);
+}
+
 // Bright, clearly varied colours per vehicle (Mu: colourful, not all
 // grey/white) — saturated enough to read at a glance, still pleasant,
 // never neon. Emergency vehicles keep their real colours below.
@@ -216,6 +239,12 @@ export function createTraffic(city, opts = {}) {
 
   const vehicles = [];
   let nextId = 1;
+  // One colour allocator for the whole fleet (moving + parked + boats +
+  // mission spawns): every vehicle gets its own distinct colour, no two
+  // alike — police included (they still read as police via the light bar
+  // + black doors + push bar).
+  let colorIdx = 0;
+  const nextColor = () => distinctColor(colorIdx++);
 
   function spawnOnEdge(type, edge, s, lane) {
     const d = edgeDir(edge);
@@ -232,15 +261,17 @@ export function createTraffic(city, opts = {}) {
       speed: 0, targetSpeed: tune.maxSpeed * range(rand, 0.55, 0.85),
       x: 0, z: 0, heading: 0, y: 0,
       parked: false, driven: false, dwell: 0,
-      mode: 'drive', color: PASTEL[Math.floor(rand() * PASTEL.length)],
+      mode: 'drive', color: nextColor(),
       route: null, routeIdx: 0,
       spin: 0, steerVis: 0, lean: 0, prevHeading: 0, braking: false,
     };
+    // Emergency vehicles keep their real colours (only 2 firetrucks and 3
+    // ambulances exist, so no duplicates). Police, angkot and bajaj take
+    // their distinct colour from the allocator — they still read as what
+    // they are via the light bar + black doors (police), the roof sign
+    // (angkot), and the three-wheel shape (bajaj).
     if (type === 'firetruck') v.color = [0.85, 0.32, 0.28];
     if (type === 'ambulance') v.color = [0.97, 0.97, 0.96];
-    if (type === 'police') v.color = [0.96, 0.96, 0.96];
-    if (type === 'angkot') v.color = [0.45, 0.75, 0.65];
-    if (type === 'bajaj') v.color = [0.92, 0.68, 0.3];
     placeOnEdge(v);
     vehicles.push(v);
     return v;
@@ -362,7 +393,7 @@ export function createTraffic(city, opts = {}) {
       speed: 0, targetSpeed: 0, x: spot.x, z: spot.z,
       heading: spot.heading, y: Math.max(0, terrainHeight(spot.x, spot.z)),
       parked: true, driven: false, dwell: 0, mode: 'parked',
-      color: PASTEL[Math.floor(rand() * PASTEL.length)], route: null, routeIdx: 0,
+      color: nextColor(), route: null, routeIdx: 0,
       spin: 0, steerVis: 0, lean: 0, prevHeading: spot.heading, braking: false,
     };
     vehicles.push(v);
@@ -377,7 +408,7 @@ export function createTraffic(city, opts = {}) {
       id: nextId++, type, waypoints, wp: 0, speed,
       x: waypoints[0][0], z: waypoints[0][1], heading: 0, y: SEA_LEVEL,
       parked: false, driven: false, mode: 'sail',
-      color: PASTEL[Math.floor(rand() * PASTEL.length)],
+      color: nextColor(),
     };
     boats.push(b);
     return b;
@@ -492,7 +523,7 @@ export function createTraffic(city, opts = {}) {
         speed: 0, targetSpeed: 0, x, z,
         heading, y: Math.max(0, terrainHeight(x, z)),
         parked: true, driven: false, dwell: 0, mode: 'parked',
-        color: PASTEL[Math.floor(rand() * PASTEL.length)], route: null, routeIdx: 0,
+        color: nextColor(), route: null, routeIdx: 0,
         spin: 0, steerVis: 0, lean: 0, prevHeading: heading, braking: false,
       };
       vehicles.push(v);
@@ -505,7 +536,7 @@ export function createTraffic(city, opts = {}) {
         id: nextId++, type: 'boat', waypoints: [[x, z]], wp: 0, speed: 0,
         x, z, heading: Math.PI / 2, y: SEA_LEVEL,
         parked: true, driven: false, mode: 'parked',
-        color: PASTEL[Math.floor(rand() * PASTEL.length)],
+        color: nextColor(),
       };
       boats.push(b);
       return b;

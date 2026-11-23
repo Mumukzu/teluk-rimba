@@ -146,7 +146,7 @@ if (params.drive && VEHICLES[params.drive]) {
     speed: 0, targetSpeed: 0, x: player.state.x, z: player.state.z,
     heading: 0, y: Math.max(0, terrainHeight(player.state.x, player.state.z)),
     parked: true, driven: false, dwell: 0, mode: 'parked',
-    color: [0.88, 0.66, 0.6], route: null, routeIdx: 0,
+    color: [0.93, 0.2, 0.62], route: null, routeIdx: 0, // vivid magenta: distinct from every fleet colour (test-only spawn)
     spin: 0, steerVis: 0, lean: 0, prevHeading: 0, braking: false,
   };
   traffic.vehicles.push(fresh);

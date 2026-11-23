@@ -6,7 +6,7 @@
 import { mulberry32, range, rangeInt } from './rng.js';
 import { riverDistance } from './city.js';
 import { emptyGeom, plainBox } from './gl.js';
-import { PASTEL, parkedCarGeom } from './vehicles.js';
+import { distinctColor, parkedCarGeom } from './vehicles.js';
 
 const PAVE = [0.78, 0.78, 0.76]; // light grey paving
 const FENCE_COL = [0.85, 0.82, 0.72];
@@ -65,6 +65,9 @@ export function buildPlotDressing(city) {
   const props = emptyGeom();
   const dressed = [];
   let cars = 0, fences = 0, flowers = 0, benches = 0;
+  // Decorative parked cars get distinct colours too (same allocator as
+  // the traffic fleet, continuing its sequence).
+  let colorIdx = 1000;
 
   const blocks = city.blocks.filter((b) =>
     (b.zone === 'downtown' || b.zone === 'commercial' || b.zone === 'residential'));
@@ -99,7 +102,7 @@ export function buildPlotDressing(city) {
     for (let k = 0; k < nCars; k++) {
       const s = spot(2.2, 1.2);
       if (!s) continue;
-      addPart(props, parkedCarGeom(PASTEL[Math.floor(rand() * PASTEL.length)]), s.x, 0.06, s.z, range(rand, 0, Math.PI * 2));
+      addPart(props, parkedCarGeom(distinctColor(colorIdx++)), s.x, 0.06, s.z, range(rand, 0, Math.PI * 2));
       cars++;
     }
     // Fences: low runs along two inner edges of the block.
