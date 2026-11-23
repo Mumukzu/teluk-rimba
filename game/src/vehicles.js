@@ -403,87 +403,255 @@ export function createTraffic(city, opts = {}) {
 }
 
 // ---- geometry builders (code-made, one mesh per vehicle type) ----
-
-function wheelGeom() {
-  return plainBox(0.14, 0.55, 0.55, [0.1, 0.1, 0.11]);
+// Local frame: X = length (front +X), Y = up from the ground, Z = width.
+// A sedan reads as a sedan: low body, sloped hood + trunk, glasshouse with
+// a roof panel and pillars, bumpers, headlights / taillights, grille,
+// mirrors, and wheels that are discs in the X-Y plane (thin in Z).
+// The OLD wheel box was thin in X (0.14 x 0.55 x 0.55), so from behind
+// every car read as a table on stilts — that is fixed here.
+function xlate(part, x, y, z) {
+  for (let i = 0; i < part.pos.length; i += 3) {
+    part.pos[i] += x; part.pos[i + 1] += y; part.pos[i + 2] += z;
+  }
+  return part;
+}
+// Rotate a part around the Z axis (in the X-Y plane) about pivot (cx, cy):
+// used for sloped hoods / trunks / windshields. Normals rotate too.
+function rotZ(part, a, cx, cy) {
+  const c = Math.cos(a), s = Math.sin(a);
+  for (let i = 0; i < part.pos.length; i += 3) {
+    const dx = part.pos[i] - cx, dy = part.pos[i + 1] - cy;
+    part.pos[i] = cx + dx * c - dy * s;
+    part.pos[i + 1] = cy + dx * s + dy * c;
+  }
+  for (let i = 0; i < part.nrm.length; i += 3) {
+    const nx = part.nrm[i], ny = part.nrm[i + 1];
+    part.nrm[i] = nx * c - ny * s;
+    part.nrm[i + 1] = nx * s + ny * c;
+  }
+  return part;
+}
+function addTo(g, part) {
+  g.pos.push(...part.pos); g.nrm.push(...part.nrm); g.col.push(...part.col);
+  return g;
 }
 
-// Generic car: body + glass cabin + 4 wheels. Body vertex colour is white
-// so the per-instance tint paints it; cabin glass and wheels stay dark.
-export function carGeom({ len, w, bodyH, cabinLen, cabinH, cabinX }) {
+const DARK = [0.16, 0.16, 0.18];
+const GLASS = [0.22, 0.28, 0.36];
+const LIGHT_GLASS = [0.7, 0.85, 0.95];
+const WARM_LIGHT = [1.0, 0.95, 0.75];
+const RED_LIGHT = [0.9, 0.15, 0.15];
+const TYRE = [0.1, 0.1, 0.11];
+const HUB = [0.75, 0.75, 0.78];
+
+function wheelGeom(dia = 0.55) {
+  return plainBox(dia, dia, 0.14, TYRE);
+}
+// Wheel + hubcap at (x, z); dia = tyre diameter.
+function addWheel(g, x, z, dia = 0.55) {
+  addTo(g, xlate(wheelGeom(dia), x, dia / 2, z));
+  const side = z >= 0 ? 1 : -1;
+  addTo(g, xlate(plainBox(0.3, 0.3, 0.04, HUB), x, dia / 2, z + side * 0.09));
+}
+
+// Generic car: low body + sloped hood/trunk slabs, glasshouse (dark glass
+// band + body-colour roof panel + pillars), bumpers, lights, grille,
+// mirrors. Body parts are white so the per-instance tint paints them.
+export function carGeom({ len, w, bodyH, cabinLen, cabinH, cabinX, hoodSlope = 0.16, wing = false, spare = false, band = false }) {
   const g = emptyGeom();
-  const body = plainBox(len, bodyH, w, [1, 1, 1]);
-  for (let i = 0; i < body.pos.length; i += 3) body.pos[i + 1] += bodyH / 2 + 0.35;
-  const cabin = plainBox(cabinLen, cabinH, w * 0.82, [0.22, 0.28, 0.36]);
-  for (let i = 0; i < cabin.pos.length; i += 3) { cabin.pos[i] += cabinX; cabin.pos[i + 1] += bodyH + 0.35 + cabinH / 2; }
-  const parts = [body, cabin];
-  for (const [wx, wz] of [[len / 2 - 0.7, w / 2 - 0.05], [len / 2 - 0.7, -w / 2 + 0.05], [-len / 2 + 0.7, w / 2 - 0.05], [-len / 2 + 0.7, -w / 2 + 0.05]]) {
-    const wh = wheelGeom();
-    for (let i = 0; i < wh.pos.length; i += 3) { wh.pos[i] += wx; wh.pos[i + 1] += 0.28; wh.pos[i + 2] += wz; }
-    parts.push(wh);
+  const bodyTop = 0.35 + bodyH;
+  const glassY = bodyTop + 0.05 + cabinH / 2;
+  addTo(g, xlate(plainBox(len, bodyH, w, [1, 1, 1]), 0, 0.35 + bodyH / 2, 0));
+  // Sloped hood (front dips) + sloped trunk lid.
+  addTo(g, rotZ(xlate(plainBox(1.15, 0.14, w - 0.25, [1, 1, 1]), len / 2 - 0.75, bodyTop + 0.05, 0), -hoodSlope, len / 2 - 0.75, bodyTop + 0.05));
+  addTo(g, rotZ(xlate(plainBox(0.95, 0.14, w - 0.25, [1, 1, 1]), -len / 2 + 0.6, bodyTop + 0.05, 0), 0.1, -len / 2 + 0.6, bodyTop + 0.05));
+  // Glasshouse: dark glass band + body-colour roof + corner pillars.
+  addTo(g, xlate(plainBox(cabinLen, cabinH, w * 0.78, GLASS), cabinX, glassY, 0));
+  addTo(g, xlate(plainBox(cabinLen * 0.9, 0.09, w * 0.8, [1, 1, 1]), cabinX, bodyTop + 0.05 + cabinH + 0.04, 0));
+  for (const px of [cabinX - cabinLen / 2 + 0.12, cabinX + cabinLen / 2 - 0.12]) {
+    for (const pz of [w * 0.78 / 2 - 0.07, -w * 0.78 / 2 + 0.07]) {
+      addTo(g, xlate(plainBox(0.14, cabinH, 0.14, [1, 1, 1]), px, glassY, pz));
+    }
   }
-  for (const p of parts) { g.pos.push(...p.pos); g.nrm.push(...p.nrm); g.col.push(...p.col); }
+  // Window dividers for vans/angkot: split the glass band into windows.
+  if (band) {
+    for (const px of [cabinX - cabinLen / 4, cabinX + cabinLen / 4]) {
+      for (const pz of [w * 0.78 / 2 + 0.01, -w * 0.78 / 2 - 0.01]) {
+        addTo(g, xlate(plainBox(0.1, cabinH * 0.9, 0.05, [1, 1, 1]), px, glassY, pz));
+      }
+    }
+  }
+  // Bumpers, headlights, taillights, grille, mirrors.
+  for (const sx of [1, -1]) {
+    addTo(g, xlate(plainBox(0.22, 0.2, w - 0.15, DARK), sx * (len / 2 - 0.02), 0.42, 0));
+  }
+  for (const pz of [w / 2 - 0.42, -w / 2 + 0.42]) {
+    addTo(g, xlate(plainBox(0.1, 0.15, 0.32, WARM_LIGHT), len / 2 + 0.02, 0.72, pz));
+    addTo(g, xlate(plainBox(0.1, 0.15, 0.32, RED_LIGHT), -len / 2 - 0.02, 0.72, pz));
+  }
+  addTo(g, xlate(plainBox(0.08, 0.16, w * 0.45, DARK), len / 2 + 0.02, 0.52, 0));
+  for (const pz of [w / 2 + 0.04, -w / 2 - 0.04]) {
+    addTo(g, xlate(plainBox(0.16, 0.07, 0.12, DARK), cabinX + 0.5, bodyTop + 0.25, pz));
+  }
+  // Rear wing (supercar) / spare tyre + roof rack (jeep).
+  if (wing) {
+    addTo(g, xlate(plainBox(0.5, 0.07, w * 0.85, [1, 1, 1]), -len / 2 + 0.35, bodyTop + 0.45, 0));
+    for (const pz of [0.5, -0.5]) addTo(g, xlate(plainBox(0.08, 0.4, 0.08, DARK), -len / 2 + 0.35, bodyTop + 0.25, pz));
+  }
+  if (spare) {
+    addTo(g, xlate(plainBox(0.55, 0.55, 0.14, TYRE), -len / 2 - 0.08, 0.75, 0));
+    addTo(g, xlate(plainBox(2.2, 0.08, 1.2, DARK), 0, bodyTop + 0.05 + cabinH + 0.14, 0));
+  }
+  for (const [wx, wz] of [[len / 2 - 0.75, w / 2 - 0.02], [len / 2 - 0.75, -w / 2 + 0.02], [-len / 2 + 0.75, w / 2 - 0.02], [-len / 2 + 0.75, -w / 2 + 0.02]]) {
+    addWheel(g, wx, wz);
+  }
+  return g;
+}
+
+// Bus: long body, window band split into individual windows, windshield,
+// destination sign, side door, bumpers, lights, mirrors.
+function busGeom() {
+  const g = emptyGeom();
+  addTo(g, xlate(plainBox(9, 1.0, 2.5, [1, 1, 1]), 0, 0.85, 0));
+  addTo(g, xlate(plainBox(8.4, 0.85, 2.52, GLASS), 0, 1.78, 0));
+  for (const px of [-3.36, -1.68, 0, 1.68, 3.36]) {
+    addTo(g, xlate(plainBox(0.12, 0.85, 2.54, [1, 1, 1]), px, 1.78, 0));
+  }
+  addTo(g, xlate(plainBox(9, 0.12, 2.5, [1, 1, 1]), 0, 2.26, 0));
+  addTo(g, xlate(plainBox(0.1, 0.95, 2.2, GLASS), 4.48, 1.55, 0));
+  addTo(g, xlate(plainBox(0.08, 0.28, 1.1, [1, 0.9, 0.5]), 4.5, 2.15, 0));
+  addTo(g, xlate(plainBox(0.06, 1.5, 0.85, [0.2, 0.22, 0.28]), 3.7, 1.1, 1.26));
+  for (const sx of [1, -1]) {
+    addTo(g, xlate(plainBox(0.25, 0.25, 2.4, DARK), sx * 4.45, 0.48, 0));
+  }
+  for (const pz of [0.85, -0.85]) {
+    addTo(g, xlate(plainBox(0.1, 0.2, 0.4, WARM_LIGHT), 4.52, 0.7, pz));
+    addTo(g, xlate(plainBox(0.1, 0.2, 0.4, RED_LIGHT), -4.52, 0.7, pz));
+    addTo(g, xlate(plainBox(0.18, 0.1, 0.14, DARK), 4.2, 1.9, pz > 0 ? 1.32 : -1.32));
+  }
+  for (const [wx, wz] of [[3.2, 1.18], [3.2, -1.18], [-3.2, 1.18], [-3.2, -1.18]]) addWheel(g, wx, wz, 0.7);
+  return g;
+}
+
+// Truck: cab with windshield + grille + bumper, ribbed cargo box, 6 wheels.
+function truckGeom() {
+  const g = emptyGeom();
+  addTo(g, xlate(plainBox(1.9, 1.7, 2.3, [1, 1, 1]), 2.35, 1.2, 0));
+  addTo(g, xlate(plainBox(0.1, 0.8, 1.9, GLASS), 3.32, 1.55, 0));
+  addTo(g, xlate(plainBox(0.08, 0.5, 1.6, DARK), 3.32, 0.75, 0));
+  addTo(g, xlate(plainBox(0.25, 0.25, 2.3, DARK), 3.3, 0.45, 0));
+  for (const pz of [0.85, -0.85]) {
+    addTo(g, xlate(plainBox(0.1, 0.18, 0.35, WARM_LIGHT), 3.34, 0.9, pz));
+    addTo(g, xlate(plainBox(0.16, 0.08, 0.12, DARK), 3.1, 1.7, pz > 0 ? 1.22 : -1.22));
+  }
+  addTo(g, xlate(plainBox(4.6, 2.0, 2.35, [0.85, 0.85, 0.82]), -0.9, 1.35, 0));
+  for (const px of [-2.2, -0.9, 0.4]) {
+    addTo(g, xlate(plainBox(0.1, 2.0, 2.39, [0.78, 0.78, 0.75]), px, 1.35, 0));
+  }
+  for (const [wx, wz] of [[2.6, 1.08], [2.6, -1.08], [-1.4, 1.08], [-1.4, -1.08], [-2.7, 1.08], [-2.7, -1.08]]) addWheel(g, wx, wz, 0.65);
+  return g;
+}
+
+// Fire truck: red body (tint), cab + windshield, ladder on top, light bar.
+function firetruckGeom() {
+  const g = emptyGeom();
+  addTo(g, xlate(plainBox(2.2, 1.9, 2.5, [1, 1, 1]), 2.5, 1.3, 0));
+  addTo(g, xlate(plainBox(0.1, 0.85, 2.0, GLASS), 3.62, 1.6, 0));
+  addTo(g, xlate(plainBox(5.3, 1.9, 2.5, [1, 1, 1]), -1.05, 1.3, 0));
+  for (const px of [-2.6, -1.05, 0.5]) {
+    addTo(g, xlate(plainBox(0.12, 1.9, 2.52, [0.9, 0.9, 0.88]), px, 1.3, 0));
+  }
+  addTo(g, xlate(plainBox(5.6, 0.18, 0.5, [0.85, 0.85, 0.86]), -0.6, 2.45, 0));
+  addTo(g, xlate(plainBox(0.5, 0.16, 0.4, RED_LIGHT), 2.5, 2.35, -0.28));
+  addTo(g, xlate(plainBox(0.5, 0.16, 0.4, [0.15, 0.3, 0.95]), 2.5, 2.35, 0.28));
+  addTo(g, xlate(plainBox(0.25, 0.25, 2.4, DARK), 3.62, 0.48, 0));
+  for (const pz of [0.9, -0.9]) addTo(g, xlate(plainBox(0.1, 0.18, 0.35, WARM_LIGHT), 3.64, 0.9, pz));
+  for (const [wx, wz] of [[2.8, 1.15], [2.8, -1.15], [-1.2, 1.15], [-1.2, -1.15], [-2.9, 1.15], [-2.9, -1.15]]) addWheel(g, wx, wz, 0.65);
+  return g;
+}
+
+// Ambulance: white van, glass band, red side stripe, red cross, light bar.
+function ambulanceGeom() {
+  const g = emptyGeom();
+  addTo(g, xlate(plainBox(5.2, 1.5, 2.0, [1, 1, 1]), 0, 1.1, 0));
+  addTo(g, xlate(plainBox(3.4, 0.6, 2.02, GLASS), -0.2, 1.45, 0));
+  addTo(g, xlate(plainBox(5.0, 0.25, 2.02, RED_LIGHT), 0, 0.9, 0));
+  addTo(g, xlate(plainBox(0.1, 0.8, 1.7, GLASS), 2.58, 1.5, 0));
+  addTo(g, xlate(plainBox(0.5, 0.16, 0.4, RED_LIGHT), 0.8, 1.95, 0));
+  // Red cross on both sides: the cross lies flat on the side face (thin in
+  // z) — vertical bar tall in y, horizontal bar wide in x.
+  for (const side of [1.02, -1.02]) {
+    addTo(g, xlate(plainBox(0.2, 0.6, 0.06, RED_LIGHT), 0, 1.5, side));
+    addTo(g, xlate(plainBox(0.6, 0.2, 0.06, RED_LIGHT), 0, 1.5, side));
+  }
+  addTo(g, xlate(plainBox(0.25, 0.22, 1.95, DARK), 2.6, 0.45, 0));
+  for (const pz of [0.7, -0.7]) addTo(g, xlate(plainBox(0.1, 0.16, 0.32, WARM_LIGHT), 2.62, 0.85, pz));
+  for (const [wx, wz] of [[1.8, 0.95], [1.8, -0.95], [-1.8, 0.95], [-1.8, -0.95]]) addWheel(g, wx, wz, 0.6);
+  return g;
+}
+
+// Bajaj: three-wheeler — low body, canopy roof on posts, front windshield,
+// one front wheel + two rear wheels, single centre headlight.
+function bajajGeom() {
+  const g = emptyGeom();
+  addTo(g, xlate(plainBox(2.2, 0.5, 1.25, [1, 1, 1]), 0, 0.6, 0));
+  addTo(g, xlate(plainBox(1.2, 0.15, 1.1, [0.2, 0.2, 0.22]), -0.5, 0.95, 0));
+  addTo(g, xlate(plainBox(2.0, 0.1, 1.3, [1, 1, 1]), 0, 1.75, 0));
+  for (const [px, pz] of [[0.85, 0.55], [0.85, -0.55], [-0.85, 0.55], [-0.85, -0.55]]) {
+    addTo(g, xlate(plainBox(0.08, 0.85, 0.08, DARK), px, 1.32, pz));
+  }
+  addTo(g, xlate(plainBox(0.08, 0.55, 1.1, LIGHT_GLASS), 0.95, 1.35, 0));
+  addTo(g, xlate(plainBox(0.08, 0.07, 0.7, DARK), 0.85, 1.15, 0));
+  addTo(g, xlate(plainBox(0.1, 0.15, 0.3, WARM_LIGHT), 1.12, 0.75, 0));
+  addTo(g, xlate(plainBox(0.2, 0.15, 1.1, DARK), 1.08, 0.42, 0));
+  addWheel(g, 1.0, 0, 0.5);
+  addWheel(g, -0.85, 0.55, 0.5);
+  addWheel(g, -0.85, -0.55, 0.5);
   return g;
 }
 
 function bikeGeom({ scooter }) {
   const g = emptyGeom();
-  const parts = [];
-  const wheelF = wheelGeom();
-  for (let i = 0; i < wheelF.pos.length; i += 3) { wheelF.pos[i] += 0.75; wheelF.pos[i + 1] += 0.3; }
-  const wheelB = wheelGeom();
-  for (let i = 0; i < wheelB.pos.length; i += 3) { wheelB.pos[i] -= 0.75; wheelB.pos[i + 1] += 0.3; }
-  parts.push(wheelF, wheelB);
+  // Wheels are discs in the X-Y plane (thin in Z) — the old orientation
+  // made them read as fins. Fork, headlight, exhaust, mirrors added.
+  addWheel(g, 0.75, 0, 0.55);
+  addWheel(g, -0.75, 0, 0.55);
+  addTo(g, rotZ(xlate(plainBox(0.08, 0.75, 0.08, DARK), 0.72, 0.65, 0), -0.3, 0.72, 0.65));
+  addTo(g, xlate(plainBox(0.08, 0.12, 0.18, WARM_LIGHT), 0.88, 0.95, 0));
+  addTo(g, xlate(plainBox(0.5, 0.09, 0.09, [0.35, 0.35, 0.36]), -0.3, 0.35, 0.24));
   if (scooter) {
-    // Step-through: front shield + flat floor + seat.
-    const shield = plainBox(0.5, 1.0, 0.55, [1, 1, 1]);
-    for (let i = 0; i < shield.pos.length; i += 3) { shield.pos[i] += 0.62; shield.pos[i + 1] += 0.85; }
-    const floor = plainBox(0.9, 0.1, 0.4, [0.25, 0.25, 0.28]);
-    for (let i = 0; i < floor.pos.length; i += 3) { floor.pos[i + 1] += 0.42; }
-    const seat = plainBox(0.8, 0.14, 0.45, [0.25, 0.22, 0.2]);
-    for (let i = 0; i < seat.pos.length; i += 3) { seat.pos[i] -= 0.45; seat.pos[i + 1] += 0.72; }
-    parts.push(shield, floor, seat);
+    // Step-through: front shield + flat floor + seat + small windshield.
+    addTo(g, xlate(plainBox(0.5, 1.0, 0.55, [1, 1, 1]), 0.62, 0.85, 0));
+    addTo(g, xlate(plainBox(0.9, 0.1, 0.4, [0.25, 0.25, 0.28]), 0, 0.42, 0));
+    addTo(g, xlate(plainBox(0.8, 0.14, 0.45, [0.25, 0.22, 0.2]), -0.45, 0.72, 0));
+    addTo(g, rotZ(xlate(plainBox(0.06, 0.5, 0.5, LIGHT_GLASS), 0.72, 1.35, 0), -0.25, 0.72, 1.35));
   } else {
-    const tank = plainBox(0.7, 0.32, 0.42, [1, 1, 1]);
-    for (let i = 0; i < tank.pos.length; i += 3) { tank.pos[i] += 0.15; tank.pos[i + 1] += 0.72; }
-    const seat = plainBox(0.75, 0.12, 0.4, [0.2, 0.2, 0.22]);
-    for (let i = 0; i < seat.pos.length; i += 3) { seat.pos[i] -= 0.5; seat.pos[i + 1] += 0.68; }
-    const bar = plainBox(0.1, 0.08, 0.6, [0.15, 0.15, 0.16]);
-    for (let i = 0; i < bar.pos.length; i += 3) { bar.pos[i] += 0.68; bar.pos[i + 1] += 1.0; }
-    parts.push(tank, seat, bar);
+    addTo(g, xlate(plainBox(0.7, 0.32, 0.42, [1, 1, 1]), 0.15, 0.72, 0));
+    addTo(g, xlate(plainBox(0.75, 0.12, 0.4, [0.2, 0.2, 0.22]), -0.5, 0.68, 0));
+    addTo(g, xlate(plainBox(0.1, 0.08, 0.6, [0.15, 0.15, 0.16]), 0.68, 1.0, 0));
   }
   // Rider: torso (white, takes the tint) + legs (dark) + helmet (white).
-  const torso = plainBox(0.42, 0.55, 0.34, [1, 1, 1]);
-  for (let i = 0; i < torso.pos.length; i += 3) { torso.pos[i] -= 0.15; torso.pos[i + 1] += 1.15; }
-  const legs = plainBox(0.4, 0.5, 0.32, [0.2, 0.22, 0.3]);
-  for (let i = 0; i < legs.pos.length; i += 3) { legs.pos[i] -= 0.15; legs.pos[i + 1] += 0.68; }
-  const helmet = plainBox(0.34, 0.32, 0.32, [1, 1, 1]);
-  for (let i = 0; i < helmet.pos.length; i += 3) { helmet.pos[i] -= 0.15; helmet.pos[i + 1] += 1.58; }
-  parts.push(torso, legs, helmet);
-  for (const p of parts) { g.pos.push(...p.pos); g.nrm.push(...p.nrm); g.col.push(...p.col); }
+  addTo(g, xlate(plainBox(0.42, 0.55, 0.34, [1, 1, 1]), -0.15, 1.15, 0));
+  addTo(g, xlate(plainBox(0.4, 0.5, 0.32, [0.2, 0.22, 0.3]), -0.15, 0.68, 0));
+  addTo(g, xlate(plainBox(0.34, 0.32, 0.32, [1, 1, 1]), -0.15, 1.58, 0));
+  for (const pz of [0.32, -0.32]) {
+    addTo(g, xlate(plainBox(0.06, 0.06, 0.14, DARK), 0.68, 1.08, pz));
+  }
   return g;
 }
 
 function boatGeom({ fishing, sail }) {
   const g = emptyGeom();
-  const parts = [];
-  const hull = plainBox(6, 0.9, 2.2, [1, 1, 1]);
-  for (let i = 0; i < hull.pos.length; i += 3) hull.pos[i + 1] += 0.45;
-  const bow = plainBox(1.4, 0.7, 1.8, [1, 1, 1]);
-  for (let i = 0; i < bow.pos.length; i += 3) { bow.pos[i] += 3.4; bow.pos[i + 1] += 0.4; }
-  parts.push(hull, bow);
+  addTo(g, xlate(plainBox(6, 0.9, 2.2, [1, 1, 1]), 0, 0.45, 0));
+  addTo(g, xlate(plainBox(1.4, 0.7, 1.8, [1, 1, 1]), 3.4, 0.4, 0));
   if (fishing) {
-    const cabin = plainBox(1.8, 1.4, 1.8, [0.9, 0.9, 0.88]);
-    for (let i = 0; i < cabin.pos.length; i += 3) { cabin.pos[i] -= 0.8; cabin.pos[i + 1] += 1.6; }
-    const mast = plainBox(0.14, 3.4, 0.14, [0.5, 0.4, 0.28]);
-    for (let i = 0; i < mast.pos.length; i += 3) { mast.pos[i] += 0.6; mast.pos[i + 1] += 2.8; }
-    const nets = plainBox(1.6, 0.5, 1.6, [0.3, 0.32, 0.3]);
-    for (let i = 0; i < nets.pos.length; i += 3) { nets.pos[i] += 1.8; nets.pos[i + 1] += 1.15; }
-    parts.push(cabin, mast, nets);
+    addTo(g, xlate(plainBox(1.8, 1.4, 1.8, [0.9, 0.9, 0.88]), -0.8, 1.6, 0));
+    addTo(g, xlate(plainBox(1.84, 0.45, 1.84, GLASS), -0.8, 1.8, 0));
+    addTo(g, xlate(plainBox(0.14, 3.4, 0.14, [0.5, 0.4, 0.28]), 0.6, 2.8, 0));
+    addTo(g, xlate(plainBox(1.6, 0.5, 1.6, [0.3, 0.32, 0.3]), 1.8, 1.15, 0));
   } else if (sail) {
-    const mast = plainBox(0.12, 4.6, 0.12, [0.55, 0.45, 0.3]);
-    for (let i = 0; i < mast.pos.length; i += 3) mast.pos[i + 1] += 3.2;
-    parts.push(mast);
+    addTo(g, xlate(plainBox(1.2, 0.6, 1.4, [1, 1, 1]), -0.5, 1.2, 0));
+    addTo(g, xlate(plainBox(0.12, 4.6, 0.12, [0.55, 0.45, 0.3]), 0, 3.2, 0));
     // Triangular sail (two triangles, white so the tint paints it pastel).
     const sailG = emptyGeom();
     const white = [1, 1, 1];
@@ -492,13 +660,12 @@ function boatGeom({ fishing, sail }) {
     sailG.pos.push(...a, ...b, ...c, ...a, ...c, ...b);
     for (let k = 0; k < 6; k++) sailG.nrm.push(...n);
     for (let k = 0; k < 6; k++) sailG.col.push(...white);
-    parts.push(sailG);
+    addTo(g, sailG);
   } else {
-    const deck = plainBox(3.2, 0.5, 1.8, [0.92, 0.92, 0.9]);
-    for (let i = 0; i < deck.pos.length; i += 3) { deck.pos[i] -= 0.4; deck.pos[i + 1] += 1.1; }
-    parts.push(deck);
+    addTo(g, xlate(plainBox(3.2, 0.5, 1.8, [0.92, 0.92, 0.9]), -0.4, 1.1, 0));
+    addTo(g, xlate(plainBox(0.08, 0.5, 1.4, LIGHT_GLASS), 0.8, 1.35, 0));
+    addTo(g, xlate(plainBox(0.5, 0.7, 0.4, DARK), -3.1, 0.6, 0));
   }
-  for (const p of parts) { g.pos.push(...p.pos); g.nrm.push(...p.nrm); g.col.push(...p.col); }
   return g;
 }
 
@@ -507,61 +674,30 @@ export function buildVehicleGeoms() {
   return {
     motorbike: bikeGeom({ scooter: false }),
     scooter: bikeGeom({ scooter: true }),
-    bajaj: (() => {
-      const g = car({ len: 2.4, w: 1.3, bodyH: 0.9, cabinLen: 1.6, cabinH: 0.7, cabinX: -0.1 });
-      return g;
-    })(),
-    car: car({ len: 3.6, w: 1.7, bodyH: 0.55, cabinLen: 1.9, cabinH: 0.5, cabinX: -0.1 }),
-    sedan: car({ len: 4.4, w: 1.8, bodyH: 0.6, cabinLen: 2.2, cabinH: 0.55, cabinX: -0.1 }),
-    mpv: car({ len: 4.5, w: 1.85, bodyH: 0.8, cabinLen: 2.8, cabinH: 0.6, cabinX: 0 }),
-    jeep: car({ len: 4.2, w: 1.9, bodyH: 0.85, cabinLen: 2.4, cabinH: 0.65, cabinX: 0 }),
-    angkot: car({ len: 4.0, w: 1.8, bodyH: 1.0, cabinLen: 2.6, cabinH: 0.6, cabinX: 0 }),
-    bus: car({ len: 9.0, w: 2.5, bodyH: 1.6, cabinLen: 7.6, cabinH: 0.9, cabinX: 0 }),
-    truck: (() => {
-      const g = emptyGeom();
-      const cab = plainBox(1.8, 1.6, 2.3, [1, 1, 1]);
-      for (let i = 0; i < cab.pos.length; i += 3) { cab.pos[i] += 2.4; cab.pos[i + 1] += 1.15; }
-      const box = plainBox(4.6, 2.0, 2.35, [0.85, 0.85, 0.82]);
-      for (let i = 0; i < box.pos.length; i += 3) { box.pos[i] -= 0.9; box.pos[i + 1] += 1.35; }
-      const parts = [cab, box];
-      for (const [wx, wz] of [[2.6, 1.05], [2.6, -1.05], [-1.6, 1.05], [-1.6, -1.05], [-2.8, 1.05], [-2.8, -1.05]]) {
-        const wh = wheelGeom();
-        for (let i = 0; i < wh.pos.length; i += 3) { wh.pos[i] += wx; wh.pos[i + 1] += 0.28; wh.pos[i + 2] += wz; }
-        parts.push(wh);
-      }
-      for (const p of parts) { g.pos.push(...p.pos); g.nrm.push(...p.nrm); g.col.push(...p.col); }
-      return g;
-    })(),
-    firetruck: (() => {
-      const g = car({ len: 7.5, w: 2.5, bodyH: 1.5, cabinLen: 2.0, cabinH: 0.7, cabinX: 2.2 });
-      const ladder = plainBox(5.6, 0.18, 0.5, [0.85, 0.85, 0.86]);
-      for (let i = 0; i < ladder.pos.length; i += 3) { ladder.pos[i] -= 0.6; ladder.pos[i + 1] += 2.3; }
-      g.pos.push(...ladder.pos); g.nrm.push(...ladder.nrm); g.col.push(...ladder.col);
-      return g;
-    })(),
-    ambulance: (() => {
-      const g = car({ len: 5.2, w: 2.0, bodyH: 1.1, cabinLen: 3.2, cabinH: 0.7, cabinX: 0 });
-      // Red cross on both sides: vertical + horizontal bar.
-      for (const side of [1.02, -1.02]) {
-        const vBar = plainBox(0.1, 0.6, 0.2, [0.9, 0.15, 0.15]);
-        for (let i = 0; i < vBar.pos.length; i += 3) { vBar.pos[i + 1] += 1.5; vBar.pos[i + 2] += side; }
-        const hBar = plainBox(0.1, 0.2, 0.6, [0.9, 0.15, 0.15]);
-        for (let i = 0; i < hBar.pos.length; i += 3) { hBar.pos[i + 1] += 1.5; hBar.pos[i + 2] += side; }
-        g.pos.push(...vBar.pos, ...hBar.pos); g.nrm.push(...vBar.nrm, ...hBar.nrm); g.col.push(...vBar.col, ...hBar.col);
-      }
-      return g;
-    })(),
+    bajaj: bajajGeom(),
+    car: car({ len: 3.6, w: 1.7, bodyH: 0.5, cabinLen: 1.9, cabinH: 0.5, cabinX: -0.1 }),
+    sedan: car({ len: 4.4, w: 1.8, bodyH: 0.55, cabinLen: 2.2, cabinH: 0.55, cabinX: -0.1 }),
+    mpv: car({ len: 4.5, w: 1.85, bodyH: 0.75, cabinLen: 2.8, cabinH: 0.6, cabinX: 0 }),
+    jeep: car({ len: 4.2, w: 1.9, bodyH: 0.8, cabinLen: 2.4, cabinH: 0.65, cabinX: 0, hoodSlope: 0.05, spare: true }),
+    angkot: car({ len: 4.0, w: 1.8, bodyH: 0.95, cabinLen: 2.6, cabinH: 0.6, cabinX: 0, band: true }),
+    bus: busGeom(),
+    truck: truckGeom(),
+    firetruck: firetruckGeom(),
+    ambulance: ambulanceGeom(),
     police: (() => {
       const g = car({ len: 4.4, w: 1.85, bodyH: 0.6, cabinLen: 2.2, cabinH: 0.55, cabinX: -0.1 });
-      // Light bar: red + blue boxes on the roof.
-      const red = plainBox(0.5, 0.16, 0.4, [0.95, 0.15, 0.15]);
-      for (let i = 0; i < red.pos.length; i += 3) { red.pos[i] -= 0.28; red.pos[i + 1] += 1.6; }
+      // Black door panels on both sides + roof light bar (sits on the roof
+      // panel, whose top is at y≈1.64 — the bar centre is 1.72).
+      for (const pz of [0.935, -0.935]) {
+        addTo(g, xlate(plainBox(1.6, 0.5, 0.04, [0.1, 0.1, 0.12]), -0.1, 0.62, pz));
+      }
+      const red = plainBox(0.5, 0.16, 0.4, RED_LIGHT);
+      addTo(g, xlate(red, -0.28, 1.72, 0));
       const blue = plainBox(0.5, 0.16, 0.4, [0.15, 0.3, 0.95]);
-      for (let i = 0; i < blue.pos.length; i += 3) { blue.pos[i] += 0.28; blue.pos[i + 1] += 1.6; }
-      g.pos.push(...red.pos, ...blue.pos); g.nrm.push(...red.nrm, ...blue.nrm); g.col.push(...red.col, ...blue.col);
+      addTo(g, xlate(blue, 0.28, 1.72, 0));
       return g;
     })(),
-    supercar: car({ len: 4.3, w: 2.0, bodyH: 0.42, cabinLen: 1.8, cabinH: 0.42, cabinX: -0.2 }),
+    supercar: car({ len: 4.3, w: 2.0, bodyH: 0.38, cabinLen: 1.8, cabinH: 0.42, cabinX: -0.2, hoodSlope: 0.22, wing: true }),
     boat: boatGeom({}),
     fishingboat: boatGeom({ fishing: true }),
     sailboat: boatGeom({ sail: true }),
