@@ -132,11 +132,13 @@ function addPart(g, part, x, y, z, rot) {
 // One ground symbol quad (textured, positions + UVs only): w wide (local
 // u) x h tall (local v), centred at (cx, cz), yaw rot — local +v (canvas
 // up) maps to world (sin rot, cos rot). Wound up-facing like quadUp.
-function addGroundSymbol(geom, cx, cz, rot, w, h, uv) {
+// y defaults to SYM_Y; stadium lots on the forecourt apron pass a
+// raised y so the symbols sit above the apron slab.
+function addGroundSymbol(geom, cx, cz, rot, w, h, uv, y = SYM_Y) {
   const A = toWorld(cx, cz, rot, -w / 2, -h / 2), B = toWorld(cx, cz, rot, w / 2, -h / 2);
   const C = toWorld(cx, cz, rot, w / 2, h / 2), D = toWorld(cx, cz, rot, -w / 2, h / 2);
   const [u0, v0, u1, v1] = uv;
-  const q = (P, u, v) => { geom.pos.push(P[0], SYM_Y, P[1]); geom.uv.push(u, v); };
+  const q = (P, u, v) => { geom.pos.push(P[0], y, P[1]); geom.uv.push(u, v); };
   q(A, u0, v0); q(C, u1, v1); q(B, u1, v0);
   q(A, u0, v0); q(D, u0, v1); q(C, u1, v1);
 }
@@ -314,6 +316,43 @@ export function buildParking(city) {
     }
   }
 
+  // --- Rimba Stadium car parks (Mu 23 Nov 23:09): 3 lots beside the
+  // stadium, all explicit rects (verified against the city dataset —
+  // see tests/parking.test.mjs). S1+S2 sit on the stadium forecourt
+  // apron (top y 0.2, stadium.js), so their geometry is raised +0.15;
+  // S3 is the big west car park across the road in block (10,7).
+  // Stadium lots fill ~85% of their bays (match day) instead of the
+  // usual ~30%. Each candidate is run through the same clearance
+  // rules as the adaptive lots and only placed if it passes all of
+  // them (deterministic — the same rects pass on every run).
+  const st = city.stadium;
+  if (st) {
+    const stadLots = [
+      // S1: south strip, 2 rows, right by the south entrance gap.
+      { cx: 522.5, cz: 118, R: 0, rect: { x0: 510, x1: 535, z0: 110, z1: 126 }, width: 25, depth: 16, rows: 2, cols: 10, yBase: 0.15, fill: 0.85, stadium: true },
+      // S2: south strip east, 1 row, beside S1.
+      { cx: 547.25, cz: 120.5, R: 0, rect: { x0: 537, x1: 557.5, z0: 115, z1: 126 }, width: 20, depth: 11, rows: 1, cols: 8, yBase: 0.15, fill: 0.85, stadium: true },
+      // S3: west car park in block (10,7), across the road from the west stand.
+      { cx: 451, cz: 153, R: 0, rect: { x0: 412, x1: 490, z0: 145, z1: 161 }, width: 77.5, depth: 16, rows: 2, cols: 31, yBase: 0, fill: 0.85, stadium: true },
+    ];
+    for (const sl of stadLots) {
+      // (1) Inside a block. (2) Clear of every building (+1.5 m).
+      // (3) Clear of every door strip (+1 m). (4) River >= 25 m.
+      // (5) Clear of other lots (+2 m). (6) Clear of the stadium (+1.5 m).
+      const inBlock = city.blocks.some((bl) =>
+        sl.rect.x0 >= bl.x0 && sl.rect.x1 <= bl.x1 && sl.rect.z0 >= bl.z0 && sl.rect.z1 <= bl.z1);
+      const clearB = !city.buildings.some((b) => rectsOverlap(sl.rect, footprint(b), 1.5));
+      const clearD = !city.buildings.some((b) => rectsOverlap(sl.rect, doorStripRect(b), 1));
+      const clearR = [[sl.rect.x0, sl.rect.z0], [sl.rect.x1, sl.rect.z0], [sl.rect.x0, sl.rect.z1], [sl.rect.x1, sl.rect.z1], [sl.cx, sl.cz]]
+        .every(([x, z]) => riverDistance(x, z) >= 25);
+      const clearL = !lots.some((l) => rectsOverlap(sl.rect, l.rect, 2));
+      const clearS = !(sl.rect.x0 - 1.5 < st.x1 && sl.rect.x1 + 1.5 > st.x0 && sl.rect.z0 - 1.5 < st.z1 && sl.rect.z1 + 1.5 > st.z0);
+      if (inBlock && clearB && clearD && clearR && clearL && clearS) {
+        lots.push({ ...sl, building: { x: st.cx, z: st.cz, zone: 'beach' } });
+      }
+    }
+  }
+
   // --- Build the geometry for every placed lot. ---
   const atlasW = ATLAS_COLS * CELL, atlasH = CELL;
   const cellUV = (cell) => {
@@ -323,14 +362,18 @@ export function buildParking(city) {
   let biggest = null;
   for (const lot of lots) {
     const { cx, cz, R, width: W, depth: D, rows, cols } = lot;
+    // Stadium lots on the forecourt apron (top y 0.2) raise every
+    // piece of lot geometry by yBase so nothing is buried in the slab.
+    const yBase = lot.yBase || 0;
+    const padY = PAD_Y + yBase, lineY = LINE_Y + yBase, symY = SYM_Y + yBase, carY = 0.09 + yBase;
     if (!biggest || cols * rows > biggest.cols * biggest.rows) biggest = lot;
     // Pad (dark asphalt over the yard paving).
-    quadUpRot(markings, cx, cz, R, -W / 2, -D / 2, W / 2, D / 2, PAD_Y, PAD_COL);
+    quadUpRot(markings, cx, cz, R, -W / 2, -D / 2, W / 2, D / 2, padY, PAD_COL);
     // Bay long lines along u: outer edges + lane edges (deduped — on a
     // 1-row lot the far lane edge IS the outer edge).
     const laneLo = -D / 2 + BAY_D, laneHi = laneLo + LANE_W; // lane v-range
     for (const v of [...new Set([-D / 2, laneLo, laneHi, D / 2])]) {
-      quadUpRot(markings, cx, cz, R, -W / 2, v - 0.06, W / 2, v + 0.06, LINE_Y, LINE_COL);
+      quadUpRot(markings, cx, cz, R, -W / 2, v - 0.06, W / 2, v + 0.06, lineY, LINE_COL);
     }
     // Divider lines along v at u = -W/2 + 2.5k, for each row.
     const rowRanges = rows === 2
@@ -339,7 +382,7 @@ export function buildParking(city) {
     for (let k = 0; k <= cols; k++) {
       const u = -W / 2 + k * BAY_W;
       for (const [v0, v1] of rowRanges) {
-        quadUpRot(markings, cx, cz, R, u - 0.06, v0, u + 0.06, v1, LINE_Y, LINE_COL);
+        quadUpRot(markings, cx, cz, R, u - 0.06, v0, u + 0.06, v1, lineY, LINE_COL);
       }
     }
     // Arrows on the lane (one-way, pointing +u): shaft + triangle head.
@@ -347,9 +390,9 @@ export function buildParking(city) {
     const laneV = (laneLo + laneHi) / 2;
     const arrowUs = W >= 20 ? [-W / 3, 0, W / 3] : [-W / 4, W / 4];
     for (const au of arrowUs) {
-      quadUpRot(markings, cx, cz, R, au - 0.9, laneV - 0.18, au + 0.5, laneV + 0.18, LINE_Y, LINE_COL);
+      quadUpRot(markings, cx, cz, R, au - 0.9, laneV - 0.18, au + 0.5, laneV + 0.18, lineY, LINE_COL);
       triUpRot(markings, cx, cz, R,
-        [au + 0.5, laneV + 0.45], [au + 1.4, laneV], [au + 0.5, laneV - 0.45], LINE_Y, LINE_COL);
+        [au + 0.5, laneV + 0.45], [au + 1.4, laneV], [au + 0.5, laneV - 0.45], lineY, LINE_COL);
     }
     // Bays: row A (v < 0, disabled bay is k=0) and row B (v > 0, if any).
     // Cars nose-in: nose toward the outer edge (row A: -v, row B: +v).
@@ -364,8 +407,12 @@ export function buildParking(city) {
     // Disabled bay: row A, first bay — no car, blue cell + wheelchair.
     const disabled = { row: 'A', k: 0 };
     const avail = carBays.filter((bb) => !(bb.row === disabled.row && bb.k === disabled.k));
-    // Cars scale with the lot: ~30% of bays, 2..8 per lot.
-    const nCars = Math.min(8, Math.max(2, Math.round(carBays.length * 0.3)));
+    // Cars scale with the lot: ~30% of bays, 2..8 per lot. Stadium
+    // lots fill most of their bays instead (match day, Mu).
+    const fill = lot.fill || 0.3;
+    const nCars = lot.stadium
+      ? Math.min(avail.length, Math.round(carBays.length * fill))
+      : Math.min(8, Math.max(2, Math.round(carBays.length * 0.3)));
     const chosen = [];
     for (let i = 0; i < nCars && avail.length; i++) {
       chosen.push(avail.splice(Math.floor(rand() * avail.length), 1)[0]);
@@ -378,6 +425,7 @@ export function buildParking(city) {
       pBays.push(emptyBays.splice(Math.floor(rand() * emptyBays.length), 1)[0]);
     }
     const pKey = new Set(pBays.map((bb) => bb.row + bb.k));
+    let lotCars = 0;
     for (const bay of carBays) {
       const bu = -W / 2 + bay.k * BAY_W + BAY_W / 2; // bay centre u
       const bv = rowV(bay.row);
@@ -386,7 +434,7 @@ export function buildParking(city) {
         // Disabled bay: blue wheelchair cell (its background IS the blue
         // square — no separate vertex-coloured quad needed).
         const [wx, wz] = toWorld(cx, cz, R, bu, bv);
-        addGroundSymbol(symbols, wx, wz, R + Math.PI, 2.2, 2.2, cellUV(WHEEL_CELL));
+        addGroundSymbol(symbols, wx, wz, R + Math.PI, 2.2, 2.2, cellUV(WHEEL_CELL), symY);
         pSymbols++;
         bays++;
         continue;
@@ -395,25 +443,27 @@ export function buildParking(city) {
         // Parked car, nose-in toward the outer edge.
         const [wx, wz] = toWorld(cx, cz, R, bu, bv);
         const wRot = R + (bay.row === 'A' ? Math.PI / 2 : -Math.PI / 2);
-        addPart(cars, simpleParkedCarGeom(distinctColor(colorIdx++)), wx, 0.09, wz, wRot);
+        addPart(cars, simpleParkedCarGeom(distinctColor(colorIdx++)), wx, carY, wz, wRot);
         parked++;
+        lotCars++;
         bays++;
         continue;
       }
       if (pKey.has(key)) {
         // Empty bay with a P: top of the P toward the outer edge.
         const [wx, wz] = toWorld(cx, cz, R, bu, bv);
-        addGroundSymbol(symbols, wx, wz, R + (bay.row === 'A' ? Math.PI : 0), 1.6, 1.6, cellUV(P_CELL));
+        addGroundSymbol(symbols, wx, wz, R + (bay.row === 'A' ? Math.PI : 0), 1.6, 1.6, cellUV(P_CELL), symY);
         pSymbols++;
       }
       bays++;
     }
+    lot.cars = lotCars;
   }
 
   return {
     markings, cars,
     symbols: { panelGeom: symbols, atlasCanvas: drawParkingAtlas() },
-    lots: lots.map((l) => ({ rect: l.rect, width: l.width, depth: l.depth, rows: l.rows, cols: l.cols, building: { x: l.building.x, z: l.building.z, zone: l.building.zone } })),
+    lots: lots.map((l) => ({ rect: l.rect, width: l.width, depth: l.depth, rows: l.rows, cols: l.cols, cars: l.cars || 0, stadium: !!l.stadium, yBase: l.yBase || 0, building: { x: l.building.x, z: l.building.z, zone: l.building.zone } })),
     counts: {
       lots: lots.length, bays, cars: parked, symbols: pSymbols,
       biggest: biggest ? { width: biggest.width, depth: biggest.depth, rows: biggest.rows, cols: biggest.cols, bays: biggest.rows * biggest.cols, centre: [(biggest.rect.x0 + biggest.rect.x1) / 2, (biggest.rect.z0 + biggest.rect.z1) / 2] } : null,
