@@ -558,6 +558,9 @@ if (params.sim) {
     const veh = traffic.matricesFor(camX, camZ, cull);
     for (const [type, spec] of Object.entries(veh)) {
       dyn['veh_' + type] = spec;
+      // Glass uses the same instances, but always tinted white: the
+      // sky-blue glass colour must not be multiplied by the body colour.
+      dyn['vehglass_' + type] = { matrices: spec.matrices, tints: spec.matrices.map(() => [1, 1, 1]) };
     }
     const ped = peds.matricesFor(camX, camZ, cull);
     dyn.ped_torso = ped.torso;

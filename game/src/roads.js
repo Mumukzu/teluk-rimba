@@ -20,9 +20,11 @@ function quad(g, a, b, c, d, y, col) {
   for (let k = 0; k < 6; k++) g.col.push(...col);
 }
 
-// One zebra crossing on one approach to an intersection: stripes run across
-// the road, just before the stop line.
-function zebra(g, cx, cz, alongX, roadHalf) {
+// One zebra crossing on ONE approach to an intersection: stripes run
+// across the road at `dir * 10` m from the centre, with a solid stop line
+// at `dir * 6.5` m (between the intersection and the zebra). One crossing
+// per intersection — the old code drew four, which made an X of paint.
+function zebraCrossing(g, cx, cz, alongX, dir, roadHalf) {
   const off = 10; // distance from the intersection centre
   const len = 3.2; // stripe length along the direction of travel
   const w = 0.65; // stripe width
@@ -31,33 +33,77 @@ function zebra(g, cx, cz, alongX, roadHalf) {
   for (let i = 0; i < n; i++) {
     const across = -roadHalf + 1.4 + i * (w + gap) + w / 2;
     if (alongX) {
-      const x0 = cx + off - len / 2, x1 = cx + off + len / 2;
+      const x0 = cx + dir * off - len / 2, x1 = cx + dir * off + len / 2;
       quad(g, [x0, cz + across - w / 2], [x1, cz + across - w / 2], [x1, cz + across + w / 2], [x0, cz + across + w / 2], 0.07, ZEBRA);
-      const x0b = cx - off - len / 2, x1b = cx - off + len / 2;
-      quad(g, [x0b, cz + across - w / 2], [x1b, cz + across - w / 2], [x1b, cz + across + w / 2], [x0b, cz + across + w / 2], 0.07, ZEBRA);
     } else {
-      const z0 = cz + off - len / 2, z1 = cz + off + len / 2;
+      const z0 = cz + dir * off - len / 2, z1 = cz + dir * off + len / 2;
       quad(g, [cx + across - w / 2, z0], [cx + across + w / 2, z0], [cx + across + w / 2, z1], [cx + across - w / 2, z1], 0.07, ZEBRA);
-      const z0b = cz - off - len / 2, z1b = cz - off + len / 2;
-      quad(g, [cx + across - w / 2, z0b], [cx + across + w / 2, z0b], [cx + across + w / 2, z1b], [cx + across - w / 2, z1b], 0.07, ZEBRA);
     }
   }
+}
+
+function stopLine(g, cx, cz, alongX, dir, roadHalf) {
+  const off = 6.5;
+  if (alongX) {
+    const x0 = cx + dir * off - 0.25, x1 = cx + dir * off + 0.25;
+    quad(g, [x0, cz - roadHalf + 0.3], [x1, cz - roadHalf + 0.3], [x1, cz + roadHalf - 0.3], [x0, cz + roadHalf - 0.3], 0.07, ZEBRA);
+  } else {
+    const z0 = cz + dir * off - 0.25, z1 = cz + dir * off + 0.25;
+    quad(g, [cx - roadHalf + 0.3, z0], [cx + roadHalf - 0.3, z0], [cx + roadHalf - 0.3, z1], [cx - roadHalf + 0.3, z1], 0.07, ZEBRA);
+  }
+}
+
+// One zebra spot per intersection: the approach the crossing sits on.
+// Prefers a non-bridge approach (a zebra on a bridge deck looks wrong),
+// east first, then west, north, south. Returns a Map keyed by node id.
+export function zebraSpots(city) {
+  const spots = new Map();
+  const nodeByIJ = new Map(city.nodes.map((n) => [n.i + ',' + n.j, n]));
+  const edgeOf = new Map();
+  for (const e of city.edges) {
+    edgeOf.set(e.a + '|' + e.b, e);
+    edgeOf.set(e.b + '|' + e.a, e);
+  }
+  for (const n of city.nodes) {
+    // [di, dj, alongX, dir]: east, west, north, south.
+    const tries = [[1, 0, true, 1], [-1, 0, true, -1], [0, -1, false, -1], [0, 1, false, 1]];
+    let pick = null, pickBridge = null;
+    for (const [di, dj, alongX, dir] of tries) {
+      const m = nodeByIJ.get((n.i + di) + ',' + (n.j + dj));
+      if (!m) continue;
+      const e = edgeOf.get(n.id + '|' + m.id);
+      if (!e) continue;
+      if (!e.bridge) { pick = { x: n.x, z: n.z, alongX, dir }; break; }
+      if (!pickBridge) pickBridge = { x: n.x, z: n.z, alongX, dir };
+    }
+    spots.set(n.id, pick || pickBridge || null);
+  }
+  return spots;
 }
 
 export function buildRoadMesh(city) {
   const g = emptyGeom();
   const N = ROAD_LINES.length;
-  // Bridge segments from the road graph (only 4 cross the river).
+  // Road segments from the road GRAPH (the source of truth): only edges
+  // are drawn, so no grid stub can cross the river or end in the water —
+  // the graph already drops non-bridge water crossings, and the city
+  // prunes dead-end nodes. Only the 4 bridge edges cross the river.
   const nodeById = new Map(city.nodes.map((n) => [n.id, n]));
+  const graphSegs = new Set();
   const bridgeSegs = new Set();
   for (const e of city.edges) {
-    if (!e.bridge) continue;
     const a = nodeById.get(e.a), b = nodeById.get(e.b);
+    graphSegs.add(`${a.x},${a.z}|${b.x},${b.z}`);
+    graphSegs.add(`${b.x},${b.z}|${a.x},${a.z}`);
+    if (!e.bridge) continue;
     bridgeSegs.add(`${a.x},${a.z}|${b.x},${b.z}`);
     bridgeSegs.add(`${b.x},${b.z}|${a.x},${a.z}`);
   }
-  // One straight run of road (asphalt + sidewalks + dashes) for the range
+  // One straight run of road (asphalt + sidewalks + markings) for the range
   // [from, to] along a segment. horiz: the run goes along x at fixed z.
+  // Markings stay clear of intersections: dashes run from+16 to to-16
+  // (the zebra sits at off 10, the stop line at 6.5, the square ends at ~6),
+  // so paint never overlaps paint.
   const drawRun = (horiz, fixed, from, to, main) => {
     if (to - from < 2) return;
     const ah = ASPHALT_HALF(fixed), ch = CORRIDOR_HALF(fixed);
@@ -70,20 +116,31 @@ export function buildRoadMesh(city) {
       quad(g, [fixed - ch, from], [fixed - ah, from], [fixed - ah, to], [fixed - ch, to], 0.1, SIDEWALK);
       quad(g, [fixed + ah, from], [fixed + ch, from], [fixed + ch, to], [fixed + ah, to], 0.1, SIDEWALK);
     }
-    const dashCol = main ? DASH_MAIN : DASH_MINOR;
-    const dashW = main ? 0.28 : 0.2;
-    for (let s = from + 4; s < to - 4; s += 7) {
-      if (horiz) quad(g, [s, fixed - dashW / 2], [s + 3.2, fixed - dashW / 2], [s + 3.2, fixed + dashW / 2], [s, fixed + dashW / 2], 0.06, dashCol);
-      else quad(g, [fixed - dashW / 2, s], [fixed + dashW / 2, s], [fixed + dashW / 2, s + 3.2], [fixed - dashW / 2, s + 3.2], 0.06, dashCol);
-    }
-    // Main roads are 4 lanes (2 per direction): thin white lane dividers
-    // at +/-3 m split each direction into two lanes.
+    const m0 = from + 16, m1 = to - 16; // marking range, clear of crossings
+    // Solid white edge lines on both sides of the asphalt.
+    const edge = (off) => {
+      if (horiz) quad(g, [m0, fixed + off - 0.075], [m1, fixed + off - 0.075], [m1, fixed + off + 0.075], [m0, fixed + off + 0.075], 0.06, DASH_MINOR);
+      else quad(g, [fixed + off - 0.075, m0], [fixed + off + 0.075, m0], [fixed + off + 0.075, m1], [fixed + off - 0.075, m1], 0.06, DASH_MINOR);
+    };
+    edge(-ah + 0.35); edge(ah - 0.35);
+    // Centre line: main roads get a double solid yellow line (4 lanes, 2
+    // per direction), minor roads a single white dashed line.
     if (main) {
-      for (let s = from + 4; s < to - 4; s += 7) {
+      for (const off of [-0.4, 0.4]) {
+        if (horiz) quad(g, [m0, fixed + off - 0.075], [m1, fixed + off - 0.075], [m1, fixed + off + 0.075], [m0, fixed + off + 0.075], 0.06, DASH_MAIN);
+        else quad(g, [fixed + off - 0.075, m0], [fixed + off + 0.075, m0], [fixed + off + 0.075, m1], [fixed + off - 0.075, m1], 0.06, DASH_MAIN);
+      }
+      // Thin white dashed lane dividers at +/-3 m split each direction.
+      for (let s = m0; s < m1 - 3.2; s += 7) {
         for (const off of [-3, 3]) {
           if (horiz) quad(g, [s, fixed + off - 0.1], [s + 3.2, fixed + off - 0.1], [s + 3.2, fixed + off + 0.1], [s, fixed + off + 0.1], 0.06, DASH_MINOR);
           else quad(g, [fixed + off - 0.1, s], [fixed + off + 0.1, s], [fixed + off + 0.1, s + 3.2], [fixed + off - 0.1, s + 3.2], 0.06, DASH_MINOR);
         }
+      }
+    } else {
+      for (let s = m0; s < m1 - 3.2; s += 7) {
+        if (horiz) quad(g, [s, fixed - 0.1], [s + 3.2, fixed - 0.1], [s + 3.2, fixed + 0.1], [s, fixed + 0.1], 0.06, DASH_MINOR);
+        else quad(g, [fixed - 0.1, s], [fixed + 0.1, s], [fixed + 0.1, s + 3.2], [fixed - 0.1, s + 3.2], 0.06, DASH_MINOR);
       }
     }
   };
@@ -118,16 +175,12 @@ export function buildRoadMesh(city) {
   };
   const drawSegment = (horiz, fixed, from, to, main) => {
     const key = horiz ? `${from},${fixed}|${to},${fixed}` : `${fixed},${from}|${fixed},${to}`;
-    const span = riverSpan(horiz, fixed, from, to);
-    if (!span) { drawRun(horiz, fixed, from, to, main); return; }
+    if (!graphSegs.has(key)) return; // not a graph edge: no road at all
+    drawRun(horiz, fixed, from, to, main);
     if (bridgeSegs.has(key)) {
-      drawRun(horiz, fixed, from, to, main);
-      addBridgeDressing(horiz, fixed, span[0], span[1]);
-      return;
+      const span = riverSpan(horiz, fixed, from, to);
+      if (span) addBridgeDressing(horiz, fixed, span[0], span[1]);
     }
-    // Road stops at the bank: draw up to 4 m before the water, both sides.
-    drawRun(horiz, fixed, from, Math.min(to, span[0] - 4), main);
-    drawRun(horiz, fixed, Math.max(from, span[1] + 4), to, main);
   };
   for (let j = 0; j < N; j++) {
     for (let i = 0; i < N - 1; i++) {
@@ -139,12 +192,29 @@ export function buildRoadMesh(city) {
       drawSegment(false, ROAD_LINES[i], ROAD_LINES[j], ROAD_LINES[j + 1], IS_MAIN(ROAD_LINES[i]));
     }
   }
-  // Intersection squares (slightly above the segments) + one zebra per approach.
+  // Intersection squares, drawn as four quadrant quads so a square that
+  // touches the river (the (0,-100) bridge endpoint) loses only the wet
+  // quadrant instead of painting asphalt into the water. One zebra crossing
+  // + one stop line per intersection, on the chosen approach.
+  const spots = zebraSpots(city);
   for (const node of city.nodes) {
     const ah = Math.max(ASPHALT_HALF(node.x), ASPHALT_HALF(node.z));
-    quad(g, [node.x - ah, node.z - ah], [node.x + ah, node.z - ah], [node.x + ah, node.z + ah], [node.x - ah, node.z + ah], 0.05, ASPHALT);
-    zebra(g, node.x, node.z, true, ah);
-    zebra(g, node.x, node.z, false, ah);
+    const quadAt = (sx, sz) => {
+      const cx = node.x + sx * ah / 2, cz = node.z + sz * ah / 2;
+      const hw = ah / 2;
+      quad(g, [cx - hw, cz - hw], [cx + hw, cz - hw], [cx + hw, cz + hw], [cx - hw, cz + hw], 0.05, ASPHALT);
+    };
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      // Skip a quadrant whose outer corner would sit in the water.
+      const cornerRd = riverDistance(node.x + sx * ah, node.z + sz * ah);
+      if (cornerRd < 12.5) continue;
+      quadAt(sx, sz);
+    }
+    const spot = spots.get(node.id);
+    if (spot) {
+      zebraCrossing(g, spot.x, spot.z, spot.alongX, spot.dir, ah);
+      stopLine(g, spot.x, spot.z, spot.alongX, spot.dir, ah);
+    }
   }
   return g;
 }

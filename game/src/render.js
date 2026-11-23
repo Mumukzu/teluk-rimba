@@ -11,7 +11,7 @@ import { buildRoadMesh, buildLampMeshes, buildTrafficLightMesh } from './roads.j
 import { buildBeachPropMeshes } from './beach.js';
 import { buildLandmarks } from './landmarks.js';
 import { buildMoonGeom, buildStarsSpec } from './sky.js';
-import { buildVehicleGeoms, headlightGeom } from './vehicles.js';
+import { buildVehicleGeoms, buildVehicleGlassGeoms, headlightGeom } from './vehicles.js';
 import { pedTorsoGeom, pedLegsGeom, pedHeadGeom, pedHairGeom } from './peds.js';
 import { buildWetGeoms } from './weather.js';
 import { buildNightLightGeoms } from './nightlights.js';
@@ -44,6 +44,7 @@ export function createRenderer(canvas, city) {
   const nightPools = buildNightLightGeoms(city, landmarks);
   const plotDressing = buildPlotDressing(city);
   const vehicleGeoms = buildVehicleGeoms();
+  const vehicleGlassGeoms = buildVehicleGlassGeoms();
 
   const meshes = [];
   const addStatic = (prog, geom, model, extra = {}) => {
@@ -123,6 +124,12 @@ export function createRenderer(canvas, city) {
   // rain streaks + headlights + the lighthouse beam.
   for (const [type, geom] of Object.entries(vehicleGeoms)) {
     addDyn(progs.litInst, geom, type === 'motorbike' ? 100 : type === 'scooter' ? 50 : type === 'car' ? 40 : 30, 'veh_' + type);
+  }
+  // Transparent glass per vehicle type (same instances as the bodies,
+  // always tinted white — see main.js buildDynamics).
+  for (const [type, geom] of Object.entries(vehicleGlassGeoms)) {
+    if (!geom.pos.length) continue;
+    addDyn(progs.transpInst, geom, type === 'motorbike' ? 100 : type === 'scooter' ? 50 : type === 'car' ? 40 : 30, 'vehglass_' + type);
   }
   addDyn(progs.litInst, pedTorsoGeom(), 340, 'ped_torso');
   addDyn(progs.litInst, pedLegsGeom(), 340, 'ped_legs');
@@ -236,7 +243,8 @@ export function createRenderer(canvas, city) {
       if (name === 'rain' && rainAmt < 0.05) continue;
       updateDynamicInstancedMesh(gl, entry.mesh, spec.matrices, spec.tints);
       const uniforms = { ...common, uModel: mat4Identity() };
-      const blendAlpha = { beam: 0.12, headbeams: 0.14, flow: 0.3, heliBeam: 0.15 }[name];
+      const blendAlpha = name.startsWith('vehglass_') ? 0.42
+        : { beam: 0.12, headbeams: 0.14, flow: 0.3, heliBeam: 0.15 }[name];
       if (blendAlpha !== undefined) {
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);

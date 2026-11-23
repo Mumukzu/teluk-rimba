@@ -355,7 +355,7 @@ export function generateCity(seed = SEED) {
   // the river channel (water) is not an intersection at all, and every
   // other road stops at the riverbank — only the 4 bridge edges cross.
   const N = ROAD_LINES.length;
-  const nodes = [];
+  let nodes = [];
   const nodeByIJ = new Map();
   for (let j = 0; j < N; j++) {
     for (let i = 0; i < N; i++) {
@@ -367,7 +367,7 @@ export function generateCity(seed = SEED) {
     }
   }
   const nodeAt = (i, j) => nodeByIJ.get(i + ',' + j) || null;
-  const edges = [];
+  let edges = [];
   const segmentIsBridge = (ax, az, bx, bz) => {
     for (let s = 0; s <= 4; s++) {
       const t = s / 4;
@@ -401,6 +401,32 @@ export function generateCity(seed = SEED) {
       if (isBridge && !isKeptBridge(a, b)) continue; // road stops at the bank
       edges.push({ a: a.id, b: b.id, main: IS_MAIN(a.x), bridge: isBridge });
     }
+  }
+
+  // Prune dead ends (Mu: no dead-end roads). A node whose neighbours are
+  // all in the river is a road to nowhere — the two NW corner nodes
+  // (-500,-600) and (-600,-500) are cut off by the river head, so they and
+  // their stubs are dropped. Pruning repeats until no leaf (degree < 2)
+  // is left, then node ids are reassigned so ids stay dense.
+  {
+    let changed = true;
+    while (changed) {
+      changed = false;
+      const deg = new Map();
+      for (const e of edges) {
+        deg.set(e.a, (deg.get(e.a) || 0) + 1);
+        deg.set(e.b, (deg.get(e.b) || 0) + 1);
+      }
+      const leaves = new Set(nodes.filter((n) => (deg.get(n.id) || 0) < 2).map((n) => n.id));
+      if (leaves.size) {
+        edges = edges.filter((e) => !leaves.has(e.a) && !leaves.has(e.b));
+        nodes = nodes.filter((n) => !leaves.has(n.id));
+        changed = true;
+      }
+    }
+    const remap = new Map(nodes.map((n, k) => [n.id, k]));
+    for (const n of nodes) n.id = remap.get(n.id);
+    for (const e of edges) { e.a = remap.get(e.a); e.b = remap.get(e.b); }
   }
 
   // --- street trees: small, on the kerb-side strip of minor roads only,

@@ -6,7 +6,7 @@
 import { mulberry32, range, rangeInt } from './rng.js';
 import { riverDistance } from './city.js';
 import { emptyGeom, plainBox } from './gl.js';
-import { PASTEL } from './vehicles.js';
+import { PASTEL, parkedCarGeom } from './vehicles.js';
 
 const PAVE = [0.78, 0.78, 0.76]; // light grey paving
 const FENCE_COL = [0.85, 0.82, 0.72];
@@ -59,23 +59,6 @@ function addPart(g, part, x, y, z, rot) {
   g.pos.push(...part.pos); g.nrm.push(...part.nrm); g.col.push(...part.col);
 }
 
-// Small decorative car: body in a bright colour + dark cabin + wheels.
-function carGeom(color) {
-  const g = emptyGeom();
-  const body = plainBox(3.6, 0.55, 1.7, color);
-  for (let i = 0; i < body.pos.length; i += 3) body.pos[i + 1] += 0.55;
-  const cabin = plainBox(1.8, 0.5, 1.4, [0.22, 0.28, 0.36]);
-  for (let i = 0; i < cabin.pos.length; i += 3) { cabin.pos[i] -= 0.2; cabin.pos[i + 1] += 1.05; }
-  const parts = [body, cabin];
-  for (const [wx, wz] of [[1.2, 0.8], [1.2, -0.8], [-1.2, 0.8], [-1.2, -0.8]]) {
-    const wheel = plainBox(0.5, 0.5, 0.25, [0.1, 0.1, 0.11]);
-    for (let i = 0; i < wheel.pos.length; i += 3) { wheel.pos[i] += wx; wheel.pos[i + 1] += 0.25; wheel.pos[i + 2] += wz; }
-    parts.push(wheel);
-  }
-  for (const p of parts) { g.pos.push(...p.pos); g.nrm.push(...p.nrm); g.col.push(...p.col); }
-  return g;
-}
-
 export function buildPlotDressing(city) {
   const rand = mulberry32(20261128);
   const paving = emptyGeom();
@@ -116,7 +99,7 @@ export function buildPlotDressing(city) {
     for (let k = 0; k < nCars; k++) {
       const s = spot(2.2, 1.2);
       if (!s) continue;
-      addPart(props, carGeom(PASTEL[Math.floor(rand() * PASTEL.length)]), s.x, 0.06, s.z, range(rand, 0, Math.PI * 2));
+      addPart(props, parkedCarGeom(PASTEL[Math.floor(rand() * PASTEL.length)]), s.x, 0.06, s.z, range(rand, 0, Math.PI * 2));
       cars++;
     }
     // Fences: low runs along two inner edges of the block.
