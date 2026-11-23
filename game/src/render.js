@@ -177,7 +177,8 @@ export function createRenderer(canvas, city) {
   // Headlight beam pool: subdivided strip whose colours fade with
   // distance, so the pool is a soft glow — never a hard washed-out patch.
   addDyn(progs.transpInst, beamPoolGeom(), 220, 'headbeams');
-  addDyn(progs.transpInst, flatQuadGeom, 128, 'flow'); // river + surf + sea ripples
+  addDyn(progs.transpInst, flatQuadGeom, 48, 'flow'); // river + surf
+  addDyn(progs.transpInst, flatQuadGeom, 80, 'sea'); // sea ripple bands (own alpha)
 
   let calls = 0, tris = 0;
 
@@ -304,7 +305,7 @@ export function createRenderer(canvas, city) {
       updateDynamicInstancedMesh(gl, entry.mesh, spec.matrices, spec.tints);
       const uniforms = { ...common, uModel: mat4Identity() };
       const blendAlpha = name.startsWith('vehglass_') ? 0.42
-        : { beam: 0.12, headbeams: 0.09, flow: 0.3, heliBeam: 0.15, beamcones: 0.24 }[name];
+        : { beam: 0.12, headbeams: 0.09, flow: 0.3, sea: 0.45, heliBeam: 0.15, beamcones: 0.24 }[name];
       if (blendAlpha !== undefined) {
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);

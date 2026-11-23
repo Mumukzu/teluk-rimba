@@ -721,29 +721,28 @@ if (params.sim) {
         fl.matrices.push(mat4TRS(wx, -0.7, 0, 0, 2.5, 1, 1400));
         fl.tints.push([0.95, 0.98, 1]);
       }
-      // Sea ripples: long pale bands drifting slowly toward the shore
-      // across the whole sea (x 620..2100), wrapping at the beach. They
-      // share the flow mesh (no extra draw call) and make the sea read
-      // as moving water instead of one flat blue plane.
+      // Sea ripples: long pale bands drifting slowly toward the shore.
+      // Own mesh ('sea', alpha 0.45) so they read clearly against the
+      // blue water. Far bands cover the open sea; near-shore bands sit
+      // in [620, 900] so several are always in the bay view.
+      const sr = { matrices: [], tints: [] };
       for (let k = 0; k < 36; k++) {
         const x = 2100 - ((game.elapsed * 3 + k * 47) % 1480);
         const z = -850 + ((k * 173) % 1700);
         const len = 40 + ((k * 37) % 50);
-        const wdt = 4 + ((k * 13) % 10) / 10 * 2; // 4-6 m wide: readable even at a grazing angle
-        fl.matrices.push(mat4TRS(x, -1.05, z, 0, wdt, 1, len));
-        fl.tints.push([0.9, 0.96, 1]);
+        const wdt = 5 + ((k * 13) % 10) / 10 * 2; // 5-7 m wide
+        sr.matrices.push(mat4TRS(x, -1.05, z, 0, wdt, 1, len));
+        sr.tints.push([0.92, 0.97, 1]);
       }
-      // Near-shore bands: always several in the bay view. x wraps in
-      // [620, 900] (the strip the bay camera sees), z spread over the
-      // beachfront, so the sea never reads empty from the shore.
       for (let k = 0; k < 40; k++) {
         const nx = 900 - ((game.elapsed * 3 + k * 37) % 280);
         const nz = -600 + ((k * 211) % 1200);
         const nlen = 60 + ((k * 29) % 40);
-        const nwdt = 4 + ((k * 7) % 10) / 10 * 2;
-        fl.matrices.push(mat4TRS(nx, -1.05, nz, 0, nwdt, 1, nlen));
-        fl.tints.push([0.92, 0.97, 1]);
+        const nwdt = 6 + ((k * 7) % 10) / 10 * 2; // 6-8 m wide
+        sr.matrices.push(mat4TRS(nx, -1.05, nz, 0, nwdt, 1, nlen));
+        sr.tints.push([0.94, 0.98, 1]);
       }
+      dyn.sea = sr;
       dyn.flow = fl;
     }
     // Rain streaks around the camera.
