@@ -16,7 +16,7 @@
 import { mulberry32, range, rangeInt, clamp } from './rng.js';
 import { PED_COUNT } from './config.js';
 import { ROAD_LINES, RIVER_POINTS, ASPHALT_HALF, terrainHeight, riverDistance } from './city.js';
-import { emptyGeom, plainBox, prismY, coneY, mat4TRS, mat4RotX, mat4Multiply } from './gl.js';
+import { emptyGeom, plainBox, prismY, coneY, scaleGeom, mat4TRS, mat4RotX, mat4Multiply } from './gl.js';
 
 // Any colour goes for shirts — bright and varied, not just pastels.
 const SHIRTS = [
@@ -698,35 +698,38 @@ export function createPeds(city, opts = {}) {
 // (shirt / pants / skin / hair) supplies the colour. Darker details use
 // a grey vertex colour so the tint reads darker there.
 // Torso (feet at y=0): hips 0.90, waist 1.08, chest 1.28, shoulders 1.42,
-// neck 1.46 — a WIDE taper, not a slab: the torso is broad enough to
-// balance the legs (Mu: upper body too small before). Collar + placket +
-// belt in grey.
+// neck 1.46 — an OVAL body (Mu: no sharp boxes). Two stacked elliptical
+// frustums (12-sided, flattened to 0.56 depth so the torso is wider than
+// it is deep): lower tapers hips 0.46 -> waist 0.40, upper flares waist
+// 0.40 -> shoulders 0.54, meeting smoothly at the waist with no ledge.
+// Belt + collar are rounded rings; the placket stays a thin flat strip
+// (a clothing detail, not body shape).
 export function pedTorsoGeom() {
   const g = emptyGeom();
   const at = (part, x, y, z) => { shift(part, x, y, z); g.pos.push(...part.pos); g.nrm.push(...part.nrm); g.col.push(...part.col); };
-  at(plainBox(0.46, 0.18, 0.26, [1, 1, 1]), 0, 0.99, 0); // hips
-  at(plainBox(0.40, 0.16, 0.23, [1, 1, 1]), 0, 1.14, 0); // waist (taper)
-  at(plainBox(0.50, 0.28, 0.28, [1, 1, 1]), 0, 1.30, 0); // chest
-  at(plainBox(0.54, 0.08, 0.30, [1, 1, 1]), 0, 1.44, 0); // shoulders
-  at(plainBox(0.34, 0.04, 0.22, [0.75, 0.75, 0.75]), 0, 1.47, 0); // collar
+  at(scaleGeom(coneY(12, 0.20, 0.23, 0.24, [1, 1, 1]), 1, 1, 0.56), 0, 1.02, 0); // hips -> waist
+  at(scaleGeom(coneY(12, 0.27, 0.20, 0.34, [1, 1, 1]), 1, 1, 0.56), 0, 1.31, 0); // waist -> shoulders
+  at(scaleGeom(prismY(12, 0.215, 0.05, [0.6, 0.6, 0.6]), 1, 1, 0.56), 0, 1.06, 0); // belt (rounded band)
+  at(scaleGeom(prismY(12, 0.16, 0.04, [0.75, 0.75, 0.75]), 1, 1, 0.56), 0, 1.48, 0); // collar (rounded ring)
   at(plainBox(0.05, 0.24, 0.02, [0.8, 0.8, 0.8]), 0, 1.28, 0.15); // placket
-  at(plainBox(0.44, 0.05, 0.24, [0.6, 0.6, 0.6]), 0, 1.06, 0); // belt
   return g; // the neck lives in the head mesh (skin tint, not shirt)
 }
 // One arm (left/right): upper arm + forearm bent ~20° at the elbow + hand.
 // LONG enough that the fingertips reach mid-thigh (Mu: arms too short
-// before) and thick enough to read. Built with the SHOULDER at the origin,
-// hanging down, so the instance matrix pivots it at the shoulder.
+// before) and thick enough to read. ROUNDED capsules (10-sided cylinders),
+// not blocks — the elbow reads as a smooth bend where the two cylinders
+// overlap. Built with the SHOULDER at the origin, hanging down, so the
+// instance matrix pivots it at the shoulder.
 // side: -1 left, +1 right.
 export function pedArmGeom(side) {
   const g = emptyGeom();
   const dx = side < 0 ? -0.25 : 0.25;
-  const upper = plainBox(0.14, 0.34, 0.15, [1, 1, 1]);
+  const upper = prismY(10, 0.07, 0.34, [1, 1, 1]); // capsule, 0.14 across
   shift(upper, 0, -0.17, 0);
-  const fore = plainBox(0.13, 0.32, 0.14, [1, 1, 1]);
+  const fore = prismY(10, 0.065, 0.32, [1, 1, 1]); // capsule, 0.13 across
   shift(fore, 0, -0.50, 0.02);
   tiltX(fore, 0.35, -0.34); // elbow bend, forearm slightly forward
-  const hand = plainBox(0.11, 0.15, 0.12, [1, 1, 1]);
+  const hand = prismY(8, 0.055, 0.15, [1, 1, 1]); // rounded hand
   shift(hand, 0, -0.76, 0.06);
   for (const part of [upper, fore, hand]) { g.pos.push(...part.pos); g.nrm.push(...part.nrm); g.col.push(...part.col); }
   return g;
@@ -739,12 +742,12 @@ export function pedArmGeom(side) {
 export function pedLegGeom(side) {
   const g = emptyGeom();
   const dx = side < 0 ? -0.11 : 0.11;
-  const thigh = plainBox(0.23, 0.45, 0.21, [1, 1, 1]);
+  const thigh = prismY(10, 0.115, 0.45, [1, 1, 1]); // rounded capsule, 0.23 across
   shift(thigh, dx, -0.225, 0);
-  const shin = plainBox(0.20, 0.42, 0.19, [1, 1, 1]);
+  const shin = prismY(10, 0.10, 0.42, [1, 1, 1]); // rounded capsule, 0.20 across
   shift(shin, dx, -0.66, 0);
   tiltX(shin, 0.14, -0.45); // knee bend, shin slightly forward
-  const shoe = plainBox(0.26, 0.14, 0.38, [0.12, 0.12, 0.13]);
+  const shoe = plainBox(0.26, 0.14, 0.38, [0.12, 0.12, 0.13]); // shoe stays a dark block (Mu)
   shift(shoe, dx, -0.85, 0.05);
   for (const part of [thigh, shin, shoe]) { g.pos.push(...part.pos); g.nrm.push(...part.nrm); g.col.push(...part.col); }
   return g;
@@ -770,9 +773,9 @@ export function pedLegsGeom() {
 export function pedSkirtGeom() {
   const g = emptyGeom();
   const at = (part, x, y, z) => { shift(part, x, y, z); g.pos.push(...part.pos); g.nrm.push(...part.nrm); g.col.push(...part.col); };
-  at(coneY(8, 0.15, 0.21, 0.40, [1, 1, 1]), 0, 0.75, 0); // tapered skirt: waist y 0.95 to hem y 0.55
+  at(coneY(12, 0.15, 0.21, 0.40, [1, 1, 1]), 0, 0.75, 0); // tapered skirt: waist y 0.95 to hem y 0.55 (12-sided, soft round)
   for (const dx of [-0.10, 0.10]) {
-    at(plainBox(0.17, 0.42, 0.17, [0.35, 0.35, 0.38]), dx, 0.34, 0); // calves, visible below the hem
+    at(prismY(10, 0.085, 0.42, [0.35, 0.35, 0.38]), dx, 0.34, 0); // rounded calves, visible below the hem
     at(plainBox(0.24, 0.14, 0.36, [0.12, 0.12, 0.13]), dx, 0.07, 0.05); // shoes (block, on the ground)
   }
   return g;

@@ -419,6 +419,23 @@ export function coneY(sides, rTop, rBottom, h, color) {
   return g;
 }
 
+// Non-uniform scale of a geometry (positions + normals). Normals use the
+// inverse-transpose scale and are renormalized, so a flattened cylinder
+// still shades as an ellipse. Used to turn round prisms into elliptical
+// body parts (a torso is wider than it is deep).
+export function scaleGeom(g, sx, sy, sz) {
+  for (let i = 0; i < g.pos.length; i += 3) {
+    g.pos[i] *= sx; g.pos[i + 1] *= sy; g.pos[i + 2] *= sz;
+  }
+  const isx = 1 / sx, isy = 1 / sy, isz = 1 / sz;
+  for (let i = 0; i < g.nrm.length; i += 3) {
+    const nx = g.nrm[i] * isx, ny = g.nrm[i + 1] * isy, nz = g.nrm[i + 2] * isz;
+    const l = Math.hypot(nx, ny, nz) || 1;
+    g.nrm[i] = nx / l; g.nrm[i + 1] = ny / l; g.nrm[i + 2] = nz / l;
+  }
+  return g;
+}
+
 export function mergeGeoms(list) {
   const g = emptyGeom();
   for (const s of list) {
