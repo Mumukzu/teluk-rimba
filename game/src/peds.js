@@ -139,10 +139,13 @@ export function createPeds(city, opts = {}) {
       const x = 55 + (i % 5) * 8, z = -22 + Math.floor(i / 5) * 8;
       coffeeTables.push({ x, z, heading: range(rand, 0, Math.PI * 2) });
     }
-    // Town square (plaza block 5,5, centre 50,50): tables ring the fountain.
+    // Town square (plaza block 5,5, centre (-51,-51) — NOT (50,50):
+    // (50,50) is a built-up downtown block; tables ringed there sat
+    // inside buildings and the sitters were invisible. The mission
+    // board already uses (-50,-50).
     for (let i = 0; i < 15; i++) {
       const a = (i / 15) * Math.PI * 2;
-      coffeeTables.push({ x: 50 + Math.cos(a) * 24, z: 50 + Math.sin(a) * 24, heading: a + Math.PI });
+      coffeeTables.push({ x: -51 + Math.cos(a) * 24, z: -51 + Math.sin(a) * 24, heading: a + Math.PI });
     }
     // Beach promenade tables (x ~600, along the sand).
     for (let i = 0; i < 15; i++) {
@@ -162,10 +165,10 @@ export function createPeds(city, opts = {}) {
         }
       }
     }
-    // Square benches (ring the fountain, facing it).
+    // Square benches (ring the fountain at (-51,-51), facing it).
     for (let i = 0; i < 20; i++) {
       const a = (i / 20) * Math.PI * 2 + 0.2;
-      benchSpots.push({ x: 50 + Math.cos(a) * 16, z: 50 + Math.sin(a) * 16, heading: a + Math.PI });
+      benchSpots.push({ x: -51 + Math.cos(a) * 16, z: -51 + Math.sin(a) * 16, heading: a + Math.PI });
     }
     // Fishing spots: riverbank promenade (rd 15, facing the water) + pier.
     for (let s = 0; s < RIVER_POINTS.length - 1; s++) {

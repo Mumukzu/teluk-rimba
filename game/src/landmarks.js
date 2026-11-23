@@ -143,7 +143,11 @@ export function buildLandmarks(city) {
 
   // ---------- Town square / park with fountain (plaza block 5,5) ----------
   const plazaGeom = emptyGeom();
-  const plaza = blockAt(city, 5, 5);
+  // Found BY ZONE (same block as blockAt(city, 5, 5) — index-based —
+  // but explicit about intent: the plaza centre is (-51,-51), NOT
+  // (50,50); peds.js used to ring its coffee tables around (50,50),
+  // a built-up downtown block, so the sitters sat inside buildings.
+  const plaza = city.blocks.find((b) => b.zone === 'plaza');
   if (plaza) {
     const cx = (plaza.x0 + plaza.x1) / 2, cz = (plaza.z0 + plaza.z1) / 2;
     // Basin ring: 12 stone blocks around a circle.
