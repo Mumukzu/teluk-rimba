@@ -32,12 +32,20 @@ export function buildShopGlow(city) {
   const rand = mulberry32(20261123);
   const matrices = [], tints = [];
   const spillMatrices = [], spillTints = [];
+  let bands = 0, dtIdx = 0;
   for (const b of city.buildings) {
     if (b.zone !== 'commercial' && b.zone !== 'downtown') continue;
+    const myDt = b.zone === 'downtown' ? dtIdx++ : -1;
     // Mu 23 Nov 21:19 — CBD ground floor glows ALL AROUND at night: a
     // warm panel + spill on EVERY face of a downtown tower (front, back,
     // left, right), so the base reads lit from any angle. Commercial shops
     // keep the single front panel. One instanced mesh either way.
+    // Mu 23 Nov 22:01 — CBD ground floor BRIGHTER + LIVELIER: the panel
+    // is wider (up to 18 m) and its tint pushes past 1.0, the spill is
+    // wider/deeper/stronger, and every OTHER downtown tower gets a lit
+    // amber sign band above the awning on its front face — from aerial
+    // night or street level the tower bases read busy and bright, not a
+    // thin line. Still warm, never blinding white; daytime untouched.
     const faces = b.zone === 'downtown'
       ? [0, Math.PI / 2, Math.PI, -Math.PI / 2]
       : [0];
@@ -48,7 +56,7 @@ export function buildShopGlow(city) {
       // across and sit w/2 out.
       const across = (turn === 0 || turn === Math.PI) ? b.w : b.d;
       const out = (turn === 0 || turn === Math.PI) ? b.d / 2 : b.w / 2;
-      const w = Math.min(across * 0.75, 10);
+      const w = b.zone === 'downtown' ? Math.min(across * 0.92, 18) : Math.min(across * 0.75, 10);
       // Ground floor, y 0.3–2.4 (below the sign band at 2.45+, so the shop
       // name and awning stay visible). Proud of the facade at +0.13 so it
       // sits IN FRONT of the shopfront glass (+0.12) — at +0.05 the glass
@@ -59,20 +67,35 @@ export function buildShopGlow(city) {
       const fz = b.z + nz * (out + 0.13);
       matrices.push(mat4TRS(fx, 1.35, fz, rot, w, h, 1));
       const base = GLOW_TINTS[Math.floor(rand() * GLOW_TINTS.length)];
-      const j = 0.85 + rand() * 0.15;
+      const j = b.zone === 'downtown' ? 1.0 + rand() * 0.15 : 0.85 + rand() * 0.15;
       const tint = [base[0] * j, base[1] * j, base[2] * j];
       tints.push(tint);
       // Warm spill on the ground in front of the shop (Mu's refs: warm
-      // light on the sidewalk) — a flat wash 2.2 m out from the facade,
-      // dimmer than the panel, same warm tint.
-      spillMatrices.push(mat4TRS(b.x + nx * (out + 2.2), 0.18, b.z + nz * (out + 2.2), rot, w * 0.8, 1, 3));
-      spillTints.push([tint[0] * 0.45, tint[1] * 0.45, tint[2] * 0.45]);
+      // light on the sidewalk) — downtown: a wider, deeper, stronger wash
+      // (5 m deep, 3 m out, 0.62x the panel tint); commercial keeps the
+      // old 3 m / 2.2 m / 0.45x spill.
+      const spillOut = b.zone === 'downtown' ? out + 3.0 : out + 2.2;
+      const spillW = b.zone === 'downtown' ? w : w * 0.8;
+      const spillD = b.zone === 'downtown' ? 5 : 3;
+      const spillF = b.zone === 'downtown' ? 0.62 : 0.45;
+      spillMatrices.push(mat4TRS(b.x + nx * spillOut, 0.18, b.z + nz * spillOut, rot, spillW, 1, spillD));
+      spillTints.push([tint[0] * spillF, tint[1] * spillF, tint[2] * spillF]);
+      // Lit amber sign band above the awning, front face only, on every
+      // OTHER downtown tower (11 of 21) — a second warm strip so the base
+      // reads as two lit layers, not one thin line.
+      if (b.zone === 'downtown' && turn === 0 && myDt % 2 === 0) {
+        const bw = Math.min(across * 0.55, 11);
+        const bj = 1.0 + rand() * 0.1;
+        matrices.push(mat4TRS(fx, 3.8, fz, rot, bw, 0.8, 1));
+        tints.push([1.0 * bj, 0.8 * bj, 0.5 * bj]);
+        bands++;
+      }
     }
   }
   return {
     geom: plainBox(1, 1, 0.06, [1, 1, 1]),
     matrices, tints,
     spill: { geom: plainBox(1, 0.02, 1, [1, 1, 1]), matrices: spillMatrices, tints: spillTints },
-    counts: { panels: matrices.length, spills: spillMatrices.length },
+    counts: { panels: matrices.length, spills: spillMatrices.length, bands },
   };
 }

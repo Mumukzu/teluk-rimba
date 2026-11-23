@@ -168,23 +168,23 @@ check('bridges are the 4 whitelisted crossings',
     meshes.bases.reduce((a, s) => a + s.matrices.length, 0)
     + meshes.glassBases.reduce((a, s) => a + s.matrices.length, 0) === 1000
     && meshes.glassBases.reduce((a, s) => a + s.matrices.length, 0) === 21);
-  // Curtain-wall glass is light silver-grey on every cell (Mu 23 Nov
-  // 21:38 — dark ocean blue was too contrasty against the cream zones):
-  // the geometry carries silver-grey / bright-silver / warm glass.
+  // Curtain-wall glass is pale sky-blue on every cell (Mu 23 Nov
+  // 22:01 — silver-grey was still cold/contrasty against the cream
+  // zones): the geometry carries pale sky-blue / bright pale-sky / warm
+  // glass.
   {
     const curtain = subdividedBox(1, 1, 1, 8, 12, 6, true);
-    const glassCols = new Set(['0.72,0.78,0.84', '0.8,0.86,0.92', '1,0.95,0.75']);
+    const glassCols = new Set(['0.68,0.8,0.92', '0.78,0.88,0.97', '1,0.95,0.75']);
     let glassVerts = 0, mullionVerts = 0;
     for (let i = 0; i < curtain.col.length; i += 3) {
       const key = curtain.col[i] + ',' + curtain.col[i + 1] + ',' + curtain.col[i + 2];
       if (glassCols.has(key)) { glassVerts++; continue; }
       const [r, g, b] = [curtain.col[i], curtain.col[i + 1], curtain.col[i + 2]];
-      // Soft mid-grey mullion: near-neutral grey, all channels in the mid
-      // band (front 0.45/0.48/0.52, side x0.94, band rows x0.85), blue
-      // slightly dominant so it still reads as cool silver, not navy.
-      if (b > r && r >= 0.35 && r <= 0.46 && g >= 0.38 && g <= 0.49 && b >= 0.41 && b <= 0.53) mullionVerts++;
+      // Soft blue-grey mullion: clearly blue (b > r), all channels in
+      // the soft band (front 0.50/0.56/0.62, side x0.94, band rows x0.85).
+      if (b > r && r >= 0.42 && r <= 0.51 && g >= 0.47 && g <= 0.57 && b >= 0.52 && b <= 0.63) mullionVerts++;
     }
-    check('curtain-wall geometry: silver-grey glass on every cell + soft mid-grey mullions',
+    check('curtain-wall geometry: pale sky-blue glass on every cell + soft blue-grey mullions',
       glassVerts > 0 && mullionVerts > 0, glassVerts + ' glass verts, ' + mullionVerts + ' mullion verts');
   }
   // Mu 23 Nov 21:21 — NON-CBD: exactly ONE wall colour per zone
@@ -201,14 +201,14 @@ check('bridges are the 4 whitelisted crossings',
     }
     check('non-CBD zones: one uniform wall colour each (cream / white / sand-white / blue-grey / wood-brown)', uniformOk);
     const downtownCols = new Set(city.buildings.filter((b) => b.zone === 'downtown').map((b) => b.color.join(',')));
-    // Every downtown tint is light silver-grey (all channels bright,
-    // cool silver b >= g >= r) — the only exception is the white
-    // hospital landmark. No dark blue left.
-    check('downtown stays light silver-grey (no dark blue / pastel left)',
+    // Every downtown tint is pale sky-blue (all channels bright, clearly
+    // blue b > g > r) — the only exception is the white hospital
+    // landmark. No dark blue, no silver left.
+    check('downtown stays pale sky-blue (no dark blue / silver left)',
       [...downtownCols].every((c) => {
         if (c === '0.95,0.95,0.95') return true; // hospital landmark
         const [r, g, bl] = c.split(',').map(Number);
-        return r >= 0.75 && g >= 0.80 && bl >= 0.85 && bl >= g && g >= r;
+        return r >= 0.70 && g >= 0.82 && bl >= 0.90 && bl > g && g > r;
       }));
   }
   const distinctRoofTints = new Set(meshes.roofs.tints.map((t) => t.join(','))).size;

@@ -155,7 +155,7 @@ export function buildBuildingMeshes(gl, progs, city) {
   const parapetEWGeom = plainBox(0.15, 1, 1, [1, 1, 1]);
   for (const b of city.buildings) {
     // Base box is centred; lift so its bottom sits on the ground.
-    // Downtown towers ride the glass curtain-wall geometry (silver-grey);
+    // Downtown towers ride the glass curtain-wall geometry (pale sky-blue);
     // every other building keeps the plain wall + window geometry.
     const cls = buildingClass(b.h);
     const base = b.zone === 'downtown' ? glassBases[cls] : bases[cls];
@@ -392,10 +392,12 @@ export function buildLitWindows(city) {
   const matrices = [], tints = [];
   const WARM = [[1, 0.85, 0.55], [1, 0.78, 0.45], [0.95, 0.9, 0.65], [1, 0.95, 0.8]];
   const COOL = [[0.7, 0.85, 1], [0.8, 0.9, 1]];
-  // Mu 23 Nov 21:19 — CBD glass towers light up MUCH more at night:
-  // 60 lit windows per tower (was 24), so the silver-grey glass reads
-  // alive after dark. Other zones unchanged.
-  const perZone = { downtown: 60, commercial: 15, residential: 7, beach: 12, port: 6, forest: 3 };
+  // Mu 23 Nov 22:01 — CBD glass towers light up MUCH more at night:
+  // 80 lit windows per tower (was 60, was 24), all in the two BRIGHTEST
+  // warm tints and drawn BIGGER (72% of the cell vs 60%), so the pale
+  // sky-blue glass reads alive after dark even from far away. Other
+  // zones unchanged.
+  const perZone = { downtown: 80, commercial: 15, residential: 7, beach: 12, port: 6, forest: 3 };
   // Every window cell of one building, in the SAME local frame
   // subdividedBox() uses: front/back faces nx=segFront (cell width
   // w/segFront), side faces nx=sideCols (cell width d/sideCols), all faces
@@ -450,11 +452,18 @@ export function buildLitWindows(city) {
       const y = b.h / 2 + v * b.h;
       // Quad geometry is 1.8 x 1.3 m; scale it to 60% of the cell so the
       // glow sits INSIDE the 78% glass quad with a dark frame around it.
-      matrices.push(mat4TRS(fx, y, fz, rotY, 0.60 * cellW / 1.8, 0.60 * cellH / 1.3, 1));
+      // Downtown towers: 72% — a bigger, brighter square that still fits
+      // inside the glass, so it reads from far away at night.
+      const q = b.zone === 'downtown' ? 0.72 : 0.60;
+      matrices.push(mat4TRS(fx, y, fz, rotY, q * cellW / 1.8, q * cellH / 1.3, 1));
       // CBD towers glow warm only (Mu 23 Nov 21:19: kuning hangat, never
-      // cool white); other zones keep ~80% warm / 20% cool.
+      // cool white) — and only the two BRIGHTEST warm tints (Mu 23 Nov
+      // 22:01: brighter, visible from afar); other zones keep the full
+      // warm mix at ~80% warm / 20% cool.
       const warm = b.zone === 'downtown' ? true : rand() < 0.8;
-      const pal = warm ? WARM : COOL;
+      const pal = b.zone === 'downtown'
+        ? [[1, 0.95, 0.8], [1, 0.85, 0.55]]
+        : warm ? WARM : COOL;
       tints.push(pal[Math.floor(rand() * pal.length)]);
     }
   }

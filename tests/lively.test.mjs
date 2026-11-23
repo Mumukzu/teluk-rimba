@@ -40,18 +40,20 @@ check('glass + glow matrices and tints are finite',
   allFin(meshes.glassBandTall.matrices) && allFin(meshes.glassGlow.matrices)
   && allFinT(meshes.glassBandTall.tints) && allFinT(meshes.glassGlow.tints));
 
-// ---- CBD full glass (Mu 23 Nov 21:19; tint silver-grey Mu 23 Nov 21:38): silver-grey curtain wall, warm
+// ---- CBD full glass (Mu 23 Nov 21:19; tint pale sky-blue Mu 23 Nov 22:01): pale sky-blue curtain wall, warm
 // lit windows on every tower, ground floor glowing on all four sides ----
 {
   const sg = buildShopGlow(city);
-  // 316 commercial front panels + 21 downtown towers x 4 faces = 400.
-  check('shop glow: 400 panels (CBD towers glow on all 4 sides)', sg.counts.panels === 400, sg.counts.panels + ' panels');
-  check('shop glow: 400 ground spills (one per panel)', sg.counts.spills === 400, sg.counts.spills + ' spills');
+  // 316 commercial front panels + 21 downtown towers x 4 faces = 400
+  // ground panels + 11 amber sign bands (every other downtown tower).
+  check('shop glow: 411 panels (400 ground + 11 sign bands, CBD towers glow on all 4 sides)', sg.counts.panels === 411, sg.counts.panels + ' panels');
+  check('shop glow: 11 amber sign bands on downtown towers', sg.counts.bands === 11, sg.counts.bands + ' bands');
+  check('shop glow: 400 ground spills (one per ground panel)', sg.counts.spills === 400, sg.counts.spills + ' spills');
   check('shop glow panels + spills are finite',
     allFin(sg.matrices) && allFinT(sg.tints) && allFin(sg.spill.matrices) && allFinT(sg.spill.tints));
   const lw = buildLitWindows(city);
-  // 21 downtown towers x 60 warm windows + the other zones unchanged.
-  check('lit windows: 10,853 (CBD towers light 60 each, all warm)', lw.matrices.length === 10853, lw.matrices.length + ' windows');
+  // 21 downtown towers x 80 warm windows + the other zones unchanged.
+  check('lit windows: 11,273 (CBD towers light 80 each, all warm, bigger quads)', lw.matrices.length === 11273, lw.matrices.length + ' windows');
   check('lit window matrices + tints are finite', allFin(lw.matrices) && allFinT(lw.tints));
 }
 

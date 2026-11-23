@@ -307,18 +307,19 @@ function pushQuad(g, a, b, c, d, n, col) {
 // 56% read too small) — a clear window with a wall border around it.
 // horizontal band every 4th row and side faces are shaded a touch darker,
 // so facades read as buildings, not plain blocks.
-// curtain=true (Mu 23 Nov 21:19, CBD full window glass; Mu 23 Nov 21:38,
-// silver-grey not dark blue): EVERY cell above the ground floor is glass
-// — light silver-grey glass shades — and the wall cells become a soft
-// mid-grey mullion grid, so the facade reads as a glass curtain wall, not
-// a wall with window holes. The instance tint multiplies these colours,
-// so both the tint (city.js) and the glass shades are light silver-grey
-// — the product stays bright silver, blending with the cream zones.
+// curtain=true (Mu 23 Nov 21:19, CBD full window glass; Mu 23 Nov 22:01,
+// pale sky-blue, not dark blue and not silver-grey): EVERY cell above the
+// ground floor is glass — pale sky-blue glass shades — and the wall cells
+// become a soft blue-grey mullion grid, so the facade reads as a glass
+// curtain wall, not a wall with window holes. The instance tint multiplies
+// these colours, so both the tint (city.js) and the glass shades are pale
+// sky-blue — the product stays bright pale blue, blending with the cream
+// zones and the blue sky above.
 export function subdividedBox(w, h, d, segFront = 6, segRows = 10, sideCols = 2, curtain = false) {
   const g = emptyGeom();
   const hw = w / 2, hh = h / 2, hd = d / 2;
-  const glassDark = curtain ? [0.72, 0.78, 0.84] : [0.3, 0.34, 0.42]; // silver-grey glass
-  const glassReflect = curtain ? [0.80, 0.86, 0.92] : [0.7, 0.8, 0.95]; // bright silver / sky reflection
+  const glassDark = curtain ? [0.68, 0.80, 0.92] : [0.3, 0.34, 0.42]; // pale sky-blue glass
+  const glassReflect = curtain ? [0.78, 0.88, 0.97] : [0.7, 0.8, 0.95]; // bright pale sky / sky reflection
   const glassWarm = curtain ? [1.0, 0.95, 0.75] : [0.95, 0.8, 0.5]; // lit / curtained window
   const roof = [0.42, 0.42, 0.46];
   // winFn: glass colour for a window cell, null for plain wall. Windows on
@@ -331,11 +332,11 @@ export function subdividedBox(w, h, d, segFront = 6, segRows = 10, sideCols = 2,
   };
   // wallFn: wall colour for a cell — a subtle darker band every 4th row,
   // side faces a touch darker than front/back for depth. Curtain mode:
-  // the wall is the soft mid-grey mullion grid between the glass cells.
+  // the wall is the soft blue-grey mullion grid between the glass cells.
   const wallFn = (shade) => (i, j) => {
     if (curtain) {
       const s = shade * (j % 4 === 3 ? 0.85 : 1.0);
-      return [0.45 * s, 0.48 * s, 0.52 * s];
+      return [0.50 * s, 0.56 * s, 0.62 * s];
     }
     const s = shade * (j % 4 === 3 ? 0.88 : 1.0);
     return [s, s, s];

@@ -205,17 +205,18 @@ const ZONE_SIZE = {
 
 // Mu 23 Nov 21:19 — CBD: FULL WINDOW GLASS. Downtown tint is the glass
 // tint (multiplied by the curtain-wall glass colours in gl.js).
-// Mu 23 Nov 21:38 — biru gelap TERLALU KONTRAS dengan krem sekitar (opsi 3):
-// kaca jadi SILVER ABU TERANG — tint + geometri kaca sama-sama terang,
-// jadi hasil akhirnya silver muda yang nyambung dengan zona krem/putih.
+// Mu 23 Nov 22:01 — silver abu terang masih terasa dingin/kontras (opsi 3):
+// kaca jadi BIRU LANGIT PUCAT — sangat muda, lembut, di antara silver dan
+// biru langit: lebih hangat dari silver, jauh lebih lembut dari ocean blue
+// gelap, nyambung dengan krem/putih sekitar + langit biru di atas.
 // Mu 23 Nov 21:21 — NON-CBD: SATU warna seragam per zona (opsi 1):
 // komersial krem hangat, perumahan putih, pantai putih pasir, pelabuhan
 // abu-biru, hutan coklat kayu. (Tint = warna dinding; kaca jendela tetap
 // gelap.) Landmark overrides (hospital/police/school) still apply after.
 const ZONE_COLORS = {
-  downtown: [ // menara kaca SILVER ABU TERANG: abu-biru muda, variasi tipis antar tower
-    [0.82, 0.86, 0.90], [0.86, 0.89, 0.92], [0.78, 0.83, 0.88],
-    [0.84, 0.87, 0.91], [0.80, 0.85, 0.89], [0.88, 0.90, 0.93],
+  downtown: [ // menara kaca BIRU LANGIT PUCAT: biru langit sangat muda, variasi tipis antar tower
+    [0.78, 0.87, 0.95], [0.82, 0.89, 0.96], [0.74, 0.85, 0.94],
+    [0.80, 0.88, 0.95], [0.76, 0.86, 0.94], [0.84, 0.90, 0.97],
   ],
   commercial: [ // SATU warna: krem hangat
     [0.96, 0.88, 0.72],
@@ -438,7 +439,7 @@ export function generateCity(seed = SEED) {
       b.d = Math.min(56, Math.round(b.d * 1.6));
       b.floors = Math.max(1, Math.round(b.h / 3.2));
       b.shape = shapes[i % shapes.length];
-      if (b.shape === 'glass') b.color = [0.78, 0.82, 0.88]; // silver-grey glass (Mu 23 Nov 21:38)
+      if (b.shape === 'glass') b.color = [0.76, 0.86, 0.94]; // pale sky-blue glass (Mu 23 Nov 22:01)
       // No facade flush against a road — the grown tower must sit back
       // from its block edge like every other building. Shrink the
       // footprint to fit the SETBACK_M margin, centre stays: shrinking
