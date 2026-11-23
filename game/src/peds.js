@@ -16,7 +16,7 @@
 import { mulberry32, range, rangeInt, clamp } from './rng.js';
 import { PED_COUNT } from './config.js';
 import { ROAD_LINES, RIVER_POINTS, ASPHALT_HALF, terrainHeight, riverDistance } from './city.js';
-import { emptyGeom, plainBox, prismY, mat4TRS, mat4RotX, mat4Multiply } from './gl.js';
+import { emptyGeom, plainBox, prismY, coneY, mat4TRS, mat4RotX, mat4Multiply } from './gl.js';
 
 // Any colour goes for shirts — bright and varied, not just pastels.
 const SHIRTS = [
@@ -368,9 +368,7 @@ export function createPeds(city, opts = {}) {
       hairStyle,
       // Variant system (ONE base model): sleeves, skirt, body scale.
       sleeves: rand() < 0.5 ? 'long' : 'short',
-      // No skirts (Mu's refs: pants only — the skirt read as a barrel
-      // and glided without a leg swing). Every NPC wears pants now.
-      skirt: false,
+      skirt: rand() < 0.15,
       scale: range(rand, 0.94, 1.06),
       pose: (activity === 'coffee' || activity === 'bench' || activity === 'beachSit') ? 'sit' : 'stand',
       state: activity === 'walk' ? 'walk' : 'stand',
@@ -659,7 +657,7 @@ export function createPeds(city, opts = {}) {
         armR.tints.push(armTint);
         if (p.skirt) {
           skirt.matrices.push(mat4TRS(p.x, y, p.z, p.heading, s, s, s));
-          skirt.tints.push(p.pants);
+          skirt.tints.push(p.shirt); // the dress matches the top; the calves below it are dark
         } else {
           // Legs pivot at the hips (±0.11, 0.90 standing / 0.45 seated):
           // opposite phases. Seated legs rotate ~45° forward at the hip.
@@ -762,14 +760,19 @@ export function pedLegsGeom() {
   }
   return g;
 }
-// Skirt / dress: flared, waist to knees + shoes. Replaces the legs for
-// skirt-wearers (feet at y=0, tinted with the pants colour).
+// Skirt / dress (Mu: NOT a round ball): a TAPERED frustum — narrow at
+// the waist (0.30 wide), flaring only slightly to the hem (0.42 wide,
+// never wider than the shoulders 0.54), ending just above the knee
+// (y 0.55). The calves + dark block shoes stay VISIBLE below the hem,
+// so the silhouette reads as a person in a skirt with legs, from front,
+// back and side. Tinted with the shirt colour (a dress matches the top);
+// the shins carry a dark vertex colour so they read as legs under any tint.
 export function pedSkirtGeom() {
   const g = emptyGeom();
   const at = (part, x, y, z) => { shift(part, x, y, z); g.pos.push(...part.pos); g.nrm.push(...part.nrm); g.col.push(...part.col); };
-  at(prismY(8, 0.20, 0.22, [1, 1, 1]), 0, 0.78, 0); // waist
-  at(prismY(8, 0.28, 0.26, [1, 1, 1]), 0, 0.55, 0); // flared hem
-  for (const dx of [-0.11, 0.11]) {
+  at(coneY(8, 0.15, 0.21, 0.40, [1, 1, 1]), 0, 0.75, 0); // tapered skirt: waist y 0.95 to hem y 0.55
+  for (const dx of [-0.10, 0.10]) {
+    at(plainBox(0.17, 0.42, 0.17, [0.35, 0.35, 0.38]), dx, 0.34, 0); // calves, visible below the hem
     at(plainBox(0.24, 0.14, 0.36, [0.12, 0.12, 0.13]), dx, 0.07, 0.05); // shoes (block, on the ground)
   }
   return g;

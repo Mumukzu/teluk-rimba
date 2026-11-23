@@ -398,6 +398,27 @@ export function prismY(sides, r, h, color) {
   return g;
 }
 
+// Tapered frustum (cone with the tip cut off): top ring radius rTop,
+// bottom ring radius rBottom, height h. For skirts/dresses — a straight
+// cylinder reads as a ball; a frustum reads as a tapered garment.
+export function coneY(sides, rTop, rBottom, h, color) {
+  const g = emptyGeom();
+  const hh = h / 2;
+  const pt = (k, y, r) => {
+    const a = ((k + 0.5) / sides) * Math.PI * 2; // half-step: faces on the axes
+    return [r * Math.cos(a), y, r * Math.sin(a)];
+  };
+  for (let k = 0; k < sides; k++) {
+    const a0 = pt(k, -hh, rBottom), a1 = pt(k + 1, -hh, rBottom), b0 = pt(k, hh, rTop), b1 = pt(k + 1, hh, rTop);
+    const mid = ((k + 1) / sides) * Math.PI * 2;
+    const n = [Math.cos(mid), 0, Math.sin(mid)];
+    pushQuad(g, a1, a0, b0, b1, n, color); // side (winding faces outward)
+    pushTri(g, [0, hh, 0], b1, b0, [0, 1, 0], color, color, color); // top cap
+    pushTri(g, [0, -hh, 0], a0, a1, [0, -1, 0], color, color, color); // bottom cap
+  }
+  return g;
+}
+
 export function mergeGeoms(list) {
   const g = emptyGeom();
   for (const s of list) {
