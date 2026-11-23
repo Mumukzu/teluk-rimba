@@ -117,7 +117,9 @@ export function buildRiver() {
 // the channel): the sheets are LIGHT BLUE [0.5,0.75,0.95] with WHITE
 // foam streaks baked in as vertical bands (blue/foam/blue/foam/blue),
 // 10 m wide so they cover the channel — what you see is blue-white
-// water, not the rock or the track behind it. The dirt track now
+// water, not the rock or the track behind it. The sheets OVERLAP
+// (span t±0.075 on a 0.14 step) so the cascade reads as ONE continuous
+// band of falling water, never as separate triangles. The dirt track
 // curves around the cascade's NE side (see buildDirtTrack), and the
 // channel bed itself is dark grey rock (groundColor).
 export function buildWaterfall() {
@@ -137,8 +139,8 @@ export function buildWaterfall() {
   const STRIPS = [[-1, -0.55, water], [-0.55, -0.25, foam], [-0.25, 0.25, water], [0.25, 0.55, foam], [0.55, 1, water]];
   for (const t of [0.08, 0.22, 0.36, 0.5, 0.64, 0.78, 0.92]) {
     const [cx, cz] = at(t);
-    const [ux, uz] = at(Math.max(0, t - 0.04));
-    const [dx2, dz2] = at(Math.min(1, t + 0.04));
+    const [ux, uz] = at(Math.max(0, t - 0.075));
+    const [dx2, dz2] = at(Math.min(1, t + 0.075));
     const topY = terrainHeight(ux, uz) + 0.5;
     const botY = terrainHeight(dx2, dz2) + 0.5;
     for (const [f0, f1, col] of STRIPS) {
@@ -210,15 +212,15 @@ export function buildVolcano() {
 // mission (mountain road). Follows the terrain so the jeep can climb it.
 // ROUTE (Mu, 23 Nov — the old straight line ran down the MIDDLE of the
 // waterfall channel, so the cascade read as a brown stripe): the middle
-// points are offset ~20 m to the NE side of the river line, so the track
-// curves AROUND the cascade instead of through it. Endpoints stay on
-// the mission line (base (-580,-580), summit (-800,-800)). The track is
+// points are offset ~40 m to the NE side of the river line, so the track
+// curves WELL CLEAR of the cascade instead of hugging it. Endpoints stay
+// on the mission line (base (-580,-580), summit (-800,-800)). The track is
 // VISUAL ONLY (missions use coordinates, not this geometry), so the
 // reroute cannot break mission 6.
 export function buildDirtTrack() {
   const g = emptyGeom();
   const col = [0.5, 0.38, 0.26];
-  const pts = [[-580, -580], [-674, -646], [-754, -726], [-800, -800]];
+  const pts = [[-580, -580], [-688, -632], [-768, -712], [-800, -800]];
   const HALF = 3.5;
   for (let i = 0; i < pts.length - 1; i++) {
     const [ax, az] = pts[i], [bx, bz] = pts[i + 1];
