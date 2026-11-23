@@ -377,9 +377,23 @@ export function plainBox(w, h, d, color, topColor = null) {
   return g;
 }
 
+function pushTriN(g, a, b, c, na, nb, nc, ca, cb, cc) {
+  g.pos.push(...a, ...b, ...c);
+  g.nrm.push(...na, ...nb, ...nc);
+  g.col.push(...ca, ...cb, ...cc);
+}
+
+function pushQuadN(g, a, b, c, d, na, nb, nc, nd, ca, cb, cc, cd) {
+  pushTriN(g, a, b, c, na, nb, nc, ca, cb, cc);
+  pushTriN(g, a, c, d, na, nc, nd, ca, cc, cd);
+}
+
 // Vertical prism (axis Y): a rounded column — heads, limbs and trunks
 // read as round instead of square. Faces are centred on the axes (a flat
 // face points +Z, so a face reads as a face, not an edge).
+// SMOOTH normals (Mu: no visible facets up close): every side vertex
+// carries the radial normal at ITS OWN angle, so adjacent faces share the
+// edge normal and the shading interpolates smoothly across the edge.
 export function prismY(sides, r, h, color) {
   const g = emptyGeom();
   const hh = h / 2;
@@ -387,11 +401,13 @@ export function prismY(sides, r, h, color) {
     const a = ((k + 0.5) / sides) * Math.PI * 2; // half-step: faces on the axes
     return [r * Math.cos(a), y, r * Math.sin(a)];
   };
+  const nrm = (k) => {
+    const a = ((k + 0.5) / sides) * Math.PI * 2;
+    return [Math.cos(a), 0, Math.sin(a)];
+  };
   for (let k = 0; k < sides; k++) {
     const a0 = pt(k, -hh), a1 = pt(k + 1, -hh), b0 = pt(k, hh), b1 = pt(k + 1, hh);
-    const mid = ((k + 1) / sides) * Math.PI * 2;
-    const n = [Math.cos(mid), 0, Math.sin(mid)];
-    pushQuad(g, a1, a0, b0, b1, n, color); // side (winding faces outward)
+    pushQuadN(g, a1, a0, b0, b1, nrm(k + 1), nrm(k), nrm(k), nrm(k + 1), color, color, color, color);
     pushTri(g, [0, hh, 0], b1, b0, [0, 1, 0], color, color, color); // top cap
     pushTri(g, [0, -hh, 0], a0, a1, [0, -1, 0], color, color, color); // bottom cap
   }
@@ -401,20 +417,122 @@ export function prismY(sides, r, h, color) {
 // Tapered frustum (cone with the tip cut off): top ring radius rTop,
 // bottom ring radius rBottom, height h. For skirts/dresses — a straight
 // cylinder reads as a ball; a frustum reads as a tapered garment.
+// SMOOTH normals: radial at each vertex's own angle, tilted up by the
+// frustum slope, so the shading is continuous across the faces.
 export function coneY(sides, rTop, rBottom, h, color) {
   const g = emptyGeom();
   const hh = h / 2;
+  const slope = Math.atan2(rBottom - rTop, h); // side tilt from vertical
+  const cs = Math.cos(slope), sn = Math.sin(slope);
   const pt = (k, y, r) => {
     const a = ((k + 0.5) / sides) * Math.PI * 2; // half-step: faces on the axes
     return [r * Math.cos(a), y, r * Math.sin(a)];
   };
+  const nrm = (k) => {
+    const a = ((k + 0.5) / sides) * Math.PI * 2;
+    return [Math.cos(a) * cs, sn, Math.sin(a) * cs];
+  };
   for (let k = 0; k < sides; k++) {
     const a0 = pt(k, -hh, rBottom), a1 = pt(k + 1, -hh, rBottom), b0 = pt(k, hh, rTop), b1 = pt(k + 1, hh, rTop);
-    const mid = ((k + 1) / sides) * Math.PI * 2;
-    const n = [Math.cos(mid), 0, Math.sin(mid)];
-    pushQuad(g, a1, a0, b0, b1, n, color); // side (winding faces outward)
+    pushQuadN(g, a1, a0, b0, b1, nrm(k + 1), nrm(k), nrm(k), nrm(k + 1), color, color, color, color);
     pushTri(g, [0, hh, 0], b1, b0, [0, 1, 0], color, color, color); // top cap
     pushTri(g, [0, -hh, 0], a0, a1, [0, -1, 0], color, color, color); // bottom cap
+  }
+  return g;
+}
+
+// Smooth capsule along Y: a straight cylinder (length len) with a
+// hemispherical dome at each end (radius r). Total height len + 2r,
+// centred on the origin. One clean surface — no rings, seams or joints.
+// Per-vertex normals follow the profile (radial on the cylinder, tilting
+// up/down over the domes), so it shades as one smooth shape even up
+// close. colFn(angle, y) optionally colours each vertex (angle 0 = +Z
+// front, +PI/2 = +X right, PI = -Z back; angle normalised to [-PI, PI]).
+// Used for the neat humanoid body: torso, arms, legs, head, calves.
+export function capsuleY(sides, r, len, color, colFn = null) {
+  const g = emptyGeom();
+  const hh = len / 2;
+  // Profile rings, bottom pole -> top pole. ny = the profile normal's
+  // y-component at that ring (radial component = sqrt(1 - ny^2)).
+  const rings = [];
+  for (const deg of [90, 60, 30, 0]) {
+    const phi = deg * Math.PI / 180;
+    rings.push({ y: -hh - r * Math.sin(phi), rad: r * Math.cos(phi), ny: -Math.sin(phi) });
+  }
+  rings.push({ y: hh, rad: r, ny: 0 });
+  for (const deg of [30, 60, 90]) {
+    const phi = deg * Math.PI / 180;
+    rings.push({ y: hh + r * Math.sin(phi), rad: r * Math.cos(phi), ny: Math.sin(phi) });
+  }
+  const ang = (k) => {
+    let a = ((k + 0.5) / sides) * Math.PI * 2;
+    if (a > Math.PI) a -= 2 * Math.PI;
+    return a; // 0 = +Z front
+  };
+  const pt = (ring, k) => {
+    const a = ((k + 0.5) / sides) * Math.PI * 2;
+    return [ring.rad * Math.sin(a), ring.y, ring.rad * Math.cos(a)];
+  };
+  const nrm = (ring, k) => {
+    const a = ((k + 0.5) / sides) * Math.PI * 2;
+    const rr = Math.sqrt(Math.max(0, 1 - ring.ny * ring.ny));
+    return [rr * Math.sin(a), ring.ny, rr * Math.cos(a)];
+  };
+  const col = (ring, k) => (colFn ? colFn(ang(k), ring.y) : color);
+  for (let i = 0; i < rings.length - 1; i++) {
+    const r0 = rings[i], r1 = rings[i + 1];
+    for (let k = 0; k < sides; k++) {
+      const k1 = (k + 1) % sides;
+      if (r0.rad === 0) {
+        // Bottom pole fan (same winding as prismY's bottom cap).
+        const p = [0, r0.y, 0], n = [0, -1, 0], c = colFn ? colFn(0, r0.y) : color;
+        pushTriN(g, p, pt(r1, k), pt(r1, k1), n, nrm(r1, k), nrm(r1, k1), c, col(r1, k), col(r1, k1));
+      } else if (r1.rad === 0) {
+        // Top pole fan (same winding as prismY's top cap).
+        const p = [0, r1.y, 0], n = [0, 1, 0], c = colFn ? colFn(0, r1.y) : color;
+        pushTriN(g, p, pt(r0, k1), pt(r0, k), n, nrm(r0, k1), nrm(r0, k), c, col(r0, k1), col(r0, k));
+      } else {
+        pushQuadN(g, pt(r0, k1), pt(r0, k), pt(r1, k), pt(r1, k1),
+          nrm(r0, k1), nrm(r0, k), nrm(r1, k), nrm(r1, k1),
+          col(r0, k1), col(r0, k), col(r1, k), col(r1, k1));
+      }
+    }
+  }
+  return g;
+}
+
+// Smooth dome: the top hemisphere of a capsule (radius r), open at the
+// bottom (equator at y=0, pole at y=r). A hair cap that sits neatly over
+// the head — no flat top, no box.
+export function domeY(sides, r, color) {
+  const g = emptyGeom();
+  const rings = [];
+  for (const deg of [0, 30, 60, 90]) {
+    const phi = deg * Math.PI / 180;
+    rings.push({ y: r * Math.sin(phi), rad: r * Math.cos(phi), ny: Math.sin(phi) });
+  }
+  const pt = (ring, k) => {
+    const a = ((k + 0.5) / sides) * Math.PI * 2;
+    return [ring.rad * Math.sin(a), ring.y, ring.rad * Math.cos(a)];
+  };
+  const nrm = (ring, k) => {
+    const a = ((k + 0.5) / sides) * Math.PI * 2;
+    const rr = Math.sqrt(Math.max(0, 1 - ring.ny * ring.ny));
+    return [rr * Math.sin(a), ring.ny, rr * Math.cos(a)];
+  };
+  for (let i = 0; i < rings.length - 1; i++) {
+    const r0 = rings[i], r1 = rings[i + 1];
+    for (let k = 0; k < sides; k++) {
+      const k1 = (k + 1) % sides;
+      if (r1.rad === 0) {
+        const p = [0, r1.y, 0], n = [0, 1, 0];
+        pushTriN(g, p, pt(r0, k1), pt(r0, k), n, nrm(r0, k1), nrm(r0, k), color, color, color);
+      } else {
+        pushQuadN(g, pt(r0, k1), pt(r0, k), pt(r1, k), pt(r1, k1),
+          nrm(r0, k1), nrm(r0, k), nrm(r1, k), nrm(r1, k1),
+          color, color, color, color);
+      }
+    }
   }
   return g;
 }

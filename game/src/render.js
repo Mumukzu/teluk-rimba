@@ -16,7 +16,7 @@ import { buildBeachPropMeshes } from './beach.js';
 import { buildLandmarks } from './landmarks.js';
 import { buildMoonGeom, buildStarsSpec, buildSkyDomeGeom, buildCloudSpec, skyColors } from './sky.js';
 import { buildVehicleBodyGeoms, buildVehicleGlassGeoms, headlightGeom, buildWheelGeom, buildWheelGeomFar, buildBikeFrontGeom, beamConeGeom, beamPoolGeom, tailGeom, beaconGeom } from './vehicles.js';
-import { pedTorsoGeom, pedArmGeom, pedLegGeom, pedSkirtGeom, pedHeadGeom, pedHairShortGeom, pedHairLongGeom, pedBadgeGeom, fishingRodGeom } from './peds.js';
+import { pedTorsoGeom, pedWowokTorsoGeom, pedArmGeom, pedLegGeom, pedSkirtGeom, pedHeadGeom, pedHairShortGeom, pedHairLongGeom, pedBadgeGeom, fishingRodGeom } from './peds.js';
 import { buildWetGeoms } from './weather.js';
 import { buildNightLightGeoms } from './nightlights.js';
 import { buildPlotDressing } from './plots.js';
@@ -223,14 +223,15 @@ export function createRenderer(canvas, city) {
   // The player (Wowok): the same humanoid base model, animated per part
   // (one instance each) so his arms/legs swing when he walks and he SITS
   // in the vehicle when driving. Capacity 1 each.
-  addDyn(progs.litInst, pedTorsoGeom(), 1, 'player_torso');
+  addDyn(progs.litInst, pedWowokTorsoGeom(), 1, 'player_torso'); // baked red/white panels, tint [1,1,1]
   addDyn(progs.litInst, pedArmGeom(-1), 1, 'player_armL');
   addDyn(progs.litInst, pedArmGeom(1), 1, 'player_armR');
   addDyn(progs.litInst, pedLegGeom(-1), 1, 'player_legsL');
   addDyn(progs.litInst, pedLegGeom(1), 1, 'player_legsR');
   addDyn(progs.litInst, pedHeadGeom(), 1, 'player_head');
   addDyn(progs.litInst, pedHairShortGeom(), 1, 'player_hair');
-  addDyn(progs.litInst, plainBox(0.30, 0.45, 0.03, [1, 1, 1]), 1, 'player_shirt');
+  // (No player_shirt mesh anymore — the white shirt is a colour panel
+  // baked into the torso capsule, Mu's reference.)
   addDyn(progs.litInst, plainBox(0.06, 1.2, 0.06, [1, 1, 1]), 260, 'rain');
   addDyn(progs.unlitInst, headlightGeom(), 240, 'headlights');
   // Phase F polish: shared spinning/steering wheels, bike steering
@@ -381,7 +382,7 @@ export function createRenderer(canvas, city) {
     // Activity props (coffee tables + chairs + cups, benches): one static
     // mesh built from the same spot lists the activity NPCs use, so props
     // and sitters always agree. The player figure is drawn per-part from
-    // state.dynamics (player_torso … player_shirt) — see main.js.
+    // state.dynamics (player_torso … player_hair) — see main.js.
     if (activityPropsMesh) {
       tris += drawMesh(gl, progs.lit, activityPropsMesh, { ...common, uModel: mat4Identity() });
       calls++;

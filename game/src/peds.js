@@ -16,7 +16,7 @@
 import { mulberry32, range, rangeInt, clamp } from './rng.js';
 import { PED_COUNT } from './config.js';
 import { ROAD_LINES, RIVER_POINTS, ASPHALT_HALF, terrainHeight, riverDistance } from './city.js';
-import { emptyGeom, plainBox, prismY, coneY, scaleGeom, mat4TRS, mat4RotX, mat4Multiply } from './gl.js';
+import { emptyGeom, plainBox, prismY, coneY, capsuleY, domeY, scaleGeom, mat4TRS, mat4RotX, mat4Multiply } from './gl.js';
 
 // Any colour goes for shirts — bright and varied, not just pastels.
 const SHIRTS = [
@@ -707,59 +707,58 @@ export function createPeds(city, opts = {}) {
 // All parts are white-tinted in the geometry; the per-instance tint
 // (shirt / pants / skin / hair) supplies the colour. Darker details use
 // a grey vertex colour so the tint reads darker there.
-// Torso (feet at y=0): hips 0.90, waist 1.08, chest 1.28, shoulders 1.42,
-// neck 1.46 — an OVAL body (Mu: no sharp boxes). Two stacked elliptical
-// frustums (12-sided, flattened to 0.56 depth so the torso is wider than
-// it is deep): lower tapers hips 0.46 -> waist 0.40, upper flares waist
-// 0.40 -> shoulders 0.54, meeting smoothly at the waist with no ledge.
-// Belt + collar are rounded rings; the placket stays a thin flat strip
-// (a clothing detail, not body shape).
+// NEAT (Mu, 23 Nov — reference: smooth, clean, one surface): every body
+// part is ONE smooth capsule — a single clean surface with NO belt line,
+// NO collar ring, NO placket strip, NO elbow block, NO knee block, NO
+// waist seam. 16 sides + per-vertex smooth normals (gl.js), so the
+// surface shades smoothly even up close, never faceted.
+// Torso (feet at y=0): ONE capsule, hips 0.90 to shoulders 1.50 —
+// elliptical (0.52 wide, 0.30 deep), rounded shoulders and hips.
 export function pedTorsoGeom() {
-  const g = emptyGeom();
-  const at = (part, x, y, z) => { shift(part, x, y, z); g.pos.push(...part.pos); g.nrm.push(...part.nrm); g.col.push(...part.col); };
-  at(scaleGeom(coneY(12, 0.20, 0.23, 0.24, [1, 1, 1]), 1, 1, 0.56), 0, 1.02, 0); // hips -> waist
-  at(scaleGeom(coneY(12, 0.27, 0.20, 0.34, [1, 1, 1]), 1, 1, 0.56), 0, 1.31, 0); // waist -> shoulders
-  at(scaleGeom(prismY(12, 0.215, 0.05, [0.6, 0.6, 0.6]), 1, 1, 0.56), 0, 1.06, 0); // belt (rounded band)
-  at(scaleGeom(prismY(12, 0.16, 0.04, [0.75, 0.75, 0.75]), 1, 1, 0.56), 0, 1.48, 0); // collar (rounded ring)
-  at(plainBox(0.05, 0.24, 0.02, [0.8, 0.8, 0.8]), 0, 1.28, 0.15); // placket
-  return g; // the neck lives in the head mesh (skin tint, not shirt)
+  const cap = capsuleY(16, 0.15, 0.30, [1, 1, 1]);
+  scaleGeom(cap, 1.733, 1, 1.0); // 0.52 wide, 0.30 deep
+  shift(cap, 0, 1.20, 0); // hips 0.90, shoulders 1.50
+  return cap;
 }
-// One arm (left/right): upper arm + forearm bent ~20° at the elbow + hand.
-// LONG enough that the fingertips reach mid-thigh (Mu: arms too short
-// before) and thick enough to read. ROUNDED capsules (10-sided cylinders),
-// not blocks — the elbow reads as a smooth bend where the two cylinders
-// overlap. Built with the SHOULDER at the origin, hanging down, so the
-// instance matrix pivots it at the shoulder.
-// side: -1 left, +1 right.
+// Wowok's torso: the SAME capsule, but the red jacket + white shirt are
+// COLOUR PANELS baked into the surface (Mu's reference: red sides, white
+// centre strip front AND back) — NOT separate geometry. The instance tint
+// for this mesh must be [1,1,1] so the baked colours show as-is.
+export function pedWowokTorsoGeom() {
+  const RED = [0.85, 0.16, 0.14], WHITE = [0.95, 0.93, 0.88];
+  const cap = capsuleY(16, 0.15, 0.30, RED, (a) => {
+    const d = Math.min(Math.abs(a), Math.PI - Math.abs(a)); // dist from front/back centre
+    return d < 0.42 ? WHITE : RED; // white shirt strip down the centre, front + back
+  });
+  scaleGeom(cap, 1.733, 1, 1.0);
+  shift(cap, 0, 1.20, 0);
+  return cap;
+}
+// One arm (left/right): ONE smooth capsule, shoulder to wrist, hanging
+// straight at the side (Mu: no elbow block, no visible joint). The
+// rounded end reads as the hand/sleeve end. Built with the SHOULDER at
+// the origin, so the instance matrix pivots it there. Fingertips reach
+// mid-thigh (shoulder 1.40 -> wrist 0.59).
+// side: -1 left, +1 right (kept for compat; the capsule is symmetric).
 export function pedArmGeom(side) {
-  const g = emptyGeom();
-  const dx = side < 0 ? -0.25 : 0.25;
-  const upper = prismY(10, 0.07, 0.34, [1, 1, 1]); // capsule, 0.14 across
-  shift(upper, 0, -0.17, 0);
-  const fore = prismY(10, 0.065, 0.32, [1, 1, 1]); // capsule, 0.13 across
-  shift(fore, 0, -0.50, 0.02);
-  tiltX(fore, 0.35, -0.34); // elbow bend, forearm slightly forward
-  const hand = prismY(8, 0.055, 0.15, [1, 1, 1]); // rounded hand
-  shift(hand, 0, -0.76, 0.06);
-  for (const part of [upper, fore, hand]) { g.pos.push(...part.pos); g.nrm.push(...part.nrm); g.col.push(...part.col); }
-  return g;
+  const cap = capsuleY(16, 0.07, 0.67, [1, 1, 1]); // 0.81 long, 0.14 across
+  shift(cap, 0, -0.405, 0); // top (shoulder) at y 0, wrist at -0.81
+  return cap;
 }
-// One leg (left/right): thigh + shin bent ~8° at the knee + shoe.
-// THICK thighs and calves (Mu: legs were poles before) and a SHOE that is
-// a visible dark block — 0.14 tall, bottom 0.02 BELOW the ground plane so
+// One leg (left/right): ONE smooth capsule, hip to ankle, straight and
+// parallel (Mu: no knee block, no joint line in the middle of the leg).
+// THICK (0.23 across, Mu: legs were poles before) and a SHOE that is a
+// visible dark block — 0.14 tall, bottom 0.02 BELOW the ground plane so
 // it always reads as touching, never floating. Built with the HIP at the
 // origin, hanging down to the foot at -0.90.
 export function pedLegGeom(side) {
   const g = emptyGeom();
   const dx = side < 0 ? -0.11 : 0.11;
-  const thigh = prismY(10, 0.115, 0.45, [1, 1, 1]); // rounded capsule, 0.23 across
-  shift(thigh, dx, -0.225, 0);
-  const shin = prismY(10, 0.10, 0.42, [1, 1, 1]); // rounded capsule, 0.20 across
-  shift(shin, dx, -0.66, 0);
-  tiltX(shin, 0.14, -0.45); // knee bend, shin slightly forward
+  const cap = capsuleY(16, 0.115, 0.62, [1, 1, 1]); // 0.85 long, 0.23 across
+  shift(cap, dx, -0.425, 0); // top (hip) at y 0, ankle at -0.85
   const shoe = plainBox(0.26, 0.14, 0.38, [0.12, 0.12, 0.13]); // shoe stays a dark block (Mu)
   shift(shoe, dx, -0.85, 0.05);
-  for (const part of [thigh, shin, shoe]) { g.pos.push(...part.pos); g.nrm.push(...part.nrm); g.col.push(...part.col); }
+  for (const part of [cap, shoe]) { g.pos.push(...part.pos); g.nrm.push(...part.nrm); g.col.push(...part.col); }
   return g;
 }
 // Combined legs (both, feet at y=0) — kept for compat; the renderer uses
@@ -776,28 +775,34 @@ export function pedLegsGeom() {
 // Skirt / dress (Mu: NOT a round ball): a TAPERED frustum — narrow at
 // the waist (0.30 wide), flaring only slightly to the hem (0.42 wide,
 // never wider than the shoulders 0.54), ending just above the knee
-// (y 0.55). The calves + dark block shoes stay VISIBLE below the hem,
-// so the silhouette reads as a person in a skirt with legs, from front,
-// back and side. Tinted with the shirt colour (a dress matches the top);
-// the shins carry a dark vertex colour so they read as legs under any tint.
+// (y 0.55). 16 sides + smooth normals, so it shades as one clean surface.
+// The calves + dark block shoes stay VISIBLE below the hem — the calves
+// are ONE smooth capsule each now (no knee block), so the silhouette
+// reads as a person in a skirt with legs, from front, back and side.
+// Tinted with the shirt colour (a dress matches the top); the calves
+// carry a dark vertex colour so they read as legs under any tint.
 export function pedSkirtGeom() {
   const g = emptyGeom();
   const at = (part, x, y, z) => { shift(part, x, y, z); g.pos.push(...part.pos); g.nrm.push(...part.nrm); g.col.push(...part.col); };
-  at(coneY(12, 0.15, 0.21, 0.40, [1, 1, 1]), 0, 0.75, 0); // tapered skirt: waist y 0.95 to hem y 0.55 (12-sided, soft round)
+  at(coneY(16, 0.15, 0.21, 0.40, [1, 1, 1]), 0, 0.75, 0); // tapered skirt: waist y 0.95 to hem y 0.55 (16-sided, smooth)
   for (const dx of [-0.10, 0.10]) {
-    at(prismY(10, 0.085, 0.42, [0.35, 0.35, 0.38]), dx, 0.34, 0); // rounded calves, visible below the hem
+    const calf = capsuleY(12, 0.085, 0.25, [0.35, 0.35, 0.38]); // one smooth capsule, hem 0.55 to ankle 0.13
+    at(calf, dx, 0.34, 0);
     at(plainBox(0.24, 0.14, 0.36, [0.12, 0.12, 0.13]), dx, 0.07, 0.05); // shoes (block, on the ground)
   }
   return g;
 }
-// Head (feet at y=0): oval 10-sided head, eyes + eyebrows, nose, mouth,
-// ears — a readable human face, not a blank box. Skin tint; the eyes /
-// brows / mouth use dark vertex colours so they read on any skin tone.
+// Head (feet at y=0): a smooth round head (a sphere, 16 sides — no flat
+// top, no facets), eyes + eyebrows, nose, mouth, ears — a readable human
+// face, not a blank box. Skin tint; the eyes / brows / mouth use dark
+// vertex colours so they read on any skin tone.
 export function pedHeadGeom() {
   const g = emptyGeom();
   const at = (part, x, y, z) => { shift(part, x, y, z); g.pos.push(...part.pos); g.nrm.push(...part.nrm); g.col.push(...part.col); };
-  at(prismY(10, 0.125, 0.25, [1, 1, 1]), 0, 1.62, 0); // oval head
-  at(prismY(8, 0.05, 0.08, [1, 1, 1]), 0, 1.50, 0); // neck (skin)
+  const head = capsuleY(16, 0.125, 0, [1, 1, 1]); // sphere, 0.25 across
+  scaleGeom(head, 1, 1.1, 0.95); // slightly oval: 0.25 wide, 0.275 tall
+  at(head, 0, 1.62, 0);
+  at(prismY(12, 0.05, 0.08, [1, 1, 1]), 0, 1.50, 0); // neck (skin)
   for (const dx of [-0.05, 0.05]) {
     at(plainBox(0.03, 0.04, 0.02, [0.1, 0.1, 0.12]), dx, 1.64, 0.12); // eyes
     at(plainBox(0.05, 0.015, 0.02, [0.12, 0.12, 0.12]), dx, 1.68, 0.12); // brows
@@ -807,21 +812,28 @@ export function pedHeadGeom() {
   at(plainBox(0.07, 0.015, 0.02, [0.3, 0.14, 0.14]), 0, 1.55, 0.12); // mouth
   return g;
 }
-// Hair, short: cap + small back panel. (Bald = this mesh with a skin tint;
-// a hat = this mesh with a bright tint.)
+// Hair, short: ONE smooth dome cap that sits neatly over the head (Mu:
+// no flat box). (Bald = this mesh with a skin tint; a hat = this mesh
+// with a bright tint.)
 export function pedHairShortGeom() {
   const g = emptyGeom();
   const at = (part, x, y, z) => { shift(part, x, y, z); g.pos.push(...part.pos); g.nrm.push(...part.nrm); g.col.push(...part.col); };
-  at(prismY(10, 0.13, 0.08, [1, 1, 1]), 0, 1.74, 0); // cap
-  at(plainBox(0.20, 0.14, 0.05, [1, 1, 1]), 0, 1.66, -0.11); // back
+  const cap = domeY(16, 0.135, [1, 1, 1]);
+  scaleGeom(cap, 1, 0.9, 1);
+  at(cap, 0, 1.66, 0); // hairline at the forehead, dome over the crown
   return g;
 }
-// Hair, long: cap + back panel down to the shoulders.
+// Hair, long: the same smooth dome + ONE smooth capsule lock down the
+// back to the shoulders (Mu: no flat back box).
 export function pedHairLongGeom() {
   const g = emptyGeom();
   const at = (part, x, y, z) => { shift(part, x, y, z); g.pos.push(...part.pos); g.nrm.push(...part.nrm); g.col.push(...part.col); };
-  at(prismY(10, 0.13, 0.08, [1, 1, 1]), 0, 1.74, 0); // cap
-  at(plainBox(0.22, 0.35, 0.06, [1, 1, 1]), 0, 1.55, -0.12); // long back
+  const cap = domeY(16, 0.135, [1, 1, 1]);
+  scaleGeom(cap, 1, 0.9, 1);
+  at(cap, 0, 1.66, 0);
+  const lock = capsuleY(12, 0.10, 0.15, [1, 1, 1]);
+  scaleGeom(lock, 1, 1, 0.5); // flattened, hugging the back of the head
+  at(lock, 0, 1.58, -0.13); // down the back to the shoulders
   return g;
 }
 // Police badge: a small gold square for the left chest (officers only).

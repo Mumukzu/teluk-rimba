@@ -3,7 +3,7 @@
 import { PLAYER, CAMERA, WORLD } from './config.js';
 import { terrainHeight, buildingAABBs } from './city.js';
 import { plainBox, mat4TRS, mat4RotX, mat4Multiply } from './gl.js';
-import { pedTorsoGeom, pedArmGeom, pedLegGeom, pedHeadGeom, pedHairShortGeom } from './peds.js';
+import { pedWowokTorsoGeom, pedArmGeom, pedLegGeom, pedHeadGeom, pedHairShortGeom } from './peds.js';
 
 export function createPlayer(city, startX, startZ) {
   const aabbs = buildingAABBs(city);
@@ -109,11 +109,13 @@ export function createPlayer(city, startX, startZ) {
     }
   }
 
-  // Per-part matrices for the animated player (one instance per part, 8
-  // instanced draws): torso / armL / armR / legL / legR / head / hair /
-  // shirtFront. Walk/run: opposite arm/leg swing + a slight run lean; idle:
-  // slow breathing; driving: SEATED in the vehicle, hands forward on the
-  // wheel / handlebar, thighs forward, shins down.
+  // Per-part matrices for the animated player (one instance per part, 7
+  // instanced draws): torso / armL / armR / legL / legR / head / hair.
+  // The white shirt is a COLOUR PANEL baked into the torso capsule (Mu's
+  // reference) — no separate shirt panel anymore. Walk/run: opposite
+  // arm/leg swing + a slight run lean; idle: slow breathing; driving:
+  // SEATED in the vehicle, hands forward on the wheel / handlebar, thighs
+  // forward, shins down.
   function partMatrices(driving) {
     const t = performance.now() / 160;
     const moving = state.moving && !driving;
@@ -162,19 +164,14 @@ export function createPlayer(city, startX, startZ) {
     const legSwingR = seated ? 0.8 : -swing;
     const legL = mat4Multiply(mat4Multiply(legBase, hipL), mat4RotX(legSwingL));
     const legR = mat4Multiply(mat4Multiply(legBase, hipR), mat4RotX(legSwingR));
-    // White shirt front (open red jacket): a thin panel on the chest, so
-    // Wowok reads as jacket-over-shirt from the front (Mu's reference).
-    // It rides on the torso matrix, so it follows the lean + breathing.
-    const shirtM = mat4Multiply(torsoM, mat4TRS(0, 1.25, 0.16, 0, 1, 1, 1));
     return {
-      torso: { matrices: [torsoM], tints: [WOWOK.jacket] },
+      torso: { matrices: [torsoM], tints: [[1, 1, 1]] }, // baked red/white panels — tint must stay white
       armL: { matrices: [armL], tints: [WOWOK.jacket] },
       armR: { matrices: [armR], tints: [WOWOK.jacket] },
       legL: { matrices: [legL], tints: [WOWOK.pants] },
       legR: { matrices: [legR], tints: [WOWOK.pants] },
       head: { matrices: [torsoM], tints: [WOWOK.skin] },
       hair: { matrices: [torsoM], tints: [WOWOK.hair] },
-      shirtFront: { matrices: [shirtM], tints: [WOWOK.shirt] },
     };
   }
 
@@ -192,14 +189,13 @@ export function createPlayer(city, startX, startZ) {
       return part;
     };
     const add = (p) => { g.pos.push(...p.pos); g.nrm.push(...p.nrm); g.col.push(...p.col); };
-    add(tint(pedTorsoGeom(), WOWOK.jacket));
+    add(pedWowokTorsoGeom()); // baked red jacket + white shirt panels, no tint
     add(tint(shift(pedArmGeom(-1), -0.28, 1.40, 0), WOWOK.jacket));
     add(tint(shift(pedArmGeom(1), 0.28, 1.40, 0), WOWOK.jacket));
     add(tint(shift(pedLegGeom(-1), 0, 0.90, 0), WOWOK.pants));
     add(tint(shift(pedLegGeom(1), 0, 0.90, 0), WOWOK.pants));
     add(tint(pedHeadGeom(), WOWOK.skin));
     add(tint(pedHairShortGeom(), WOWOK.hair));
-    add(tint(shift(plainBox(0.30, 0.45, 0.03, [1, 1, 1]), 0, 1.25, 0.16), WOWOK.shirt));
     return g;
   }
 
