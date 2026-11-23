@@ -155,7 +155,8 @@ export function buildLivelyMeshes(city) {
     else if (c.face === 2) { lx = b.w / 2 + proud * b.w; lz = -u * b.d; rotY = b.rot + Math.PI / 2; }
     else { lx = -(b.w / 2 + proud * b.w); lz = u * b.d; rotY = b.rot - Math.PI / 2; }
     const cr = Math.cos(b.rot), sr = Math.sin(b.rot);
-    return {
+  
+  return {
       x: b.x + lx * cr + lz * sr, y: b.h / 2 + v * b.h, z: b.z - lx * sr + lz * cr,
       rotY, cellW, cellH,
     };
@@ -480,6 +481,75 @@ export function buildLivelyMeshes(city) {
     streetCounts.carts = nCarts; streetCounts.tents = nTents; streetCounts.cafe = nCafe;
   }
 
+  // ---- Feature 5: used roofs (not empty roofs) ----
+  // Some roofs become gardens, small pools, helipads or small courts —
+  // merged into the clutter mesh (1 draw total). Placement avoids the
+  // roof unit (opposite quadrant) and the stepped/shaped tiers: on
+  // mid-rise blocks the items sit on the roof deck (y h+0.75); on
+  // stepped towers they sit ON TOP of the first setback tier (y h+3.1),
+  // smaller. Shaped towers (spire/crown/tiered) keep their own crowns.
+  let roofUseCount = 0;
+  const roofUseKinds = { garden: 0, pool: 0, helipad: 0, court: 0 };
+  for (const b of city.buildings) {
+    if (b.h < 12 || b.shape) continue;
+    if (hash01(b.x + 17, b.z + 13) >= 0.6) continue;
+    const stepped = b.h >= 20; // tier1 top at h+3, footprint 0.66
+    // Tallest towers (h>=45) have a SECOND tier (h+3..h+6, footprint
+    // 0.42): their roof use sits on top of THAT (y h+6.1, smaller),
+    // otherwise the garden would be buried inside tier2.
+    const yBase = b.h >= 45 ? b.h + 6.1 : stepped ? b.h + 3.1 : b.h + 0.75;
+    const sf = b.h >= 45 ? 0.4 : stepped ? 0.6 : 1.0; // size factor
+    // Opposite quadrant from the roof unit (if any) so nothing collides.
+    const hasUnit = hash01(b.x + 11, b.z + 5) < 0.5;
+    let qx, qz;
+    if (hasUnit) {
+      const ox = hash01(b.x, b.z + 1) - 0.5, oz = hash01(b.x + 2, b.z) - 0.5;
+      qx = (ox >= 0 ? -1 : 1) * b.w * 0.15;
+      qz = (oz >= 0 ? -1 : 1) * b.d * 0.15;
+    } else {
+      qx = (hash01(b.x + 23, b.z) < 0.5 ? -1 : 1) * b.w * 0.15;
+      qz = (hash01(b.x, b.z + 23) < 0.5 ? -1 : 1) * b.d * 0.15;
+    }
+    const cx = b.x + qx, cz = b.z + qz;
+    const kind = hash01(b.x + 19, b.z + 3);
+    if (kind < 0.4) {
+      // Roof garden: green slab + 2 mini trees + bench.
+      roofUseKinds.garden++;
+      addBoxAt(clutter, b.w * 0.3 * sf, 0.25, b.d * 0.3 * sf, [0.3, 0.55, 0.28], cx, yBase + 0.12, cz, b.rot);
+      for (const [tx, tz] of [[-0.5, -0.4], [0.5, 0.4]]) {
+        addBoxAt(clutter, 0.18, 0.7, 0.18, [0.4, 0.28, 0.16], cx + tx * b.w * 0.12, yBase + 0.6, cz + tz * b.d * 0.12, b.rot);
+        addBoxAt(clutter, 0.9, 0.7, 0.9, [0.25, 0.52, 0.25], cx + tx * b.w * 0.12, yBase + 1.3, cz + tz * b.d * 0.12, b.rot);
+      }
+      addBoxAt(clutter, 1.0, 0.08, 0.4, [0.7, 0.6, 0.45], cx, yBase + 0.35, cz + b.d * 0.1 * sf, b.rot);
+    } else if (kind < 0.6) {
+      // Small pool: blue slab + white rim.
+      roofUseKinds.pool++;
+      addBoxAt(clutter, b.w * 0.25 * sf, 0.15, b.d * 0.25 * sf, [0.3, 0.6, 0.9], cx, yBase + 0.07, cz, b.rot);
+      const pw = b.w * 0.25 * sf, pd = b.d * 0.25 * sf;
+      addBoxAt(clutter, pw, 0.06, 0.12, [0.95, 0.95, 0.95], cx, yBase + 0.16, cz + pd / 2, b.rot);
+      addBoxAt(clutter, pw, 0.06, 0.12, [0.95, 0.95, 0.95], cx, yBase + 0.16, cz - pd / 2, b.rot);
+      addBoxAt(clutter, 0.12, 0.06, pd, [0.95, 0.95, 0.95], cx + pw / 2, yBase + 0.16, cz, b.rot);
+      addBoxAt(clutter, 0.12, 0.06, pd, [0.95, 0.95, 0.95], cx - pw / 2, yBase + 0.16, cz, b.rot);
+    } else if (kind < 0.75) {
+      // Helipad: dark slab + white H.
+      roofUseKinds.helipad++;
+      addBoxAt(clutter, b.w * 0.35 * sf, 0.12, b.d * 0.35 * sf, [0.25, 0.25, 0.28], cx, yBase + 0.06, cz, b.rot);
+      const hw = b.w * 0.35 * sf, hd = b.d * 0.35 * sf;
+      addBoxAt(clutter, 0.3, 0.03, hd * 0.6, [0.95, 0.95, 0.95], cx - hw * 0.22, yBase + 0.14, cz, b.rot);
+      addBoxAt(clutter, 0.3, 0.03, hd * 0.6, [0.95, 0.95, 0.95], cx + hw * 0.22, yBase + 0.14, cz, b.rot);
+      addBoxAt(clutter, hw * 0.55, 0.03, 0.3, [0.95, 0.95, 0.95], cx, yBase + 0.14, cz, b.rot);
+    } else {
+      // Small court: terracotta slab + white lines.
+      roofUseKinds.court++;
+      addBoxAt(clutter, b.w * 0.3 * sf, 0.12, b.d * 0.3 * sf, [0.7, 0.45, 0.3], cx, yBase + 0.06, cz, b.rot);
+      const cw = b.w * 0.3 * sf, cd = b.d * 0.3 * sf;
+      addBoxAt(clutter, 0.12, 0.03, cd * 0.9, [0.95, 0.95, 0.95], cx - cw * 0.35, yBase + 0.14, cz, b.rot);
+      addBoxAt(clutter, 0.12, 0.03, cd * 0.9, [0.95, 0.95, 0.95], cx + cw * 0.35, yBase + 0.14, cz, b.rot);
+      addBoxAt(clutter, cw * 0.9, 0.03, 0.12, [0.95, 0.95, 0.95], cx, yBase + 0.14, cz, b.rot);
+    }
+    roofUseCount++;
+  }
+
   return {
     stepped: { geom: unitBox, matrices: steppedMatrices, tints: steppedTints },
     pitched: { geom: pitchedRoofGeom(), matrices: pitchedMatrices, tints: pitchedTints },
@@ -495,6 +565,7 @@ export function buildLivelyMeshes(city) {
       curtains: curtainMatrices.length, laundry: laundryPieces.length,
       murals: muralPicks.length, neon: neonCount,
       carts: streetCounts.carts, tents: streetCounts.tents, cafe: streetCounts.cafe,
+      roofUse: roofUseCount, roofUseKinds,
       clutterTris: clutter.pos.length / 9,
     },
   };
