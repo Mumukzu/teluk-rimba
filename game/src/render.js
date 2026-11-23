@@ -11,6 +11,7 @@ import { buildRoadMesh, buildLampMeshes, buildTrafficLightMesh } from './roads.j
 import { buildDirectionSigns } from './signs.js';
 import { buildShopSigns } from './shopsigns.js';
 import { buildRooftopSigns } from './rooftopsigns.js';
+import { buildShopGlow } from './shopglow.js';
 import { buildBeachPropMeshes } from './beach.js';
 import { buildLandmarks } from './landmarks.js';
 import { buildMoonGeom, buildStarsSpec, buildSkyDomeGeom, buildCloudSpec, skyColors } from './sky.js';
@@ -50,6 +51,7 @@ export function createRenderer(canvas, city) {
   const rooftopSigns = buildRooftopSigns(city);
   const rooftopSignTexture = rooftopSigns.atlasCanvas
     ? createCanvasTexture(gl, rooftopSigns.atlasCanvas) : null;
+  const shopGlow = buildShopGlow(city);
   const stars = buildStarsSpec();
   const wet = buildWetGeoms();
   const nightPools = buildNightLightGeoms(city, landmarks);
@@ -169,6 +171,9 @@ export function createRenderer(canvas, city) {
   addInst(progs.unlitInst, landmarks.glow);
   // Night sky: lit windows + moon + stars, drawn only at night.
   addInst(progs.unlitInst, litWindows, { nightOnly: true });
+  // Night shopfront glow (Mu's night refs): warm-lit ground floors on
+  // every shop, drawn only at night (+1 draw at night, 0 by day).
+  addInst(progs.unlitInst, shopGlow, { nightOnly: true });
   addInst(progs.unlitInst, { geom: buildMoonGeom(), matrices: [mat4TRS(MOON_POS[0], MOON_POS[1], MOON_POS[2], 0, 1, 1, 1)], tints: [[1, 1, 1]] }, { nightOnly: true });
   addInst(progs.unlitInst, stars, { nightOnly: true });
   // Wet roads (transparent, only while wet) + puddles.
