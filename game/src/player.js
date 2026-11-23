@@ -2,7 +2,7 @@
 // third-person follow camera with drag orbit + wheel zoom.
 import { PLAYER, CAMERA, WORLD } from './config.js';
 import { terrainHeight, buildingAABBs } from './city.js';
-import { plainBox } from './gl.js';
+import { plainBox, prismY } from './gl.js';
 
 export function createPlayer(city, startX, startZ) {
   const aabbs = buildingAABBs(city);
@@ -80,26 +80,48 @@ export function createPlayer(city, startX, startZ) {
     return { eye, center };
   }
 
-  // Player figure: shirt body + head with a face (eyes + hair) + legs,
-  // one merged geometry with vertex colours.
+  // Player figure: shirt body + rounded arms, a rounded head with a
+  // readable face (eyes + nose + mouth) + hair, two separate rounded
+  // legs + shoes — one merged geometry with vertex colours.
   function figureGeom() {
+    const g = { pos: [], nrm: [], col: [] };
+    const add = (p) => { g.pos.push(...p.pos); g.nrm.push(...p.nrm); g.col.push(...p.col); };
     const body = plainBox(0.55, 0.85, 0.32, [0.85, 0.3, 0.25]);
     for (let i = 0; i < body.pos.length; i += 3) body.pos[i + 1] += 1.05;
-    const head = plainBox(0.34, 0.34, 0.32, [0.85, 0.65, 0.5]);
+    add(body);
+    for (const dx of [-0.36, 0.36]) {
+      const arm = prismY(6, 0.07, 0.62, [0.85, 0.3, 0.25]);
+      for (let i = 0; i < arm.pos.length; i += 3) { arm.pos[i] += dx; arm.pos[i + 1] += 1.05; }
+      add(arm);
+      const hand = plainBox(0.13, 0.14, 0.13, [0.85, 0.65, 0.5]);
+      for (let i = 0; i < hand.pos.length; i += 3) { hand.pos[i] += dx; hand.pos[i + 1] += 0.68; }
+      add(hand);
+    }
+    const head = prismY(8, 0.17, 0.34, [0.85, 0.65, 0.5]);
     for (let i = 0; i < head.pos.length; i += 3) head.pos[i + 1] += 1.65;
-    const hair = plainBox(0.36, 0.12, 0.34, [0.15, 0.12, 0.1]);
+    add(head);
+    const hair = prismY(8, 0.18, 0.12, [0.15, 0.12, 0.1]);
     for (let i = 0; i < hair.pos.length; i += 3) hair.pos[i + 1] += 1.86;
-    const legs = plainBox(0.5, 0.6, 0.3, [0.2, 0.25, 0.35]);
-    for (let i = 0; i < legs.pos.length; i += 3) legs.pos[i + 1] += 0.3;
-    const g = { pos: [], nrm: [], col: [] };
-    for (const p of [body, head, hair, legs]) {
-      g.pos.push(...p.pos); g.nrm.push(...p.nrm); g.col.push(...p.col);
+    add(hair);
+    for (const dx of [-0.14, 0.14]) {
+      const leg = prismY(6, 0.11, 0.6, [0.2, 0.25, 0.35]);
+      for (let i = 0; i < leg.pos.length; i += 3) { leg.pos[i] += dx; leg.pos[i + 1] += 0.3; }
+      add(leg);
+      const shoe = plainBox(0.22, 0.12, 0.36, [0.12, 0.12, 0.13]);
+      for (let i = 0; i < shoe.pos.length; i += 3) { shoe.pos[i] += dx; shoe.pos[i + 1] += 0.06; shoe.pos[i + 2] += 0.04; }
+      add(shoe);
     }
     for (const dx of [-0.08, 0.08]) {
       const eye = plainBox(0.06, 0.08, 0.04, [0.1, 0.1, 0.12]);
       for (let i = 0; i < eye.pos.length; i += 3) { eye.pos[i] += dx; eye.pos[i + 1] += 1.68; eye.pos[i + 2] += 0.17; }
-      g.pos.push(...eye.pos); g.nrm.push(...eye.nrm); g.col.push(...eye.col);
+      add(eye);
     }
+    const nose = plainBox(0.05, 0.08, 0.05, [0.85, 0.65, 0.5]);
+    for (let i = 0; i < nose.pos.length; i += 3) { nose.pos[i + 1] += 1.62; nose.pos[i + 2] += 0.18; }
+    add(nose);
+    const mouth = plainBox(0.12, 0.025, 0.02, [0.3, 0.14, 0.14]);
+    for (let i = 0; i < mouth.pos.length; i += 3) { mouth.pos[i + 1] += 1.53; mouth.pos[i + 2] += 0.165; }
+    add(mouth);
     return g;
   }
 

@@ -193,8 +193,9 @@ export function buildPalmMesh(city) {
     add(seg);
   }
   // Fronds: long thin boxes, drooping ~28 degrees, fanning around the crown.
-  for (let f = 0; f < 6; f++) {
-    const a = (f / 6) * Math.PI * 2;
+  // Eight fronds now (was six) so the crown reads dense, not sparse.
+  for (let f = 0; f < 8; f++) {
+    const a = (f / 8) * Math.PI * 2;
     const frond = plainBox(2.6, 0.06, 0.32, f % 2 === 0 ? [0.22, 0.52, 0.22] : [0.27, 0.58, 0.25]);
     for (let i = 0; i < frond.pos.length; i += 3) {
       let x = frond.pos[i] + 1.3; // inner end at the crown centre
@@ -264,22 +265,43 @@ export function buildLitWindows(city) {
 }
 
 export function buildTreeMesh(gl, progs, city) {
-  // One tree geometry (trunk + two canopy boxes), instanced for street + forest.
-  const trunk = plainBox(0.34, 1.4, 0.34, [0.4, 0.28, 0.16]);
-  const canopy1 = plainBox(1.9, 1.3, 1.9, [0.2, 0.48, 0.2]);
-  const canopy2 = plainBox(1.3, 1.0, 1.3, [0.26, 0.55, 0.24]);
-  // Merge by hand: translate the parts into place.
-  const parts = [trunk];
-  const c1 = canopy1;
-  for (let i = 0; i < c1.pos.length; i += 3) c1.pos[i + 1] += 1.9;
-  parts.push(c1);
-  const c2 = canopy2;
-  for (let i = 0; i < c2.pos.length; i += 3) c2.pos[i + 1] += 2.9;
-  parts.push(c2);
-  const geom = { pos: [], nrm: [], col: [] };
-  for (const p of parts) {
-    geom.pos.push(...p.pos); geom.nrm.push(...p.nrm); geom.col.push(...p.col);
-  }
+  // Lush broadleaf tree: a taller trunk + two visible branches spreading
+  // into a dense crown of three overlapping foliage blobs (two greens),
+  // instanced for street + forest. The crown is ~2.4 m wide at scale 1:
+  // street trees sit 5.5 m from the road centre line (asphalt ends at
+  // 4 m, buildings start at 7 m), so even at max scale 1.15 the crown
+  // (radius ~1.4 m) stays clear of the asphalt and the facades, and its
+  // lowest leaves (~2 m up) stay above doors, signs and sightlines.
+  const geom = emptyGeom();
+  const TRUNK = [0.4, 0.28, 0.16];
+  const LEAF = [0.2, 0.48, 0.2];
+  const LEAF_LT = [0.27, 0.56, 0.25];
+  const shift = (part, x, y, z) => {
+    for (let i = 0; i < part.pos.length; i += 3) { part.pos[i] += x; part.pos[i + 1] += y; part.pos[i + 2] += z; }
+    return part;
+  };
+  const rotZ = (part, a) => {
+    const c = Math.cos(a), s = Math.sin(a);
+    for (let i = 0; i < part.pos.length; i += 3) {
+      const x = part.pos[i], y = part.pos[i + 1];
+      part.pos[i] = x * c - y * s;
+      part.pos[i + 1] = x * s + y * c;
+    }
+    for (let i = 0; i < part.nrm.length; i += 3) {
+      const nx = part.nrm[i], ny = part.nrm[i + 1];
+      part.nrm[i] = nx * c - ny * s;
+      part.nrm[i + 1] = nx * s + ny * c;
+    }
+    return part;
+  };
+  addPartAt(geom, plainBox(0.36, 2.0, 0.36, TRUNK), 0, 1.0, 0); // trunk
+  // Two branches from the trunk top, leaning out into the crown.
+  addPartAt(geom, rotZ(shift(plainBox(0.13, 1.1, 0.13, TRUNK), 0, 0.55, 0), 0.5), 0, 1.9, 0);
+  addPartAt(geom, rotZ(shift(plainBox(0.13, 1.1, 0.13, TRUNK), 0, 0.55, 0), -0.5), 0, 1.9, 0);
+  // Dense crown: one big central blob + two lighter side blobs.
+  addPartAt(geom, plainBox(2.2, 1.2, 2.2, LEAF), 0, 2.85, 0);
+  addPartAt(geom, plainBox(1.3, 0.9, 1.3, LEAF_LT), 0.55, 2.45, 0.55);
+  addPartAt(geom, plainBox(1.3, 0.9, 1.3, LEAF_LT), -0.55, 2.45, -0.55);
   const matrices = [];
   const tints = [];
   const all = [...city.streetTrees, ...city.forestTrees];

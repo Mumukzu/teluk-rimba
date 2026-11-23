@@ -287,6 +287,27 @@ export function plainBox(w, h, d, color, topColor = null) {
   return g;
 }
 
+// Vertical prism (axis Y): a rounded column — heads, limbs and trunks
+// read as round instead of square. Faces are centred on the axes (a flat
+// face points +Z, so a face reads as a face, not an edge).
+export function prismY(sides, r, h, color) {
+  const g = emptyGeom();
+  const hh = h / 2;
+  const pt = (k, y) => {
+    const a = ((k + 0.5) / sides) * Math.PI * 2; // half-step: faces on the axes
+    return [r * Math.cos(a), y, r * Math.sin(a)];
+  };
+  for (let k = 0; k < sides; k++) {
+    const a0 = pt(k, -hh), a1 = pt(k + 1, -hh), b0 = pt(k, hh), b1 = pt(k + 1, hh);
+    const mid = ((k + 1) / sides) * Math.PI * 2;
+    const n = [Math.cos(mid), 0, Math.sin(mid)];
+    pushQuad(g, a1, a0, b0, b1, n, color); // side (winding faces outward)
+    pushTri(g, [0, hh, 0], b1, b0, [0, 1, 0], color, color, color); // top cap
+    pushTri(g, [0, -hh, 0], a0, a1, [0, -1, 0], color, color, color); // bottom cap
+  }
+  return g;
+}
+
 export function mergeGeoms(list) {
   const g = emptyGeom();
   for (const s of list) {

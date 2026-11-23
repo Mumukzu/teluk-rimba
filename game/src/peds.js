@@ -5,7 +5,7 @@
 import { mulberry32, range, rangeInt, clamp } from './rng.js';
 import { PED_COUNT } from './config.js';
 import { ROAD_LINES, ASPHALT_HALF, terrainHeight, riverDistance } from './city.js';
-import { emptyGeom, plainBox, mat4TRS } from './gl.js';
+import { emptyGeom, plainBox, prismY, mat4TRS } from './gl.js';
 
 // Any colour goes for shirts — bright and varied, not just pastels.
 const SHIRTS = [
@@ -268,23 +268,25 @@ export function createPeds(city, opts = {}) {
 }
 
 // ---- geometry: three parts, each tinted per NPC ----
-// Torso (white -> shirt colour) + arms.
+// Torso (white -> shirt colour) + rounded arms (not square bars).
 export function pedTorsoGeom() {
   const g = emptyGeom();
   const body = plainBox(0.55, 0.85, 0.32, [1, 1, 1]);
   for (let i = 0; i < body.pos.length; i += 3) body.pos[i + 1] += 1.05;
-  const armL = plainBox(0.14, 0.7, 0.14, [1, 1, 1]);
-  for (let i = 0; i < armL.pos.length; i += 3) { armL.pos[i] -= 0.36; armL.pos[i + 1] += 1.05; }
-  const armR = plainBox(0.14, 0.7, 0.14, [1, 1, 1]);
-  for (let i = 0; i < armR.pos.length; i += 3) { armR.pos[i] += 0.36; armR.pos[i + 1] += 1.05; }
-  for (const p of [body, armL, armR]) { g.pos.push(...p.pos); g.nrm.push(...p.nrm); g.col.push(...p.col); }
+  for (const dx of [-0.36, 0.36]) {
+    const arm = prismY(6, 0.07, 0.62, [1, 1, 1]);
+    for (let i = 0; i < arm.pos.length; i += 3) { arm.pos[i] += dx; arm.pos[i + 1] += 1.05; }
+    g.pos.push(...arm.pos); g.nrm.push(...arm.nrm); g.col.push(...arm.col);
+  }
+  for (const p of [body]) { g.pos.push(...p.pos); g.nrm.push(...p.nrm); g.col.push(...p.col); }
   return g;
 }
-// Legs: two separate legs (not one block) + dark shoes, tinted as pants.
+// Legs: two separate rounded legs (not one block, not square bars) +
+// dark shoes, tinted as pants.
 export function pedLegsGeom() {
   const g = emptyGeom();
   for (const dx of [-0.14, 0.14]) {
-    const leg = plainBox(0.2, 0.6, 0.28, [1, 1, 1]);
+    const leg = prismY(6, 0.11, 0.6, [1, 1, 1]);
     for (let i = 0; i < leg.pos.length; i += 3) { leg.pos[i] += dx; leg.pos[i + 1] += 0.3; }
     g.pos.push(...leg.pos); g.nrm.push(...leg.nrm); g.col.push(...leg.col);
     const shoe = plainBox(0.22, 0.12, 0.36, [0.12, 0.12, 0.13]);
@@ -293,11 +295,12 @@ export function pedLegsGeom() {
   }
   return g;
 }
-// Head with a face: two eyes on the front + hands (skin) at the arm ends.
-// Same matrix as the body, so no per-part offset is needed.
+// Head with a readable human face: rounded (octagonal) head, two eyes, a
+// nose that sticks out, and a mouth — not a blank box. Plus hands (skin)
+// at the arm ends. Same matrix as the body, so no per-part offset needed.
 export function pedHeadGeom() {
   const g = emptyGeom();
-  const head = plainBox(0.34, 0.34, 0.32, [1, 1, 1]);
+  const head = prismY(8, 0.17, 0.34, [1, 1, 1]);
   for (let i = 0; i < head.pos.length; i += 3) head.pos[i + 1] += 1.65;
   g.pos.push(...head.pos); g.nrm.push(...head.nrm); g.col.push(...head.col);
   for (const dx of [-0.08, 0.08]) {
@@ -305,6 +308,14 @@ export function pedHeadGeom() {
     for (let i = 0; i < eye.pos.length; i += 3) { eye.pos[i] += dx; eye.pos[i + 1] += 1.68; eye.pos[i + 2] += 0.17; }
     g.pos.push(...eye.pos); g.nrm.push(...eye.nrm); g.col.push(...eye.col);
   }
+  // Nose: a small block sticking out of the face centre (skin tint).
+  const nose = plainBox(0.05, 0.08, 0.05, [1, 1, 1]);
+  for (let i = 0; i < nose.pos.length; i += 3) { nose.pos[i + 1] += 1.62; nose.pos[i + 2] += 0.18; }
+  g.pos.push(...nose.pos); g.nrm.push(...nose.nrm); g.col.push(...nose.col);
+  // Mouth: a thin dark line under the nose.
+  const mouth = plainBox(0.12, 0.025, 0.02, [0.3, 0.14, 0.14]);
+  for (let i = 0; i < mouth.pos.length; i += 3) { mouth.pos[i + 1] += 1.53; mouth.pos[i + 2] += 0.165; }
+  g.pos.push(...mouth.pos); g.nrm.push(...mouth.nrm); g.col.push(...mouth.col);
   for (const dx of [-0.36, 0.36]) {
     const hand = plainBox(0.13, 0.14, 0.13, [1, 1, 1]);
     for (let i = 0; i < hand.pos.length; i += 3) { hand.pos[i] += dx; hand.pos[i + 1] += 0.68; }
@@ -312,10 +323,10 @@ export function pedHeadGeom() {
   }
   return g;
 }
-// Hair: cap on top of the head + a back panel, tinted per NPC.
+// Hair: a rounded cap on top of the head + a back panel, tinted per NPC.
 export function pedHairGeom() {
   const g = emptyGeom();
-  const cap = plainBox(0.36, 0.12, 0.34, [1, 1, 1]);
+  const cap = prismY(8, 0.18, 0.12, [1, 1, 1]);
   for (let i = 0; i < cap.pos.length; i += 3) cap.pos[i + 1] += 1.86;
   const back = plainBox(0.36, 0.28, 0.08, [1, 1, 1]);
   for (let i = 0; i < back.pos.length; i += 3) { back.pos[i + 1] += 1.7; back.pos[i + 2] -= 0.15; }

@@ -9,7 +9,7 @@
 import { mulberry32, range, rangeInt, clamp } from './rng.js';
 import { VEHICLES, TRAFFIC_COUNT, PARKED_COUNT } from './config.js';
 import { ROAD_LINES, MAIN_LINES, IS_MAIN, ASPHALT_HALF, terrainHeight, riverDistance, SEA_LEVEL } from './city.js';
-import { emptyGeom, plainBox, mat4TRS, mat4Multiply } from './gl.js';
+import { emptyGeom, plainBox, prismY, mat4TRS, mat4Multiply } from './gl.js';
 
 const SEED = 20261123;
 
@@ -703,6 +703,19 @@ function limb(g, x0, y0, x1, y1, z, thick, color) {
   const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
   addTo(g, rotZ(xlate(plainBox(len, thick, thick, color), mx, my, z), ang, mx, my));
 }
+// Same as limb but with a rounded (hexagonal) cross-section, so arms and
+// legs read as limbs with round joints, not square bars. The prism's axis
+// is Y (its length); rotZ swings it to the limb angle in the X-Y plane.
+function limbRound(g, x0, y0, x1, y1, z, r, color) {
+  const dx = x1 - x0, dy = y1 - y0;
+  const len = Math.hypot(dx, dy) || 1;
+  const ang = Math.atan2(dy, dx);
+  const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+  // prismY length is along Y; rotate -90 deg first so its length lies
+  // along X, then rotZ to the limb angle.
+  const p = prismY(6, r, len, color);
+  addTo(g, rotZ(xlate(rotZ(p, -Math.PI / 2, 0, 0), mx, my, z), ang, mx, my));
+}
 // Wheel arch: a dark half-disc just proud of the body side, a touch
 // larger than the tyre, centred on the wheel hub — reads as the arch
 // shadow / indentation around the wheel.
@@ -1104,21 +1117,42 @@ function bikeGeom({ scooter, withWheels = true }) {
     // test counts exactly 15 of 17 types with glass).
     addTo(body, rotZ(xlate(plainBox(0.05, 0.45, 0.4, [0.35, 0.45, 0.6]), 0.72, 1.3, 0), -0.4, 0.72, 1.3));
   }
-  // Rider: torso (white, takes the tint) + legs (dark) + helmet (white) +
-  // arms reaching to the handlebar grips. The sport rider leans forward
-  // over the tank; the scooter rider sits upright.
+  // Rider: rounded torso with shoulder joints + open-face helmet (rounded
+  // cap) + a readable face (eyes, nose, mouth) + rounded arms reaching
+  // to the handlebar grips + two separate rounded legs to the footpegs.
+  // The sport rider leans forward over the tank; the scooter rider sits
+  // upright. The whole head (helmet + face) rotates with the lean.
   const torso = xlate(plainBox(0.42, 0.55, 0.34, [1, 1, 1]), -0.15, 1.15, 0);
-  const head = xlate(plainBox(0.34, 0.32, 0.32, [1, 1, 1]), -0.15, 1.58, 0);
-  if (!scooter) {
-    rotZ(torso, -0.45, -0.35, 0.9);
-    rotZ(head, -0.45, -0.35, 0.9);
-  }
+  if (!scooter) rotZ(torso, -0.45, -0.35, 0.9);
   addTo(body, torso);
-  addTo(body, xlate(plainBox(0.4, 0.5, 0.32, [0.2, 0.22, 0.3]), -0.15, 0.68, 0));
-  addTo(body, head);
+  for (const pz of [0.2, -0.2]) {
+    const joint = prismY(6, 0.09, 0.12, [1, 1, 1]);
+    const jx = scooter ? -0.15 : 0.02, jy = scooter ? 1.42 : 1.32;
+    addTo(body, xlate(joint, jx, jy, pz));
+  }
+  {
+    const headG = emptyGeom();
+    const head = prismY(8, 0.16, 0.3, [1, 1, 1]); // rounded head
+    addTo(headG, xlate(head, -0.15, 1.58, 0));
+    const helmet = prismY(8, 0.18, 0.14, [0.25, 0.25, 0.3]); // open-face helmet cap
+    addTo(headG, xlate(helmet, -0.15, 1.74, 0));
+    // Face on the front (+X): eyes, a nose that sticks out, a mouth.
+    for (const pz of [-0.07, 0.07]) {
+      addTo(headG, xlate(plainBox(0.04, 0.07, 0.05, [0.1, 0.1, 0.12]), 0.018, 1.62, pz));
+    }
+    addTo(headG, xlate(plainBox(0.05, 0.07, 0.05, [1, 1, 1]), 0.03, 1.57, 0)); // nose
+    addTo(headG, xlate(plainBox(0.02, 0.02, 0.1, [0.3, 0.14, 0.14]), 0.015, 1.5, 0)); // mouth
+    if (!scooter) rotZ(headG, -0.45, -0.35, 0.9);
+    addTo(body, headG);
+  }
+  // Two separate rounded legs, hip -> footpeg, + small feet.
+  for (const pz of [0.12, -0.12]) {
+    limbRound(body, -0.2, 0.85, 0.15, 0.4, pz, 0.09, [0.2, 0.22, 0.3]);
+    addTo(body, xlate(plainBox(0.2, 0.08, 0.12, [0.12, 0.12, 0.13]), 0.18, 0.38, pz));
+  }
   const shoulder = scooter ? [-0.15, 1.42] : [0.02, 1.32];
   for (const pz of [0.2, -0.2]) {
-    limb(body, shoulder[0], shoulder[1], 0.68, 1.02, pz, 0.09, [1, 1, 1]);
+    limbRound(body, shoulder[0], shoulder[1], 0.68, 1.02, pz, 0.055, [1, 1, 1]);
   }
   return { body, glass };
 }
