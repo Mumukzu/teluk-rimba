@@ -203,17 +203,19 @@ const ZONE_SIZE = {
   forest: { w: [8, 12], d: [8, 12], h: [4, 6] },
 };
 
-// Mu 23 Nov 21:19 — CBD: FULL WINDOW GLASS, ocean blue. Downtown tint
-// is the glass tint (multiplied by the curtain-wall glass colours in
-// gl.js), so it must stay in the ocean-blue family — deep to bright.
+// Mu 23 Nov 21:19 — CBD: FULL WINDOW GLASS. Downtown tint is the glass
+// tint (multiplied by the curtain-wall glass colours in gl.js).
+// Mu 23 Nov 21:38 — biru gelap TERLALU KONTRAS dengan krem sekitar (opsi 3):
+// kaca jadi SILVER ABU TERANG — tint + geometri kaca sama-sama terang,
+// jadi hasil akhirnya silver muda yang nyambung dengan zona krem/putih.
 // Mu 23 Nov 21:21 — NON-CBD: SATU warna seragam per zona (opsi 1):
 // komersial krem hangat, perumahan putih, pantai putih pasir, pelabuhan
 // abu-biru, hutan coklat kayu. (Tint = warna dinding; kaca jendela tetap
 // gelap.) Landmark overrides (hospital/police/school) still apply after.
 const ZONE_COLORS = {
-  downtown: [ // menara kaca OCEAN BLUE: biru laut, variasi tipis antar tower
-    [0.15, 0.42, 0.78], [0.20, 0.52, 0.88], [0.28, 0.62, 0.95],
-    [0.12, 0.50, 0.68], [0.18, 0.45, 0.82], [0.32, 0.68, 0.92],
+  downtown: [ // menara kaca SILVER ABU TERANG: abu-biru muda, variasi tipis antar tower
+    [0.82, 0.86, 0.90], [0.86, 0.89, 0.92], [0.78, 0.83, 0.88],
+    [0.84, 0.87, 0.91], [0.80, 0.85, 0.89], [0.88, 0.90, 0.93],
   ],
   commercial: [ // SATU warna: krem hangat
     [0.96, 0.88, 0.72],
@@ -436,7 +438,7 @@ export function generateCity(seed = SEED) {
       b.d = Math.min(56, Math.round(b.d * 1.6));
       b.floors = Math.max(1, Math.round(b.h / 3.2));
       b.shape = shapes[i % shapes.length];
-      if (b.shape === 'glass') b.color = [0.4, 0.7, 0.98]; // glass blue (fresher, Mu 23 Nov)
+      if (b.shape === 'glass') b.color = [0.78, 0.82, 0.88]; // silver-grey glass (Mu 23 Nov 21:38)
       // No facade flush against a road — the grown tower must sit back
       // from its block edge like every other building. Shrink the
       // footprint to fit the SETBACK_M margin, centre stays: shrinking

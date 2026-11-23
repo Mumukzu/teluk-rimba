@@ -155,7 +155,7 @@ export function buildBuildingMeshes(gl, progs, city) {
   const parapetEWGeom = plainBox(0.15, 1, 1, [1, 1, 1]);
   for (const b of city.buildings) {
     // Base box is centred; lift so its bottom sits on the ground.
-    // Downtown towers ride the glass curtain-wall geometry (ocean blue);
+    // Downtown towers ride the glass curtain-wall geometry (silver-grey);
     // every other building keeps the plain wall + window geometry.
     const cls = buildingClass(b.h);
     const base = b.zone === 'downtown' ? glassBases[cls] : bases[cls];
@@ -393,7 +393,7 @@ export function buildLitWindows(city) {
   const WARM = [[1, 0.85, 0.55], [1, 0.78, 0.45], [0.95, 0.9, 0.65], [1, 0.95, 0.8]];
   const COOL = [[0.7, 0.85, 1], [0.8, 0.9, 1]];
   // Mu 23 Nov 21:19 — CBD glass towers light up MUCH more at night:
-  // 60 lit windows per tower (was 24), so the ocean-blue glass reads
+  // 60 lit windows per tower (was 24), so the silver-grey glass reads
   // alive after dark. Other zones unchanged.
   const perZone = { downtown: 60, commercial: 15, residential: 7, beach: 12, port: 6, forest: 3 };
   // Every window cell of one building, in the SAME local frame

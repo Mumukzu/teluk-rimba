@@ -40,7 +40,7 @@ check('glass + glow matrices and tints are finite',
   allFin(meshes.glassBandTall.matrices) && allFin(meshes.glassGlow.matrices)
   && allFinT(meshes.glassBandTall.tints) && allFinT(meshes.glassGlow.tints));
 
-// ---- CBD full glass (Mu 23 Nov 21:19): ocean-blue curtain wall, warm
+// ---- CBD full glass (Mu 23 Nov 21:19; tint silver-grey Mu 23 Nov 21:38): silver-grey curtain wall, warm
 // lit windows on every tower, ground floor glowing on all four sides ----
 {
   const sg = buildShopGlow(city);
