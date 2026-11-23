@@ -430,6 +430,7 @@ function stepWorld(dt) {
   } else if (input.takeActions() & ACTION_CONFIRM) {
     startGame();
   }
+  const mk = couriers.active ? couriers.marker() : missions.marker();
   hud.update(dt, {
     money: game.money,
     coins: coins.count(),
@@ -438,6 +439,19 @@ function stepWorld(dt) {
     speedKmh: game.speedKmh,
     objective: game.objective,
     place: game.place,
+    // Neon City HUD (Mu, option 1): real shop/mission state, no invented
+    // bars — the game has no health/stamina/level systems, so the HUD
+    // shows owned items + missions progress instead.
+    weapon: { owned: shop.state.pistol, ammo: shop.state.ammo },
+    armor: shop.state.armor,
+    medkits: shop.state.medkits,
+    drinks: shop.state.drinks,
+    boosted: shop.isBoosted(game.elapsed),
+    missionsDone: missions.doneIds().length,
+    missionsTotal: 6,
+    armed: shop.state.pistol,
+    driving: !!game.driving,
+    targetDist: mk ? Math.hypot(mk.x - player.state.x, mk.z - player.state.z) : null,
   });
   // Full-map markers (M key): mission/board target, the shop, coins found.
   hud.setMapMarkers(mapMarkers());

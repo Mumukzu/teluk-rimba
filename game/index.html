@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="id">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,14 +8,41 @@
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #0a1226; font-family: system-ui, sans-serif; }
   #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  /* --- Neon City HUD (Mu, option 1): dark translucent panels, neon
+         cyan / magenta / yellow accents, GTA-style layout --- */
   #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
-  #hud-top { position: absolute; top: 12px; left: 14px; font-size: 20px; font-weight: 700; line-height: 1.5; }
-  #hud-stars { letter-spacing: 2px; font-size: 22px; }
-  #hud-objective { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); font-size: 15px; background: rgba(0,0,0,.45); padding: 6px 14px; border-radius: 6px; }
-  #hud-area { position: absolute; top: 48px; left: 50%; transform: translateX(-50%); font-size: 13px; background: rgba(0,0,0,.35); padding: 3px 10px; border-radius: 5px; }
-  #minimap { position: absolute; top: 12px; right: 14px; width: 200px; height: 200px; border: 2px solid rgba(255,255,255,.6); border-radius: 8px; background: #1a2f22; }
-  #hud-speed { position: absolute; bottom: 14px; right: 16px; font-size: 18px; font-weight: 700; }
-  #hud-hint { position: absolute; bottom: 52px; left: 50%; transform: translateX(-50%); font-size: 14px; background: rgba(0,0,0,.55); padding: 8px 16px; border-radius: 6px; display: none; }
+  .neon-panel { background: rgba(6,12,24,.72); border: 1px solid rgba(34,211,238,.55); border-radius: 8px; box-shadow: 0 0 12px rgba(34,211,238,.28); }
+  /* Top-left: mission banner + distance chip. */
+  #hud-mission { position: absolute; top: 12px; left: 14px; max-width: 44vw; }
+  #hud-objective { font-size: 15px; font-weight: 700; padding: 7px 14px; border-left: 3px solid #ff2e88; }
+  #hud-distance { display: none; margin-top: 6px; font-size: 13px; font-weight: 700; color: #22d3ee; padding: 4px 10px; letter-spacing: 1px; }
+  #hud-area { margin-top: 6px; font-size: 12px; padding: 3px 10px; opacity: .95; display: inline-block; }
+  /* Top-right: money, coins, time, wanted stars, missions progress. */
+  #hud-top { position: absolute; top: 12px; right: 14px; text-align: right; font-size: 18px; font-weight: 700; line-height: 1.45; }
+  #hud-money { font-size: 24px; color: #ffd23f; text-shadow: 0 0 12px rgba(255,210,63,.75); padding: 4px 12px; }
+  #hud-coins, #hud-time { font-size: 15px; padding: 3px 10px; display: inline-block; margin-top: 5px; }
+  #hud-stars { letter-spacing: 3px; font-size: 22px; margin-top: 4px; }
+  #hud-missions { font-size: 12px; letter-spacing: 1px; color: #22d3ee; padding: 3px 10px; display: inline-block; margin-top: 5px; }
+  /* Bottom-left: circular minimap + active zone strip. */
+  #minimap-wrap { position: absolute; bottom: 14px; left: 14px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  #minimap { width: 200px; height: 200px; border: 2px solid rgba(34,211,238,.8); border-radius: 50%; background: #0a1826; box-shadow: 0 0 20px rgba(34,211,238,.45); }
+  #hud-zone { font-size: 13px; font-weight: 700; letter-spacing: 2px; color: #22d3ee; padding: 4px 12px; text-shadow: 0 0 10px rgba(34,211,238,.7); }
+  /* Bottom-right: owned-item chips, weapon slot, round speedometer. */
+  #hud-br { position: absolute; bottom: 14px; right: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 7px; }
+  #hud-status { display: flex; gap: 6px; }
+  #hud-status span { font-size: 12px; font-weight: 700; letter-spacing: 1px; padding: 4px 9px; }
+  #hud-boost { color: #ffd23f; border-color: rgba(255,210,63,.7); }
+  #hud-weapon { display: flex; gap: 10px; align-items: center; padding: 7px 12px; border-color: rgba(255,46,136,.6); box-shadow: 0 0 12px rgba(255,46,136,.3); }
+  #hud-weapon-name { font-size: 15px; font-weight: 700; letter-spacing: 1px; }
+  #hud-ammo { font-size: 15px; font-weight: 700; color: #ffd23f; text-shadow: 0 0 10px rgba(255,210,63,.7); }
+  #hud-speedo { display: none; filter: drop-shadow(0 0 10px rgba(34,211,238,.45)); }
+  /* Centre: crosshair, only while armed. */
+  #hud-crosshair { position: absolute; left: 50%; top: 50%; width: 24px; height: 24px; transform: translate(-50%,-50%); display: none;
+    background:
+      linear-gradient(#22d3ee,#22d3ee) center/2px 24px no-repeat,
+      linear-gradient(#22d3ee,#22d3ee) center/24px 2px no-repeat;
+    filter: drop-shadow(0 0 5px rgba(34,211,238,.95)); }
+  #hud-hint { position: absolute; bottom: 52px; left: 50%; transform: translateX(-50%); font-size: 14px; padding: 8px 16px; display: none; }
   #start-screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(160deg, #0d3b4c 0%, #0a2a3a 55%, #123f2a 100%); color: #fff; cursor: pointer; text-align: center; z-index: 10; }
   #start-screen h1 { font-size: 56px; margin: 0 0 8px; letter-spacing: 2px; }
   #start-screen p { font-size: 17px; margin: 6px 0; opacity: .9; }
@@ -26,17 +53,42 @@
 <body>
 <canvas id="game" aria-label="Teluk Rimba: a tropical port city you can explore on foot"></canvas>
 <div id="hud">
+  <div id="hud-mission">
+    <div id="hud-objective" class="neon-panel">Explore Teluk Rimba</div>
+    <div id="hud-distance" class="neon-panel"></div>
+    <div id="hud-area" class="neon-panel">Rimba Central</div>
+  </div>
   <div id="hud-top">
-    <div id="hud-money">$0</div>
-    <div id="hud-coins">◉ 0/12 coins</div>
-    <div id="hud-time">10:00</div>
+    <div id="hud-money" class="neon-panel">$0</div>
+    <div id="hud-coins" class="neon-panel">◉ 0/12 coins</div>
+    <div id="hud-time" class="neon-panel">10:00</div>
+    <div id="hud-missions" class="neon-panel">MISSIONS 0/6</div>
     <div id="hud-stars">☆☆☆</div>
   </div>
-  <div id="hud-objective">Explore Teluk Rimba</div>
-  <div id="hud-area">Rimba Central</div>
-  <canvas id="minimap" width="200" height="200"></canvas>
-  <div id="hud-speed">0 km/h</div>
-  <div id="hud-hint"></div>
+  <div id="minimap-wrap">
+    <canvas id="minimap" width="200" height="200"></canvas>
+    <div id="hud-zone" class="neon-panel">RIMBA CENTRAL</div>
+  </div>
+  <div id="hud-br">
+    <div id="hud-status">
+      <span id="hud-armor" class="neon-panel">ARMOR ×0</span>
+      <span id="hud-medkit" class="neon-panel">MEDKIT ×0</span>
+      <span id="hud-boost" class="neon-panel" style="display:none;">BOOST</span>
+    </div>
+    <div id="hud-weapon" class="neon-panel">
+      <span id="hud-weapon-name">NO WEAPON</span>
+      <span id="hud-ammo"></span>
+    </div>
+    <svg id="hud-speedo" width="120" height="120" viewBox="0 0 120 120" aria-label="Speedometer">
+      <circle cx="60" cy="60" r="52" fill="rgba(6,12,24,.72)" stroke="rgba(34,211,238,.35)" stroke-width="2"/>
+      <circle cx="60" cy="60" r="46" fill="none" stroke="#ff2e63" stroke-width="6" stroke-dasharray="43.4 245.6" stroke-dashoffset="-173.4" transform="rotate(126 60 60)" opacity=".85"/>
+      <circle id="hud-speedo-arc" cx="60" cy="60" r="46" fill="none" stroke="#22d3ee" stroke-width="6" stroke-linecap="round" stroke-dasharray="0 289" transform="rotate(126 60 60)"/>
+      <text id="hud-speedo-text" x="60" y="67" text-anchor="middle" fill="#fff" font-size="24" font-weight="700">0</text>
+      <text x="60" y="85" text-anchor="middle" fill="#22d3ee" font-size="10" font-weight="700" letter-spacing="1">KM/H</text>
+    </svg>
+  </div>
+  <div id="hud-crosshair"></div>
+  <div id="hud-hint" class="neon-panel"></div>
 </div>
 <div id="start-screen" tabindex="0">
   <h1>TELUK RIMBA</h1>
