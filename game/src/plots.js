@@ -8,17 +8,18 @@ import { riverDistance, ROAD_LINES, ASPHALT_HALF } from './city.js';
 import { emptyGeom, plainBox } from './gl.js';
 import { distinctColor, parkedCarGeom } from './vehicles.js';
 
-// Yard paving (Mu): a visible 4 m paving-block grid in a two-tone
-// checker, plus a darker border strip around each yard edge. Tone
-// varies slightly per zone but stays tidy; the two tones are far apart
-// (0.2+) so the grid reads from street level and from the air — the old
-// 2x2 slabs with +/-0.05 variation read as flat.
+// Yard paving (Mu: subtle and calm — no more chessboard): small 4x2 m
+// rectangular blocks in running bond, all nearly the same soft tone
+// (variation only +/-0.02), thin grout lines from a dark underlay
+// showing through the 0.06 m gaps between inset tiles. Reads as paving
+// up close, calm from the air. Tone varies slightly per zone.
 const PAVE_ZONE = {
-  downtown: { light: [0.66, 0.66, 0.64], dark: [0.46, 0.46, 0.44] },
-  commercial: { light: [0.7, 0.66, 0.6], dark: [0.48, 0.45, 0.4] },
-  residential: { light: [0.72, 0.7, 0.64], dark: [0.5, 0.48, 0.43] },
+  downtown: [0.62, 0.62, 0.6],
+  commercial: [0.64, 0.62, 0.58],
+  residential: [0.65, 0.64, 0.6],
 };
-const PAVE_BORDER = [0.4, 0.4, 0.38]; // border strip tone (darker)
+const PAVE_GROUT = [0.45, 0.44, 0.42]; // thin grout lines (underlay)
+const PAVE_BORDER = [0.54, 0.54, 0.52]; // border strip tone (slightly darker)
 const FENCE_COL = [0.85, 0.82, 0.72];
 const BENCH_COL = [0.55, 0.42, 0.28];
 const BIN_COL = [0.15, 0.3, 0.2]; // dark green trash bin
@@ -92,7 +93,7 @@ function tiltZ(part, a) {
 const YARD_TRUNK = [0.4, 0.28, 0.16];
 const YARD_LEAF = [0.2, 0.48, 0.2];
 const YARD_LEAF_LT = [0.27, 0.56, 0.25];
-const YARD_STONE = [0.6, 0.6, 0.58];
+const YARD_STONE = [0.42, 0.42, 0.4]; // fountain stone — dark enough to read against the soft light yard paving (was 0.6, camouflaged)
 
 // Small broadleaf yard tree (same shape as the street trees, smaller):
 // trunk + two leaning branches + three overlapping crown blobs.
@@ -181,24 +182,28 @@ export function buildPlotDressing(city) {
     if (corners.some(([x, z]) => riverDistance(x, z) < 25)) continue;
     dressed.push(b);
 
-    // Paving-block grid: 4 m squares in a two-tone checker, with a
-    // darker border strip around the yard edge.
+    // Paving blocks: 4x2 m rectangles in running bond (alternate rows
+    // offset by half a tile), inset 0.06 m over a dark underlay so thin
+    // grout lines show between tiles. Near-one-tone: per-tile variation
+    // only +/-0.02 plus a barely-there +0.012 on odd rows.
     const pal = PAVE_ZONE[b.zone] || PAVE_ZONE.residential;
-    const pv = range(rand, -0.02, 0.02);
-    const paveLight = [pal.light[0] + pv, pal.light[1] + pv, pal.light[2] + pv];
-    const paveDark = [pal.dark[0] + pv, pal.dark[1] + pv, pal.dark[2] + pv];
-    const TS = 4;
-    let pix = 0;
-    for (let x = b.x0; x < b.x1; x += TS, pix++) {
-      const px1 = Math.min(x + TS, b.x1);
-      let piz = 0;
-      for (let z = b.z0; z < b.z1; z += TS, piz++) {
-        const pz1 = Math.min(z + TS, b.z1);
-        quadUp(paving, x, z, px1, pz1, 0.06, (pix + piz) % 2 === 0 ? paveLight : paveDark);
+    quadUp(paving, b.x0, b.z0, b.x1, b.z1, 0.06, PAVE_GROUT);
+    const TW = 4, TH = 2, IN = 0.06;
+    let piz = 0;
+    for (let z = b.z0; z < b.z1; z += TH, piz++) {
+      const z1 = Math.min(z + TH, b.z1);
+      const xOff = (piz % 2 === 0) ? 0 : TW / 2;
+      for (let x = b.x0 + xOff - TW; x < b.x1; x += TW) {
+        const tx0 = Math.max(x, b.x0), tx1 = Math.min(x + TW, b.x1);
+        if (tx1 - tx0 < 0.2 || z1 - z < 2 * IN + 0.2) continue;
+        const v = range(rand, -0.02, 0.02);
+        const rowV = (piz % 2 === 0) ? 0 : 0.012;
+        quadUp(paving, tx0 + IN, z + IN, tx1 - IN, z1 - IN, 0.07,
+          [pal[0] + v + rowV, pal[1] + v + rowV, pal[2] + v + rowV]);
       }
     }
-    // Border strip: darker frame 0.8 m wide around the yard edge.
-    const bw = 0.8, by = 0.07;
+    // Border strip: soft darker frame 0.6 m wide around the yard edge.
+    const bw = 0.6, by = 0.08;
     quadUp(paving, b.x0, b.z0, b.x1, b.z0 + bw, by, PAVE_BORDER);
     quadUp(paving, b.x0, b.z1 - bw, b.x1, b.z1, by, PAVE_BORDER);
     quadUp(paving, b.x0, b.z0, b.x0 + bw, b.z1, by, PAVE_BORDER);
