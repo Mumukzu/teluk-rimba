@@ -56,12 +56,16 @@ export function mat4RotZ(a) {
 // +x front; z = width). `steer` marks the front wheels. Cars share one
 // layout derived from their length/width; bikes have two wheels, the
 // bajaj three, trucks six. Boats have none.
-function carWheels(len, w, dia = 0.55, width = 0.14) {
+function carWheels(len, w, dia = 0.55, width = 0.17) {
+  // Wheels sit INSIDE the wheel wells: the tyre's outer face ends 1 cm
+  // inside the body side (w/2 - width/2 - 0.01), almost flush, never
+  // sticking out past the body.
+  const z = w / 2 - width / 2 - 0.01;
   return [
-    { x: len / 2 - 0.75, z: w / 2 - 0.02, dia, width, steer: true },
-    { x: len / 2 - 0.75, z: -w / 2 + 0.02, dia, width, steer: true },
-    { x: -len / 2 + 0.75, z: w / 2 - 0.02, dia, width, steer: false },
-    { x: -len / 2 + 0.75, z: -w / 2 + 0.02, dia, width, steer: false },
+    { x: len / 2 - 0.75, z, dia, width, steer: true },
+    { x: len / 2 - 0.75, z: -z, dia, width, steer: true },
+    { x: -len / 2 + 0.75, z, dia, width, steer: false },
+    { x: -len / 2 + 0.75, z: -z, dia, width, steer: false },
   ];
 }
 export function wheelSpecs(type) {
@@ -71,41 +75,41 @@ export function wheelSpecs(type) {
     case 'motorbike':
     case 'scooter':
       return [
-        { x: 0.75, z: 0, dia: 0.55, width: 0.16, steer: true },
-        { x: -0.75, z: 0, dia: 0.55, width: 0.16, steer: false },
+        { x: 0.75, z: 0, dia: 0.55, width: 0.18, steer: true },
+        { x: -0.75, z: 0, dia: 0.55, width: 0.18, steer: false },
       ];
     case 'bajaj':
       return [
-        { x: 1.0, z: 0, dia: 0.5, width: 0.13, steer: true },
-        { x: -0.85, z: 0.55, dia: 0.5, width: 0.13, steer: false },
-        { x: -0.85, z: -0.55, dia: 0.5, width: 0.13, steer: false },
+        { x: 1.0, z: 0, dia: 0.5, width: 0.15, steer: true },
+        { x: -0.85, z: 0.53, dia: 0.5, width: 0.15, steer: false },
+        { x: -0.85, z: -0.53, dia: 0.5, width: 0.15, steer: false },
       ];
     case 'bus':
       return [
-        { x: 3.2, z: 1.18, dia: 0.7, width: 0.16, steer: true },
-        { x: 3.2, z: -1.18, dia: 0.7, width: 0.16, steer: true },
-        { x: -3.2, z: 1.18, dia: 0.7, width: 0.16, steer: false },
-        { x: -3.2, z: -1.18, dia: 0.7, width: 0.16, steer: false },
+        { x: 3.2, z: 1.17, dia: 0.7, width: 0.18, steer: true },
+        { x: 3.2, z: -1.17, dia: 0.7, width: 0.18, steer: true },
+        { x: -3.2, z: 1.17, dia: 0.7, width: 0.18, steer: false },
+        { x: -3.2, z: -1.17, dia: 0.7, width: 0.18, steer: false },
       ];
     case 'truck':
     case 'firetruck': {
       const zw = type === 'truck' ? 1.08 : 1.15;
       const fx = type === 'truck' ? 2.6 : 2.8, bx = type === 'truck' ? -2.7 : -2.9, mx = type === 'truck' ? -1.4 : -1.2;
       return [
-        { x: fx, z: zw, dia: 0.65, width: 0.16, steer: true },
-        { x: fx, z: -zw, dia: 0.65, width: 0.16, steer: true },
-        { x: mx, z: zw, dia: 0.65, width: 0.16, steer: false },
-        { x: mx, z: -zw, dia: 0.65, width: 0.16, steer: false },
-        { x: bx, z: zw, dia: 0.65, width: 0.16, steer: false },
-        { x: bx, z: -zw, dia: 0.65, width: 0.16, steer: false },
+        { x: fx, z: zw, dia: 0.65, width: 0.18, steer: true },
+        { x: fx, z: -zw, dia: 0.65, width: 0.18, steer: true },
+        { x: mx, z: zw, dia: 0.65, width: 0.18, steer: false },
+        { x: mx, z: -zw, dia: 0.65, width: 0.18, steer: false },
+        { x: bx, z: zw, dia: 0.65, width: 0.18, steer: false },
+        { x: bx, z: -zw, dia: 0.65, width: 0.18, steer: false },
       ];
     }
     case 'ambulance':
       return [
-        { x: 1.8, z: 0.95, dia: 0.6, width: 0.15, steer: true },
-        { x: 1.8, z: -0.95, dia: 0.6, width: 0.15, steer: true },
-        { x: -1.8, z: 0.95, dia: 0.6, width: 0.15, steer: false },
-        { x: -1.8, z: -0.95, dia: 0.6, width: 0.15, steer: false },
+        { x: 1.8, z: 0.905, dia: 0.6, width: 0.17, steer: true },
+        { x: 1.8, z: -0.905, dia: 0.6, width: 0.17, steer: true },
+        { x: -1.8, z: 0.905, dia: 0.6, width: 0.17, steer: false },
+        { x: -1.8, z: -0.905, dia: 0.6, width: 0.17, steer: false },
       ];
     case 'boat':
     case 'fishingboat':
@@ -531,8 +535,9 @@ export function createTraffic(city, opts = {}) {
       return out;
     },
     // Wheel instances (one shared unit-wheel mesh for every vehicle).
-    // Near wheels spin with speed and the front wheels steer; far wheels
-    // (past 90 m) are static — the simple version for far cars.
+    // Near wheels (< 90 m) spin with speed and the front wheels steer;
+    // far wheels (past 90 m) are static — the simple version for far
+    // cars, rendered with the low-poly wheel mesh.
     wheelMatricesFor(camX, camZ, maxDist) {
       const matrices = [], tints = [];
       for (const v of vehicles) {
@@ -540,15 +545,35 @@ export function createTraffic(city, opts = {}) {
         if (!specs.length) continue;
         const d = Math.hypot(v.x - camX, v.z - camZ);
         if (d > maxDist && !v.driven) continue;
-        const near = d < 90;
+        if (d >= 90) continue; // far wheels go to wheelMatricesFarFor
         const carM = vehicleMatrix(v);
-        const spin = near ? (v.spin || 0) : 0;
-        const steer = near ? -(v.steerVis || 0) : 0;
+        const spin = v.spin || 0;
+        const steer = -(v.steerVis || 0);
         for (const w of specs) {
           const local = mat4Multiply(
             mat4Trans(w.x, w.dia / 2, w.z),
             mat4Multiply(mat4RotY(w.steer ? steer : 0),
               mat4Multiply(mat4RotZ(spin), mat4Scale(w.dia / 2, w.dia / 2, w.width))));
+          matrices.push(mat4Multiply(carM, local));
+          tints.push([1, 1, 1]);
+        }
+      }
+      return { matrices, tints };
+    },
+    // Far wheels (90 m .. maxDist): static, low-poly mesh, no spin/steer.
+    wheelMatricesFarFor(camX, camZ, maxDist) {
+      const matrices = [], tints = [];
+      for (const v of vehicles) {
+        const specs = wheelSpecs(v.type);
+        if (!specs.length) continue;
+        const d = Math.hypot(v.x - camX, v.z - camZ);
+        if (d > maxDist && !v.driven) continue;
+        if (d < 90 || v.driven) continue; // near wheels (and the driven car) use the full mesh
+        const carM = vehicleMatrix(v);
+        for (const w of specs) {
+          const local = mat4Multiply(
+            mat4Trans(w.x, w.dia / 2, w.z),
+            mat4Scale(w.dia / 2, w.dia / 2, w.width));
           matrices.push(mat4Multiply(carM, local));
           tints.push([1, 1, 1]);
         }
@@ -718,11 +743,37 @@ function limbRound(g, x0, y0, x1, y1, z, r, color) {
 }
 // Wheel arch: a dark half-disc just proud of the body side, a touch
 // larger than the tyre, centred on the wheel hub — reads as the arch
-// shadow / indentation around the wheel.
+// shadow / indentation around the wheel. Used where the wheel sits
+// BEHIND the body side (truck, fire truck, bus, bajaj): the solid disc
+// fakes the dark well because the body side itself hides the tyre.
 function addArch(g, x, z, dia, w) {
   const r = dia / 2 + 0.06;
   const side = z >= 0 ? 1 : -1;
   addTo(g, xlate(halfFan(12, r, DARK, side < 0), x, dia / 2, side * (w / 2 + 0.015)));
+}
+// Upper-half ring (annulus, y >= 0) facing +Z (flip for -Z): the open
+// wheel-well arch. The tyre shows THROUGH the ring's inner hole, so the
+// wheel reads as sitting inside the well, not pasted on the body side.
+function halfRing(sides, rOut, rIn, color, flip = false) {
+  const g = emptyGeom();
+  const n = flip ? [0, 0, -1] : [0, 0, 1];
+  for (let i = 0; i < sides; i++) {
+    const a0 = (Math.PI * i) / sides, a1 = (Math.PI * (i + 1)) / sides;
+    const o0 = [rOut * Math.cos(a0), rOut * Math.sin(a0), 0];
+    const o1 = [rOut * Math.cos(a1), rOut * Math.sin(a1), 0];
+    const i0 = [rIn * Math.cos(a0), rIn * Math.sin(a0), 0];
+    const i1 = [rIn * Math.cos(a1), rIn * Math.sin(a1), 0];
+    if (flip) { pushTri(g, o0, i0, i1, n, color); pushTri(g, o0, i1, o1, n, color); }
+    else { pushTri(g, o0, i1, i0, n, color); pushTri(g, o0, o1, i1, n, color); }
+  }
+  return g;
+}
+// Open wheel-well arch for notched bodies (cars, ambulance): the ring
+// sits just proud of the body side and the recessed tyre shows through
+// its inner hole — a real semicircular hollow above each wheel.
+function addArchRing(g, x, z, dia, w) {
+  const side = z >= 0 ? 1 : -1;
+  addTo(g, xlate(halfRing(12, dia / 2 + 0.08, dia / 2 + 0.01, DARK, side < 0), x, dia / 2, side * (w / 2 + 0.005)));
 }
 
 const DARK = [0.16, 0.16, 0.18];
@@ -778,13 +829,16 @@ function tyreLathe(r, w, sides = 20) {
 }
 
 // Round wheel: 20-sided lathe tyre (rounded profile, smooth normals) +
-// 12-sided rim + 8-sided hub on the outer face, so the wheel reads as
-// round from any angle, not a dark polygon.
-function addWheel(g, x, z, dia = 0.55) {
-  addTo(g, xlate(tyreLathe(dia / 2, 0.14), x, dia / 2, z));
+// a SMALLER bright rim (0.24 x dia, so the tyre reads thick and the rim
+// sits in the middle) + a small bright centre cap on the outer face, so
+// the wheel reads as round from any angle, not a dark polygon. `width`
+// is the tyre thickness; the rim/cap sit just outside the tyre's face.
+function addWheel(g, x, z, dia = 0.55, width = 0.17) {
+  addTo(g, xlate(tyreLathe(dia / 2, width), x, dia / 2, z));
   const side = z >= 0 ? 1 : -1;
-  addTo(g, xlate(fanZ(12, dia * 0.3, HUB, side < 0), x, dia / 2, z + side * 0.075));
-  addTo(g, xlate(fanZ(8, dia * 0.12, DARK, side < 0), x, dia / 2, z + side * 0.08));
+  const face = width / 2;
+  addTo(g, xlate(fanZ(12, dia * 0.24, HUB, side < 0), x, dia / 2, z + side * (face + 0.005)));
+  addTo(g, xlate(fanZ(8, dia * 0.09, CHROME, side < 0), x, dia / 2, z + side * (face + 0.01)));
 }
 // Round headlight facing +X (jeep, trucks): a disc + a dark bezel ring.
 function addRoundHeadlight(g, x, y, z, r = 0.14) {
@@ -803,45 +857,66 @@ export function carGeom({ len, w, bodyH, cabinLen, cabinH, cabinX, hoodSlope = 0
   const glassY = bodyTop + 0.05 + cabinH / 2;
   const roofY = bodyTop + 0.05 + cabinH;
   const glassLen = cabinLen - 0.9; // side glass between the A- and C-pillars
-  addTo(body, xlate(plainBox(len, bodyH, w, [1, 1, 1]), 0, 0.35 + bodyH / 2, 0));
+  // BODY with real wheel wells: the main box starts above the wheel tops
+  // (y 0.55), so each wheel sits in an open notch instead of being
+  // pasted on the body side; a dark skirt fills the lower edge between
+  // the wheels and a dark underbody closes the see-through gap. The
+  // shoulder strip (a touch wider than the body) is the shoulder line
+  // above the doors — the shoulders are wider than the cabin.
+  const wheelTop = 0.55, skirtH = 0.2;
+  addTo(body, xlate(plainBox(len, bodyH - skirtH, w, [1, 1, 1]), 0, wheelTop + (bodyH - skirtH) / 2, 0));
+  const fwX = len / 2 - 0.75, rwX = -len / 2 + 0.75, notch = 0.45;
+  for (const [sx, ex] of [[len / 2, fwX + notch], [fwX - notch, rwX + notch], [rwX - notch, -len / 2]]) {
+    if (ex >= sx) continue; // degenerate segment (very short car)
+    addTo(body, xlate(plainBox(sx - ex, skirtH, w, DARK), (sx + ex) / 2, 0.35 + skirtH / 2, 0));
+  }
+  addTo(body, xlate(plainBox(len * 0.95, 0.15, w - 0.3, DARK), 0, 0.42, 0)); // underbody
+  addTo(body, xlate(plainBox(len * 0.92, 0.1, w + 0.04, [1, 1, 1]), 0, bodyTop - 0.06, 0)); // shoulder
   // Sloped hood (front dips) + sloped trunk lid (hatchbacks slope steeply).
   addTo(body, rotZ(xlate(plainBox(1.15, 0.14, w - 0.25, [1, 1, 1]), len / 2 - 0.75, bodyTop + 0.05, 0), -hoodSlope, len / 2 - 0.75, bodyTop + 0.05));
   addTo(body, rotZ(xlate(plainBox(0.95, 0.14, w - 0.25, [1, 1, 1]), -len / 2 + 0.6, bodyTop + 0.05, 0), tailSlope, -len / 2 + 0.6, bodyTop + 0.05));
-  // Side glass (transparent) + sloped windshield + sloped rear window.
-  addTo(glass, xlate(plainBox(glassLen, cabinH, w * 0.78, GLASS), cabinX, glassY, 0));
+  // CABIN — one solid trapezoid volume, not a flat roof board on thin
+  // pillars. The base (cabinLen) is longer than the roof (cabinLen-0.7);
+  // the front/rear edges slope inward following the glass, and the roof
+  // is exactly the cabin width — never wider than the cabin. Thick
+  // body-colour pillars (A sloped, B vertical, C sloped, ~10 cm) + a
+  // beltline and a roof rail frame the side glass, which is a flat
+  // dark-blue plane set a few cm INTO the frame so each window reads.
+  const cabinW = w * 0.78;
+  const topLen = cabinLen - 0.7;
+  addTo(body, xlate(plainBox(topLen, 0.08, cabinW, [1, 1, 1]), cabinX, roofY + 0.02, 0)); // roof
+  // Sloped windshield + rear window (transparent), recessed between the
+  // A/C pillars, with a pale sky-reflection streak on the upper glass.
   const slopeLen = Math.hypot(0.35, cabinH + 0.02);
   const slopeAng = Math.atan2(0.35, cabinH + 0.02);
   const wcx = cabinX + cabinLen / 2 - 0.275, wcy = (bodyTop + 0.05 + roofY + 0.02) / 2;
   const rcx = cabinX - cabinLen / 2 + 0.275;
-  addTo(glass, rotZ(xlate(plainBox(0.07, slopeLen, w * 0.78, GLASS), wcx, wcy, 0), slopeAng, wcx, wcy));
-  addTo(glass, rotZ(xlate(plainBox(0.07, slopeLen, w * 0.78, GLASS), rcx, wcy, 0), -slopeAng, rcx, wcy));
-  // Sky-reflection streaks: a pale band across the upper windshield and
-  // one along each side glass.
+  addTo(glass, rotZ(xlate(plainBox(0.05, slopeLen, cabinW - 0.12, GLASS), wcx, wcy, 0), slopeAng, wcx, wcy));
+  addTo(glass, rotZ(xlate(plainBox(0.05, slopeLen, cabinW - 0.12, GLASS), rcx, wcy, 0), -slopeAng, rcx, wcy));
   const nrm = [Math.cos(slopeAng), Math.sin(slopeAng)];
   const sdir = [-Math.sin(slopeAng), Math.cos(slopeAng)];
   const sx = wcx + nrm[0] * 0.05 + sdir[0] * 0.12, sy = wcy + nrm[1] * 0.05 + sdir[1] * 0.12;
-  addTo(glass, rotZ(xlate(plainBox(0.02, 0.28, w * 0.7, GLASS_REFLECT), sx, sy, 0), slopeAng, sx, sy));
-  for (const pz of [w * 0.78 / 2 + 0.01, -w * 0.78 / 2 - 0.01]) {
-    addTo(glass, xlate(plainBox(glassLen * 0.7, 0.14, 0.03, GLASS_REFLECT), cabinX, bodyTop + 0.05 + cabinH * 0.72, pz));
+  addTo(glass, rotZ(xlate(plainBox(0.02, 0.28, cabinW - 0.2, GLASS_REFLECT), sx, sy, 0), slopeAng, sx, sy));
+  // Side glass: one flat dark-blue plane per side, recessed inside the
+  // pillar plane, with a pale reflection streak along its upper half.
+  for (const pz of [cabinW / 2 - 0.03, -cabinW / 2 + 0.03]) {
+    addTo(glass, xlate(plainBox(glassLen + 0.2, cabinH - 0.15, 0.03, GLASS), cabinX, glassY, pz));
+    addTo(glass, xlate(plainBox(glassLen * 0.7, 0.14, 0.03, GLASS_REFLECT), cabinX, glassY + cabinH * 0.28, pz));
   }
-  // Roof panel + A/C-pillar strips (body colour) framing the glass.
-  addTo(body, xlate(plainBox(cabinLen * 0.9, 0.09, w * 0.8, [1, 1, 1]), cabinX, roofY + 0.04, 0));
-  for (const [px, ang] of [[wcx, slopeAng], [rcx, -slopeAng]]) {
-    for (const pz of [w * 0.78 / 2 - 0.02, -w * 0.78 / 2 + 0.02]) {
-      addTo(body, rotZ(xlate(plainBox(0.16, slopeLen, 0.12, [1, 1, 1]), px, wcy, pz), ang, px, wcy));
+  // Thick pillars + beltline + roof rail (body colour), framing the glass.
+  for (const pz of [cabinW / 2 - 0.01, -cabinW / 2 + 0.01]) {
+    for (const [px, ang] of [[wcx, slopeAng], [rcx, -slopeAng]]) {
+      addTo(body, rotZ(xlate(plainBox(0.1, slopeLen, 0.08, [1, 1, 1]), px, wcy, pz), ang, px, wcy));
     }
-  }
-  // Corner pillars at the ends of the side glass.
-  for (const px of [cabinX - glassLen / 2 + 0.1, cabinX + glassLen / 2 - 0.1]) {
-    for (const pz of [w * 0.78 / 2 - 0.07, -w * 0.78 / 2 + 0.07]) {
-      addTo(body, xlate(plainBox(0.14, cabinH, 0.14, [1, 1, 1]), px, glassY, pz));
-    }
+    addTo(body, xlate(plainBox(0.1, cabinH, 0.08, [1, 1, 1]), cabinX, glassY, pz)); // B-pillar
+    addTo(body, xlate(plainBox(glassLen + 0.3, 0.12, 0.08, [1, 1, 1]), cabinX, bodyTop + 0.06, pz)); // beltline
+    addTo(body, xlate(plainBox(glassLen + 0.3, 0.12, 0.08, [1, 1, 1]), cabinX, roofY - 0.06, pz)); // roof rail
   }
   // Window dividers for vans/angkot: split the side glass into windows.
   if (band) {
     for (const px of [cabinX - glassLen / 4, cabinX + glassLen / 4]) {
-      for (const pz of [w * 0.78 / 2 + 0.01, -w * 0.78 / 2 - 0.01]) {
-        addTo(body, xlate(plainBox(0.1, cabinH * 0.9, 0.05, [1, 1, 1]), px, glassY, pz));
+      for (const pz of [cabinW / 2 - 0.01, -cabinW / 2 + 0.01]) {
+        addTo(body, xlate(plainBox(0.1, cabinH * 0.9, 0.08, [1, 1, 1]), px, glassY, pz));
       }
     }
   }
@@ -851,8 +926,8 @@ export function carGeom({ len, w, bodyH, cabinLen, cabinH, cabinX, hoodSlope = 0
     addTo(body, xlate(plainBox(0.15, 0.4, 0.5, SEAT), sx2, bodyTop + 0.35, sz2));
   }
   addTo(body, xlate(plainBox(0.25, 0.12, w * 0.6, SEAT), cabinX + cabinLen / 2 - 0.35, bodyTop + 0.35, 0));
-  // Doors: panel + shut line + handles + skirt + indicator, both sides.
-  // (The wheel arches interrupt the panel low down — that is the point.)
+  // Doors: panel + shut line + handles + indicator, both sides.
+  // (The dark skirt segments below interrupt the panel low down.)
   const panelH = bodyH * 0.42, panelY = 0.35 + bodyH * 0.62;
   for (const pz of [w / 2 + 0.01, -w / 2 - 0.01]) {
     addTo(body, xlate(plainBox(len * 0.62, panelH, 0.05, TRIM), 0, panelY, pz));
@@ -860,7 +935,6 @@ export function carGeom({ len, w, bodyH, cabinLen, cabinH, cabinX, hoodSlope = 0
     for (const hx of [len * 0.18, -len * 0.18]) {
       addTo(body, xlate(plainBox(0.22, 0.06, 0.05, DARK), hx, panelY + panelH * 0.25, pz));
     }
-    addTo(body, xlate(plainBox(len * 0.8, 0.12, 0.06, DARK), 0, 0.42, pz));
     addTo(body, xlate(plainBox(0.08, 0.08, 0.05, [1, 0.6, 0.1]), len / 2 - 0.6, panelY + panelH * 0.25, pz));
   }
   // Bumpers with a chrome strip, headlights + taillights with bezels,
@@ -894,12 +968,16 @@ export function carGeom({ len, w, bodyH, cabinLen, cabinH, cabinX, hoodSlope = 0
     for (const pz of [0.5, -0.5]) addTo(body, xlate(plainBox(0.08, 0.4, 0.08, DARK), -len / 2 + 0.35, bodyTop + 0.25, pz));
   }
   if (spare) {
-    addTo(body, xlate(rotY(prismZ(10, 0.275, 0.14, TYRE), Math.PI / 2, 0, 0), -len / 2 - 0.08, 0.75, 0));
+    addTo(body, xlate(rotY(tyreLathe(0.275, 0.14), Math.PI / 2, 0, 0), -len / 2 - 0.08, 0.75, 0));
+    addTo(body, xlate(rotY(fanZ(12, 0.13, HUB, true), Math.PI / 2, 0, 0), -len / 2 - 0.155, 0.75, 0));
     addTo(body, xlate(plainBox(2.2, 0.08, 1.2, DARK), 0, roofY + 0.14, 0));
   }
-  for (const [wx, wz] of [[len / 2 - 0.75, w / 2 - 0.02], [len / 2 - 0.75, -w / 2 + 0.02], [-len / 2 + 0.75, w / 2 - 0.02], [-len / 2 + 0.75, -w / 2 + 0.02]]) {
-    if (withWheels) addWheel(body, wx, wz);
-    addArch(body, wx, wz, 0.55, w);
+  // Wheels sit inside the open wells (tyre outer face 1 cm inside the
+  // body side) and the open arch ring frames each one.
+  const wheelZ = w / 2 - 0.17 / 2 - 0.01;
+  for (const [wx, wz] of [[len / 2 - 0.75, wheelZ], [len / 2 - 0.75, -wheelZ], [-len / 2 + 0.75, wheelZ], [-len / 2 + 0.75, -wheelZ]]) {
+    if (withWheels) addWheel(body, wx, wz, 0.55, 0.17);
+    addArchRing(body, wx, wz, 0.55, w);
   }
   return { body, glass };
 }
@@ -940,8 +1018,8 @@ function busGeom(withWheels = true) {
     addTo(body, xlate(plainBox(0.05, 0.05, 0.16, DARK), 4.2, 1.9, pz > 0 ? 1.3 : -1.3));
     addTo(body, xlate(plainBox(0.22, 0.14, 0.14, DARK), 4.2, 1.95, pz > 0 ? 1.38 : -1.38));
   }
-  for (const [wx, wz] of [[3.2, 1.18], [3.2, -1.18], [-3.2, 1.18], [-3.2, -1.18]]) {
-    if (withWheels) addWheel(body, wx, wz, 0.7);
+  for (const [wx, wz] of [[3.2, 1.17], [3.2, -1.17], [-3.2, 1.17], [-3.2, -1.17]]) {
+    if (withWheels) addWheel(body, wx, wz, 0.7, 0.18);
     addArch(body, wx, wz, 0.7, 2.5);
   }
   // License plates on both bumpers.
@@ -982,7 +1060,7 @@ function truckGeom(withWheels = true) {
     addTo(body, xlate(plainBox(0.08, 0.4, 0.5, DARK), -3.35, 0.35, pz)); // mud flaps
   }
   for (const [wx, wz] of [[2.6, 1.08], [2.6, -1.08], [-1.4, 1.08], [-1.4, -1.08], [-2.7, 1.08], [-2.7, -1.08]]) {
-    if (withWheels) addWheel(body, wx, wz, 0.65);
+    if (withWheels) addWheel(body, wx, wz, 0.65, 0.18);
     addArch(body, wx, wz, 0.65, 2.4);
   }
   addTo(body, xlate(plainBox(0.03, 0.12, 0.5, [0.92, 0.92, 0.85]), 3.44, 0.45, 0)); // front plate
@@ -1019,7 +1097,7 @@ function firetruckGeom(withWheels = true) {
   addTo(body, xlate(plainBox(0.6, 0.12, 0.5, DARK), -3.7, 0.3, 0)); // rear step
   for (const pz of [0.9, -0.9]) addTo(body, xlate(plainBox(0.1, 0.18, 0.35, WARM_LIGHT), 3.64, 0.9, pz));
   for (const [wx, wz] of [[2.8, 1.15], [2.8, -1.15], [-1.2, 1.15], [-1.2, -1.15], [-2.9, 1.15], [-2.9, -1.15]]) {
-    if (withWheels) addWheel(body, wx, wz, 0.65);
+    if (withWheels) addWheel(body, wx, wz, 0.65, 0.18);
     addArch(body, wx, wz, 0.65, 2.5);
   }
   return { body, glass };
@@ -1029,7 +1107,14 @@ function firetruckGeom(withWheels = true) {
 // rear doors with windows.
 function ambulanceGeom(withWheels = true) {
   const body = emptyGeom(), glass = emptyGeom();
-  addTo(body, xlate(plainBox(5.2, 1.5, 2.0, [1, 1, 1]), 0, 1.1, 0));
+  // Body with real wheel wells (same notch as the cars): the main box
+  // starts above the wheel tops (y 0.6), a dark skirt fills the lower
+  // edge between the wheels, a dark underbody closes the gap.
+  addTo(body, xlate(plainBox(5.2, 1.25, 2.0, [1, 1, 1]), 0, 1.225, 0));
+  for (const [sx, ex] of [[2.6, 2.25], [1.35, -1.35], [-2.25, -2.6]]) {
+    addTo(body, xlate(plainBox(sx - ex, 0.25, 2.0, DARK), (sx + ex) / 2, 0.475, 0));
+  }
+  addTo(body, xlate(plainBox(4.9, 0.15, 1.7, DARK), 0, 0.42, 0)); // underbody
   addTo(glass, xlate(plainBox(3.4, 0.6, 2.02, GLASS), -0.2, 1.45, 0)); // side glass band
   for (const pz of [1.02, -1.02]) {
     addTo(glass, xlate(plainBox(3.0, 0.14, 0.03, GLASS_REFLECT), -0.2, 1.62, pz)); // its streak
@@ -1052,9 +1137,9 @@ function ambulanceGeom(withWheels = true) {
   }
   addTo(body, xlate(plainBox(0.25, 0.22, 1.95, DARK), 2.6, 0.45, 0)); // bumper
   for (const pz of [0.7, -0.7]) addTo(body, xlate(plainBox(0.1, 0.16, 0.32, WARM_LIGHT), 2.62, 0.85, pz));
-  for (const [wx, wz] of [[1.8, 0.95], [1.8, -0.95], [-1.8, 0.95], [-1.8, -0.95]]) {
-    if (withWheels) addWheel(body, wx, wz, 0.6);
-    addArch(body, wx, wz, 0.6, 2.0);
+  for (const [wx, wz] of [[1.8, 0.905], [1.8, -0.905], [-1.8, 0.905], [-1.8, -0.905]]) {
+    if (withWheels) addWheel(body, wx, wz, 0.6, 0.17);
+    addArchRing(body, wx, wz, 0.6, 2.0);
   }
   return { body, glass };
 }
@@ -1079,9 +1164,9 @@ function bajajGeom(withWheels = true) {
     addTo(body, xlate(plainBox(2.0, 0.15, 0.05, DARK), 0, 0.42, pz)); // side skirts
   }
   if (withWheels) {
-    addWheel(body, 1.0, 0, 0.5);
-    addWheel(body, -0.85, 0.55, 0.5);
-    addWheel(body, -0.85, -0.55, 0.5);
+    addWheel(body, 1.0, 0, 0.5, 0.15);
+    addWheel(body, -0.85, 0.53, 0.5, 0.15);
+    addWheel(body, -0.85, -0.53, 0.5, 0.15);
   }
   return { body, glass };
 }
@@ -1093,8 +1178,8 @@ function bikeGeom({ scooter, withWheels = true }) {
   // steering assembly for the same reason. What stays here: the frame,
   // tank/seat, exhaust, rear fender, rider.
   if (withWheels) {
-    addWheel(body, 0.75, 0, 0.55);
-    addWheel(body, -0.75, 0, 0.55);
+    addWheel(body, 0.75, 0, 0.55, 0.18);
+    addWheel(body, -0.75, 0, 0.55, 0.18);
   }
   addTo(body, xlate(plainBox(0.5, 0.09, 0.09, [0.35, 0.35, 0.36]), -0.3, 0.35, 0.24)); // exhaust
   addTo(body, xlate(plainBox(0.5, 0.25, 0.04, DARK), -0.2, 0.35, 0.22)); // chain guard
@@ -1309,21 +1394,35 @@ export function buildVehicleBodyGeoms() {
   return buildVehicleParts(false).body;
 }
 
-// One shared unit wheel: round 10-sided tyre (dark), 8-sided rim + hub
-// (light — a different colour from the tyre) on both faces, and 5 spokes
-// per face so the spin reads. Instances scale it to each wheel size;
-// the per-instance tint stays white so the colours are never muddied.
+// One shared unit wheel: round 20-sided lathe tyre (dark), a SMALLER
+// bright rim (0.48 of the radius, so the tyre reads thick) + a small
+// bright centre cap + 5 spokes per face so the spin reads. Instances
+// scale it to each wheel size; the per-instance tint stays white so the
+// colours are never muddied.
 export function buildWheelGeom() {
   const g = emptyGeom();
   addTo(g, tyreLathe(1, 1));
   for (const side of [1, -1]) {
-    addTo(g, xlate(fanZ(12, 0.55, HUB, side < 0), 0, 0, side * 0.51));
-    addTo(g, xlate(fanZ(8, 0.22, DARK, side < 0), 0, 0, side * 0.52));
+    addTo(g, xlate(fanZ(12, 0.48, HUB, side < 0), 0, 0, side * 0.51));
+    addTo(g, xlate(fanZ(8, 0.18, CHROME, side < 0), 0, 0, side * 0.52));
     for (let k = 0; k < 5; k++) {
       const a = (k / 5) * Math.PI * 2;
       const spoke = rotZ(xlate(plainBox(0.9, 0.14, 0.02, HUB), 0.55, 0, side * 0.53), a, 0, 0);
       addTo(g, spoke);
     }
+  }
+  return g;
+}
+
+// Simple far wheel (10-sided lathe tyre, 8-sided rim, small cap, no
+// spokes): the far version for cars past 90 m — fewer tyre sides, same
+// silhouette, one shared mesh.
+export function buildWheelGeomFar() {
+  const g = emptyGeom();
+  addTo(g, tyreLathe(1, 1, 10));
+  for (const side of [1, -1]) {
+    addTo(g, xlate(fanZ(8, 0.48, HUB, side < 0), 0, 0, side * 0.51));
+    addTo(g, xlate(fanZ(6, 0.18, CHROME, side < 0), 0, 0, side * 0.52));
   }
   return g;
 }

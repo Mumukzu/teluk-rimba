@@ -11,7 +11,7 @@ import { buildRoadMesh, buildLampMeshes, buildTrafficLightMesh } from './roads.j
 import { buildBeachPropMeshes } from './beach.js';
 import { buildLandmarks } from './landmarks.js';
 import { buildMoonGeom, buildStarsSpec } from './sky.js';
-import { buildVehicleBodyGeoms, buildVehicleGlassGeoms, headlightGeom, buildWheelGeom, buildBikeFrontGeom, beamConeGeom, tailGeom, beaconGeom } from './vehicles.js';
+import { buildVehicleBodyGeoms, buildVehicleGlassGeoms, headlightGeom, buildWheelGeom, buildWheelGeomFar, buildBikeFrontGeom, beamConeGeom, tailGeom, beaconGeom } from './vehicles.js';
 import { pedTorsoGeom, pedLegsGeom, pedHeadGeom, pedHairGeom } from './peds.js';
 import { buildWetGeoms } from './weather.js';
 import { buildNightLightGeoms } from './nightlights.js';
@@ -150,6 +150,7 @@ export function createRenderer(canvas, city) {
   // Phase F polish: shared spinning/steering wheels, bike steering
   // assemblies, live taillights, bike lights, beam cones, police beacons.
   addDyn(progs.litInst, buildWheelGeom(), 1200, 'wheels');
+  addDyn(progs.litInst, buildWheelGeomFar(), 1200, 'wheelsFar'); // far cars: low-poly wheels
   addDyn(progs.litInst, buildBikeFrontGeom(), 130, 'bikeFront');
   addDyn(progs.unlitInst, tailGeom(), 320, 'taillights');
   addDyn(progs.unlitInst, headlightGeom(), 240, 'bikelights');

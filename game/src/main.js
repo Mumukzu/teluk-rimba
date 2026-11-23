@@ -577,6 +577,7 @@ if (params.sim) {
     // Wheels (shared unit-wheel mesh: spin + steer) and the bike steering
     // assemblies, refilled every frame from the traffic state.
     dyn.wheels = traffic.wheelMatricesFor(camX, camZ, cull);
+    dyn.wheelsFar = traffic.wheelMatricesFarFor(camX, camZ, cull); // far cars: low-poly wheels
     dyn.bikeFront = traffic.bikeFrontMatricesFor(camX, camZ, cull);
     // Headlights at night: two dots at the front of each moving car,
     // plus a soft beam pool on the road ahead (Mu: all vehicle lights on),
