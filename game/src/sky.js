@@ -38,7 +38,7 @@ export function buildSkyDomeGeom() {
 // grey, night dark moonlit).
 export function buildCloudPuffGeom() {
   const g = emptyGeom();
-  const GREY = [0.7, 0.7, 0.74], WHITE = [1, 1, 1];
+  const GREY = [0.78, 0.78, 0.81], WHITE = [1, 1, 1];
   const blob = (r, sy, cx, cy, cz) => {
     const SEGS = 8, RINGS = 5;
     const pt = (ring, seg) => {

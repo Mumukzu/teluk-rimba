@@ -729,9 +729,9 @@ if (params.sim) {
         const x = 2100 - ((game.elapsed * 3 + k * 47) % 1480);
         const z = -850 + ((k * 173) % 1700);
         const len = 40 + ((k * 37) % 50);
-        const wdt = 1.2 + ((k * 13) % 10) / 10;
+        const wdt = 4 + ((k * 13) % 10) / 10 * 2; // 4-6 m wide: readable even at a grazing angle
         fl.matrices.push(mat4TRS(x, -1.05, z, 0, wdt, 1, len));
-        fl.tints.push([0.85, 0.93, 1]);
+        fl.tints.push([0.9, 0.96, 1]);
       }
       dyn.flow = fl;
     }
