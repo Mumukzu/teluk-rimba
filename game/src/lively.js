@@ -278,7 +278,11 @@ export function buildLivelyMeshes(city) {
   const muralGeom = { pos: [], uv: [] };
   const muralPicks = [];
   {
-    const want = { downtown: 6, commercial: 4, beach: 2 };
+    // Mu 23 Nov 21:19 — NO murals on downtown towers: a solid pattern
+    // panel would break the full-glass curtain wall. Murals stay on
+    // commercial + beach walls only (was downtown 6 + commercial 4 +
+    // beach 2 = 12, now 6).
+    const want = { commercial: 4, beach: 2 };
     for (const [zone, n] of Object.entries(want)) {
       const cands = city.buildings
         .filter((b) => b.zone === zone && b.h >= 20)

@@ -203,35 +203,32 @@ const ZONE_SIZE = {
   forest: { w: [8, 12], d: [8, 12], h: [4, 6] },
 };
 
-// Mu: WARNA-WARNI tapi SOFT / pastel lembut — jangan gonjreng mencolok.
-// 23 Nov 21:00 — Mu: jangan kusam/pudar. Palet disegarkan: saturasi naik
-// (spread antar channel lebih lebar, warna terbaca jelas), lightness tetap
-// pastel (bukan neon). Variasi per zona, tetap harmonis. (Tint = warna
-// dinding; kaca jendela tetap gelap.)
+// Mu 23 Nov 21:19 — CBD: FULL WINDOW GLASS, ocean blue. Downtown tint
+// is the glass tint (multiplied by the curtain-wall glass colours in
+// gl.js), so it must stay in the ocean-blue family — deep to bright.
+// Mu 23 Nov 21:21 — NON-CBD: SATU warna seragam per zona (opsi 1):
+// komersial krem hangat, perumahan putih, pantai putih pasir, pelabuhan
+// abu-biru, hutan coklat kayu. (Tint = warna dinding; kaca jendela tetap
+// gelap.) Landmark overrides (hospital/police/school) still apply after.
 const ZONE_COLORS = {
-  downtown: [ // menara kaca pastel SEGAR: biru langit, teal, lavendel, mint, peach
-    [0.45, 0.72, 0.94], [0.32, 0.82, 0.78], [0.62, 0.58, 0.94],
-    [0.42, 0.88, 0.58], [0.98, 0.68, 0.45], [0.72, 0.62, 0.92],
+  downtown: [ // menara kaca OCEAN BLUE: biru laut, variasi tipis antar tower
+    [0.15, 0.42, 0.78], [0.20, 0.52, 0.88], [0.28, 0.62, 0.95],
+    [0.12, 0.50, 0.68], [0.18, 0.45, 0.82], [0.32, 0.68, 0.92],
   ],
-  commercial: [ // toko pastel SEGAR: koral, kuning mentega, mint, turquoise, lilac, peach
-    [0.98, 0.55, 0.45], [1.0, 0.82, 0.35], [0.45, 0.9, 0.6],
-    [0.3, 0.85, 0.82], [0.72, 0.58, 0.95], [0.98, 0.66, 0.4],
+  commercial: [ // SATU warna: krem hangat
+    [0.96, 0.88, 0.72],
   ],
-  residential: [ // rumah pastel SEGAR: biru bubuk, pink, mint, krem, lavendel, peach
-    [0.5, 0.75, 0.95], [0.98, 0.6, 0.66], [0.5, 0.9, 0.62],
-    [0.98, 0.88, 0.5], [0.75, 0.62, 0.95], [0.98, 0.7, 0.45],
+  residential: [ // SATU warna: putih
+    [0.97, 0.97, 0.96],
   ],
-  beach: [ // putih/krem SEGAR + aksen pastel laut yang jelas
-    [0.98, 0.94, 0.82], [0.7, 0.92, 0.92], [0.98, 0.82, 0.6],
-    [0.75, 0.94, 0.68], [0.98, 0.72, 0.68], [0.72, 0.82, 0.98],
+  beach: [ // SATU warna: putih pasir
+    [0.97, 0.93, 0.82],
   ],
-  port: [ // industrial SEGAR: biru baja, sage, terakota, pasir — tetap kalem tapi hidup
-    [0.45, 0.68, 0.9], [0.5, 0.82, 0.55], [0.92, 0.55, 0.38],
-    [0.95, 0.75, 0.4], [0.4, 0.8, 0.72], [0.88, 0.6, 0.45],
+  port: [ // SATU warna: abu-biru
+    [0.55, 0.63, 0.73],
   ],
-  forest: [ // kabin kayu hangat SEGAR, tidak abu-abu
-    [0.82, 0.6, 0.35], [0.75, 0.52, 0.3], [0.88, 0.68, 0.42],
-    [0.68, 0.55, 0.38], [0.8, 0.58, 0.35], [0.9, 0.72, 0.45],
+  forest: [ // SATU warna: coklat kayu
+    [0.62, 0.45, 0.28],
   ],
 };
 

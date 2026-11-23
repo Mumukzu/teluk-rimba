@@ -92,6 +92,9 @@ export function createRenderer(canvas, city) {
   addStatic(progs.lit, world.dirtTrack, mat4Identity()); // mountain road (mission 6)
   addStatic(progs.lit, buildRoadMesh(city), mat4Identity());
   for (const spec of buildingMeshes.bases) addInst(progs.litInst, spec);
+  // CBD curtain-wall glass bases (Mu 23 Nov 21:19): tall + skyscraper
+  // downtown towers only — 2 extra draws, same lit program.
+  for (const spec of buildingMeshes.glassBases) addInst(progs.litInst, spec);
   addInst(progs.litInst, buildingMeshes.roofs);
   addInst(progs.litInst, buildingMeshes.tiers);
   addInst(progs.litInst, buildingMeshes.spires);

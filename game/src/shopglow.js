@@ -34,26 +34,40 @@ export function buildShopGlow(city) {
   const spillMatrices = [], spillTints = [];
   for (const b of city.buildings) {
     if (b.zone !== 'commercial' && b.zone !== 'downtown') continue;
-    const nx = Math.sin(b.rot), nz = Math.cos(b.rot);
-    const w = Math.min(b.w * 0.75, 10);
-    // Ground floor, y 0.3–2.4 (below the sign band at 2.45+, so the shop
-    // name and awning stay visible). Proud of the facade at +0.13 so it
-    // sits IN FRONT of the shopfront glass (+0.12) — at +0.05 the glass
-    // hid the panel's centre and only its pale edges showed. The dark
-    // door (+0.17) still pokes through the glow, like a real shopfront.
-    const h = 2.1;
-    const fx = b.x + nx * (b.d / 2 + 0.13);
-    const fz = b.z + nz * (b.d / 2 + 0.13);
-    matrices.push(mat4TRS(fx, 1.35, fz, b.rot, w, h, 1));
-    const base = GLOW_TINTS[Math.floor(rand() * GLOW_TINTS.length)];
-    const j = 0.85 + rand() * 0.15;
-    const tint = [base[0] * j, base[1] * j, base[2] * j];
-    tints.push(tint);
-    // Warm spill on the ground in front of the shop (Mu's refs: warm
-    // light on the sidewalk) — a flat wash 2.2 m out from the facade,
-    // dimmer than the panel, same warm tint.
-    spillMatrices.push(mat4TRS(b.x + nx * (b.d / 2 + 2.2), 0.18, b.z + nz * (b.d / 2 + 2.2), b.rot, w * 0.8, 1, 3));
-    spillTints.push([tint[0] * 0.45, tint[1] * 0.45, tint[2] * 0.45]);
+    // Mu 23 Nov 21:19 — CBD ground floor glows ALL AROUND at night: a
+    // warm panel + spill on EVERY face of a downtown tower (front, back,
+    // left, right), so the base reads lit from any angle. Commercial shops
+    // keep the single front panel. One instanced mesh either way.
+    const faces = b.zone === 'downtown'
+      ? [0, Math.PI / 2, Math.PI, -Math.PI / 2]
+      : [0];
+    for (const turn of faces) {
+      const rot = b.rot + turn;
+      const nx = Math.sin(rot), nz = Math.cos(rot);
+      // Front/back faces span w across and sit d/2 out; side faces span d
+      // across and sit w/2 out.
+      const across = (turn === 0 || turn === Math.PI) ? b.w : b.d;
+      const out = (turn === 0 || turn === Math.PI) ? b.d / 2 : b.w / 2;
+      const w = Math.min(across * 0.75, 10);
+      // Ground floor, y 0.3–2.4 (below the sign band at 2.45+, so the shop
+      // name and awning stay visible). Proud of the facade at +0.13 so it
+      // sits IN FRONT of the shopfront glass (+0.12) — at +0.05 the glass
+      // hid the panel's centre and only its pale edges showed. The dark
+      // door (+0.17) still pokes through the glow, like a real shopfront.
+      const h = 2.1;
+      const fx = b.x + nx * (out + 0.13);
+      const fz = b.z + nz * (out + 0.13);
+      matrices.push(mat4TRS(fx, 1.35, fz, rot, w, h, 1));
+      const base = GLOW_TINTS[Math.floor(rand() * GLOW_TINTS.length)];
+      const j = 0.85 + rand() * 0.15;
+      const tint = [base[0] * j, base[1] * j, base[2] * j];
+      tints.push(tint);
+      // Warm spill on the ground in front of the shop (Mu's refs: warm
+      // light on the sidewalk) — a flat wash 2.2 m out from the facade,
+      // dimmer than the panel, same warm tint.
+      spillMatrices.push(mat4TRS(b.x + nx * (out + 2.2), 0.18, b.z + nz * (out + 2.2), rot, w * 0.8, 1, 3));
+      spillTints.push([tint[0] * 0.45, tint[1] * 0.45, tint[2] * 0.45]);
+    }
   }
   return {
     geom: plainBox(1, 1, 0.06, [1, 1, 1]),

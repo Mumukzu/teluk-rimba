@@ -105,9 +105,18 @@ export function buildRoofUnitGeom() {
 
 export function buildBuildingMeshes(gl, progs, city) {
   const bases = {};
+  // Mu 23 Nov 21:19 — CBD full window glass: a curtain-wall variant of
+  // every height class (SAME grid as the plain class, so buildLitWindows
+  // still lands exactly on the glass cells). Downtown towers use the
+  // curtain geometry; every other building keeps the plain one.
+  const glassBases = {};
   for (const [name, cfg] of Object.entries(BUILDING_CLASSES)) {
     bases[name] = {
       geom: subdividedBox(1, 1, 1, cfg.segFront, cfg.segRows, cfg.sideCols),
+      matrices: [], tints: [], prog: progs.litInst,
+    };
+    glassBases[name] = {
+      geom: subdividedBox(1, 1, 1, cfg.segFront, cfg.segRows, cfg.sideCols, true),
       matrices: [], tints: [], prog: progs.litInst,
     };
   }
@@ -146,9 +155,12 @@ export function buildBuildingMeshes(gl, progs, city) {
   const parapetEWGeom = plainBox(0.15, 1, 1, [1, 1, 1]);
   for (const b of city.buildings) {
     // Base box is centred; lift so its bottom sits on the ground.
+    // Downtown towers ride the glass curtain-wall geometry (ocean blue);
+    // every other building keeps the plain wall + window geometry.
     const cls = buildingClass(b.h);
-    bases[cls].matrices.push(mat4TRS(b.x, b.h / 2, b.z, b.rot, b.w, b.h, b.d));
-    bases[cls].tints.push(b.color);
+    const base = b.zone === 'downtown' ? glassBases[cls] : bases[cls];
+    base.matrices.push(mat4TRS(b.x, b.h / 2, b.z, b.rot, b.w, b.h, b.d));
+    base.tints.push(b.color);
     // Roof slab, coloured by zone (varied a touch per building).
     roofMatrices.push(mat4TRS(b.x, b.h + 0.25, b.z, b.rot, b.w + 0.7, 0.5, b.d + 0.7));
     const rv = 0.92 + hash01(b.x, b.z) * 0.16;
@@ -169,7 +181,13 @@ export function buildBuildingMeshes(gl, progs, city) {
     if (b.h >= 12) {
       glassBandTallMatrices.push(mat4TRS(b.x, 1.1, b.z, b.rot, b.w + 0.14, 2.2, b.d + 0.14));
       glassBandTallTints.push([0.85, 0.92, 1.0]); // pale blue-white glass
-      glassGlowMatrices.push(mat4TRS(b.x, 1.05, b.z, b.rot, b.w + 0.02, 1.9, b.d + 0.02));
+      // Mu 23 Nov 21:19 — CBD ground floor glows ALL AROUND at night: the
+      // glow core on downtown towers sits PROUD of the glass band (0.10 m
+      // out, vs 0.01 m for other tall buildings), so the warm band reads
+      // directly on all four sides instead of dimmed behind the glass.
+      // Shopfront details still poke through (door 0.17, sign 0.14).
+      const glowOut = b.zone === 'downtown' ? 0.20 : 0.02;
+      glassGlowMatrices.push(mat4TRS(b.x, 1.05, b.z, b.rot, b.w + glowOut, 1.9, b.d + glowOut));
       const gt = GLASS_GLOW_TINTS[Math.floor(hash01(b.x + 5, b.z + 9) * GLASS_GLOW_TINTS.length)];
       const gj = 0.85 + hash01(b.x, b.z + 4) * 0.15;
       glassGlowTints.push([gt[0] * gj, gt[1] * gj, gt[2] * gj]);
@@ -205,8 +223,10 @@ export function buildBuildingMeshes(gl, progs, city) {
       entranceTints.push(darken(b.color, 0.9));
     }
     // Balconies on the front face, floors 2..4, for multi-storey blocks —
-    // only where the balcony sits below the roof (y < h - 1).
-    if (b.h >= 8 && (b.zone === 'residential' || b.zone === 'commercial' || b.zone === 'downtown' || b.zone === 'beach')) {
+    // only where the balcony sits below the roof (y < h - 1). NOT on
+    // downtown towers (Mu 23 Nov 21:19): a glass curtain wall stays clean,
+    // no balcony slabs sticking out of the glass.
+    if (b.h >= 8 && b.zone !== 'downtown' && (b.zone === 'residential' || b.zone === 'commercial' || b.zone === 'beach')) {
       const nB = Math.max(0, Math.min(3, Math.floor((b.h - 1) / 3.2) - 1));
       for (let k = 0; k < nB; k++) {
         const fy = (k + 2) * 3.2;
@@ -272,6 +292,11 @@ export function buildBuildingMeshes(gl, progs, city) {
   const part = (geom, matrices, tints) => ({ geom, matrices, tints, prog: progs.litInst });
   return {
     bases: [bases.short, bases.mid, bases.tall, bases.skyscraper],
+    // CBD curtain-wall bases (only the classes downtown towers actually
+    // use — tall + skyscraper — are non-empty; the rest are filtered out
+    // so they cost no draw call).
+    glassBases: [glassBases.short, glassBases.mid, glassBases.tall, glassBases.skyscraper]
+      .filter((s) => s.matrices.length > 0),
     roofs: part(unitBox, roofMatrices, roofTints),
     tiers: part(unitBox, tierMatrices, tierTints),
     spires: part(unitBox, spireMatrices, spireTints),
@@ -367,7 +392,10 @@ export function buildLitWindows(city) {
   const matrices = [], tints = [];
   const WARM = [[1, 0.85, 0.55], [1, 0.78, 0.45], [0.95, 0.9, 0.65], [1, 0.95, 0.8]];
   const COOL = [[0.7, 0.85, 1], [0.8, 0.9, 1]];
-  const perZone = { downtown: 24, commercial: 15, residential: 7, beach: 12, port: 6, forest: 3 };
+  // Mu 23 Nov 21:19 — CBD glass towers light up MUCH more at night:
+  // 60 lit windows per tower (was 24), so the ocean-blue glass reads
+  // alive after dark. Other zones unchanged.
+  const perZone = { downtown: 60, commercial: 15, residential: 7, beach: 12, port: 6, forest: 3 };
   // Every window cell of one building, in the SAME local frame
   // subdividedBox() uses: front/back faces nx=segFront (cell width
   // w/segFront), side faces nx=sideCols (cell width d/sideCols), all faces
@@ -423,7 +451,9 @@ export function buildLitWindows(city) {
       // Quad geometry is 1.8 x 1.3 m; scale it to 60% of the cell so the
       // glow sits INSIDE the 78% glass quad with a dark frame around it.
       matrices.push(mat4TRS(fx, y, fz, rotY, 0.60 * cellW / 1.8, 0.60 * cellH / 1.3, 1));
-      const warm = rand() < 0.8; // ~80% warm yellow, rest cool white
+      // CBD towers glow warm only (Mu 23 Nov 21:19: kuning hangat, never
+      // cool white); other zones keep ~80% warm / 20% cool.
+      const warm = b.zone === 'downtown' ? true : rand() < 0.8;
       const pal = warm ? WARM : COOL;
       tints.push(pal[Math.floor(rand() * pal.length)]);
     }

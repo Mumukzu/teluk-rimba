@@ -161,8 +161,52 @@ check('bridges are the 4 whitelisted crossings',
   // Detail meshes (buildBuildingMeshes is pure geometry — no GL calls —
   // so it runs in Node with a stubbed progs object).
   const meshes = buildBuildingMeshes(null, { litInst: 'LIT' }, city);
-  check('4 base geometries cover all 1000 buildings',
-    meshes.bases.reduce((a, s) => a + s.matrices.length, 0) === 1000);
+  // Mu 23 Nov 21:19 — CBD towers ride the glass curtain-wall bases
+  // (21 towers: 11 tall + 10 skyscraper); the other 979 keep the plain
+  // wall + window bases. Together they still cover all 1000 buildings.
+  check('4 plain + 2 glass base geometries cover all 1000 buildings',
+    meshes.bases.reduce((a, s) => a + s.matrices.length, 0)
+    + meshes.glassBases.reduce((a, s) => a + s.matrices.length, 0) === 1000
+    && meshes.glassBases.reduce((a, s) => a + s.matrices.length, 0) === 21);
+  // Curtain-wall glass is ocean blue on every cell (not the pastel wall
+  // colours): the geometry carries deep-ocean / bright-ocean / warm glass.
+  {
+    const curtain = subdividedBox(1, 1, 1, 8, 12, 6, true);
+    const glassCols = new Set(['0.1,0.3,0.55', '0.55,0.8,1', '1,0.95,0.75']);
+    let glassVerts = 0, mullionVerts = 0;
+    for (let i = 0; i < curtain.col.length; i += 3) {
+      const key = curtain.col[i] + ',' + curtain.col[i + 1] + ',' + curtain.col[i + 2];
+      if (glassCols.has(key)) { glassVerts++; continue; }
+      const [r, g, b] = [curtain.col[i], curtain.col[i + 1], curtain.col[i + 2]];
+      // Dark navy mullion: blue-dominant, all channels in the dark band.
+      if (b > r && r >= 0.15 && r <= 0.25 && g >= 0.18 && g <= 0.28 && b >= 0.24 && b <= 0.34) mullionVerts++;
+    }
+    check('curtain-wall geometry: ocean-blue glass on every cell + dark navy mullions',
+      glassVerts > 0 && mullionVerts > 0, glassVerts + ' glass verts, ' + mullionVerts + ' mullion verts');
+  }
+  // Mu 23 Nov 21:21 — NON-CBD: exactly ONE wall colour per zone
+  // (landmarks keep their own identifying colour, so they are excluded).
+  {
+    const want = {
+      commercial: '0.96,0.88,0.72', residential: '0.97,0.97,0.96',
+      beach: '0.97,0.93,0.82', port: '0.55,0.63,0.73', forest: '0.62,0.45,0.28',
+    };
+    let uniformOk = true;
+    for (const [zone, col] of Object.entries(want)) {
+      const cols = new Set(city.buildings.filter((b) => b.zone === zone && !b.landmark).map((b) => b.color.join(',')));
+      if (cols.size !== 1 || !cols.has(col)) uniformOk = false;
+    }
+    check('non-CBD zones: one uniform wall colour each (cream / white / sand-white / blue-grey / wood-brown)', uniformOk);
+    const downtownCols = new Set(city.buildings.filter((b) => b.zone === 'downtown').map((b) => b.color.join(',')));
+    // Every downtown tint is ocean blue (blue channel dominant) — the
+    // only exception is the white hospital landmark.
+    check('downtown stays ocean blue (no pastel / warm colours left)',
+      [...downtownCols].every((c) => {
+        if (c === '0.95,0.95,0.95') return true; // hospital landmark
+        const [r, g, bl] = c.split(',').map(Number);
+        return bl > r && bl >= g;
+      }));
+  }
   const distinctRoofTints = new Set(meshes.roofs.tints.map((t) => t.join(','))).size;
   check('roof tints vary by zone (not one grey)', distinctRoofTints > 10);
   check('plinth + cornice on every building', meshes.plinth.matrices.length === 1000 && meshes.cornice.matrices.length === 1000);

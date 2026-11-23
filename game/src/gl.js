@@ -307,23 +307,35 @@ function pushQuad(g, a, b, c, d, n, col) {
 // 56% read too small) — a clear window with a wall border around it.
 // horizontal band every 4th row and side faces are shaded a touch darker,
 // so facades read as buildings, not plain blocks.
-export function subdividedBox(w, h, d, segFront = 6, segRows = 10, sideCols = 2) {
+// curtain=true (Mu 23 Nov 21:19, CBD full window glass): EVERY cell above
+// the ground floor is glass — ocean-blue glass shades — and the wall cells
+// become a dark navy mullion grid, so the facade reads as a glass curtain
+// wall, not a wall with window holes. The instance tint multiplies these
+// colours, so the glass shades are chosen to stay ocean blue under an
+// ocean-blue tint.
+export function subdividedBox(w, h, d, segFront = 6, segRows = 10, sideCols = 2, curtain = false) {
   const g = emptyGeom();
   const hw = w / 2, hh = h / 2, hd = d / 2;
-  const glassDark = [0.3, 0.34, 0.42];
-  const glassReflect = [0.7, 0.8, 0.95]; // sky reflection
-  const glassWarm = [0.95, 0.8, 0.5]; // lit / curtained window
+  const glassDark = curtain ? [0.10, 0.30, 0.55] : [0.3, 0.34, 0.42]; // deep ocean
+  const glassReflect = curtain ? [0.55, 0.80, 1.0] : [0.7, 0.8, 0.95]; // bright ocean / sky reflection
+  const glassWarm = curtain ? [1.0, 0.95, 0.75] : [0.95, 0.8, 0.5]; // lit / curtained window
   const roof = [0.42, 0.42, 0.46];
   // winFn: glass colour for a window cell, null for plain wall. Windows on
   // every other column/row, never on the ground floor or the top floor.
+  // Curtain mode: every cell is glass (ground + top floor stay plain).
   const winFn = (i, j) => {
-    if (!(j > 0 && j < segRows - 1 && i % 2 === 0 && j % 2 === 0)) return null;
+    if (!(j > 0 && j < segRows - 1 && (curtain || (i % 2 === 0 && j % 2 === 0)))) return null;
     const hv = ((i * 31 + j * 17 + segFront * 7) % 100 + 100) % 100;
     return hv < 60 ? glassDark : hv < 85 ? glassReflect : glassWarm;
   };
   // wallFn: wall colour for a cell — a subtle darker band every 4th row,
-  // side faces a touch darker than front/back for depth.
+  // side faces a touch darker than front/back for depth. Curtain mode:
+  // the wall is the dark navy mullion grid between the glass cells.
   const wallFn = (shade) => (i, j) => {
+    if (curtain) {
+      const s = shade * (j % 4 === 3 ? 0.85 : 1.0);
+      return [0.22 * s, 0.26 * s, 0.32 * s];
+    }
     const s = shade * (j % 4 === 3 ? 0.88 : 1.0);
     return [s, s, s];
   };

@@ -4,8 +4,9 @@
 // Pure geometry: buildLivelyMeshes + buildBuildingMeshes run in Node
 // (document is undefined — the canvas atlases are null there).
 import { generateCity, riverDistance } from '../game/src/city.js';
-import { buildBuildingMeshes } from '../game/src/buildings.js';
+import { buildBuildingMeshes, buildLitWindows } from '../game/src/buildings.js';
 import { buildLivelyMeshes } from '../game/src/lively.js';
+import { buildShopGlow } from '../game/src/shopglow.js';
 
 let fails = 0;
 function check(name, ok, extra = '') {
@@ -39,11 +40,28 @@ check('glass + glow matrices and tints are finite',
   allFin(meshes.glassBandTall.matrices) && allFin(meshes.glassGlow.matrices)
   && allFinT(meshes.glassBandTall.tints) && allFinT(meshes.glassGlow.tints));
 
+// ---- CBD full glass (Mu 23 Nov 21:19): ocean-blue curtain wall, warm
+// lit windows on every tower, ground floor glowing on all four sides ----
+{
+  const sg = buildShopGlow(city);
+  // 316 commercial front panels + 21 downtown towers x 4 faces = 400.
+  check('shop glow: 400 panels (CBD towers glow on all 4 sides)', sg.counts.panels === 400, sg.counts.panels + ' panels');
+  check('shop glow: 400 ground spills (one per panel)', sg.counts.spills === 400, sg.counts.spills + ' spills');
+  check('shop glow panels + spills are finite',
+    allFin(sg.matrices) && allFinT(sg.tints) && allFin(sg.spill.matrices) && allFinT(sg.spill.tints));
+  const lw = buildLitWindows(city);
+  // 21 downtown towers x 60 warm windows + the other zones unchanged.
+  check('lit windows: 10,853 (CBD towers light 60 each, all warm)', lw.matrices.length === 10853, lw.matrices.length + ' windows');
+  check('lit window matrices + tints are finite', allFin(lw.matrices) && allFinT(lw.tints));
+}
+
 // ---- Feature 2: livelier facades ----
 check('curtains inside real window cells (thousands)', lv.counts.curtains > 1000, lv.counts.curtains + ' curtains');
 check('curtain matrices + tints are finite', allFin(lv.curtains.matrices) && allFinT(lv.curtains.tints));
 check('facade clutter geometry is finite', allFinG(lv.clutter));
-check('12 geometric murals on tall walls', lv.counts.murals === 12);
+// Mu 23 Nov 21:19: NO murals on downtown glass towers — murals stay on
+// commercial (4) + beach (2) walls only, so the CBD curtain wall stays clean.
+check('6 geometric murals on tall walls (no murals on CBD glass)', lv.counts.murals === 6);
 check('mural panels carry UVs', lv.muralGeom.uv.length === lv.muralGeom.pos.length / 3 * 2);
 check('laundry pieces fit the 200-capacity dynamic mesh', lv.counts.laundry <= 200, lv.counts.laundry + ' pieces');
 
