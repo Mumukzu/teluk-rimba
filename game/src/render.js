@@ -56,6 +56,8 @@ export function createRenderer(canvas, city) {
   const lively = buildLivelyMeshes(city); // varied shapes, facades, neon, street life, used roofs
   const muralTexture = lively.muralAtlasCanvas
     ? createCanvasTexture(gl, lively.muralAtlasCanvas) : null;
+  const neonTexture = lively.neonAtlasCanvas
+    ? createCanvasTexture(gl, lively.neonAtlasCanvas) : null;
   const stars = buildStarsSpec();
   const wet = buildWetGeoms();
   const nightPools = buildNightLightGeoms(city, landmarks);
@@ -125,6 +127,13 @@ export function createRenderer(canvas, city) {
   if (muralTexture) {
     const muralMesh = createTexturedMesh(gl, progs.textured, lively.muralGeom);
     meshes.push({ mesh: muralMesh, prog: progs.textured, model: mat4Identity(), textured: true, texture: muralTexture });
+  }
+  // Vertical neon name boards (Mu): our own shop names on commercial/CBD
+  // facades, one shared atlas, one textured draw. The glow halo behind
+  // each board is a dynamic night-only mesh (feature 6). (+1 draw.)
+  if (neonTexture) {
+    const neonMesh = createTexturedMesh(gl, progs.textured, lively.neonGeom);
+    meshes.push({ mesh: neonMesh, prog: progs.textured, model: mat4Identity(), textured: true, texture: neonTexture });
   }
   addInst(progs.litInst, buildingMeshes.roofDeck);
   addInst(progs.litInst, buildingMeshes.parapetNS);
