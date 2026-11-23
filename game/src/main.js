@@ -916,6 +916,14 @@ if (params.sim) {
         timeHours: game.timeHours, activityPropsMesh,
         elapsed: game.elapsed, dynamics: buildDynamics(), weather: weather.state,
       });
+      // Headless rAF can stall completely (0 frames in 110 s observed),
+      // so a manual step also publishes the perf counters — otherwise
+      // the draw-call probe has nothing to read. Test-only.
+      window.__PERF__ = {
+        fps: 0, calls: renderer.calls, tris: renderer.tris,
+        timeHours: +game.timeHours.toFixed(2),
+        peds: peds.count(), vehicles: traffic.counts().total,
+      };
       return { elapsed: +game.elapsed.toFixed(2), timeHours: +game.timeHours.toFixed(2) };
     };
   }
