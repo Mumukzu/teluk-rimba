@@ -706,6 +706,23 @@ function fanZ(sides, r, color, flip = false) {
   }
   return g;
 }
+// Full ring (annulus) facing +Z (flip for -Z): a thin bright rim ring
+// around the wheel centre — the rim reads as a ring + spokes, never as
+// a solid bright disc covering the tyre.
+function ringZ(sides, rOut, rIn, color, flip = false) {
+  const g = emptyGeom();
+  const n = flip ? [0, 0, -1] : [0, 0, 1];
+  for (let i = 0; i < sides; i++) {
+    const a0 = (2 * Math.PI * i) / sides, a1 = (2 * Math.PI * (i + 1)) / sides;
+    const o0 = [rOut * Math.cos(a0), rOut * Math.sin(a0), 0];
+    const o1 = [rOut * Math.cos(a1), rOut * Math.sin(a1), 0];
+    const i0 = [rIn * Math.cos(a0), rIn * Math.sin(a0), 0];
+    const i1 = [rIn * Math.cos(a1), rIn * Math.sin(a1), 0];
+    if (flip) { pushTri(g, o0, i0, i1, n, color); pushTri(g, o0, i1, o1, n, color); }
+    else { pushTri(g, o0, i1, i0, n, color); pushTri(g, o0, o1, i1, n, color); }
+  }
+  return g;
+}
 // Upper-half fan (semicircle, y >= 0) facing +Z (flip for -Z): the
 // wheel-arch recess — a dark crescent above the tyre.
 function halfFan(sides, r, color, flip = false) {
@@ -782,7 +799,7 @@ const GLASS_REFLECT = [0.88, 0.93, 1.0]; // pale sky-reflection streak
 const WARM_LIGHT = [1.0, 0.95, 0.75];
 const RED_LIGHT = [0.9, 0.15, 0.15];
 const TYRE = [0.1, 0.1, 0.11];
-const SIDEWALL = [0.15, 0.15, 0.16]; // tyre sidewall/shoulder, a touch lighter than the tread
+const SIDEWALL = [0.07, 0.07, 0.08]; // tyre sidewall/shoulder — full black, a hair darker than the tread, so the whole tyre reads black with no grey/white ring in sunlight (the frozen phase-f test counts only the [0.1,0.1] tread vertices: 120 per wheel, so the sidewall must never be [0.1,0.1])
 const HUB = [0.75, 0.75, 0.78];
 const INTERIOR = [0.1, 0.1, 0.12];
 const SEAT = [0.16, 0.16, 0.18];
@@ -796,7 +813,8 @@ const TRIM = [0.93, 0.93, 0.93]; // door panel, a touch darker than paint
 // segment (P2->P3) is exactly 1 segment x 20 sides x 6 verts = 120
 // TYRE-coloured vertices, which is what the frozen phase-f test counts
 // per wheel (bajaj: 3 wheels x 120). The sidewall/shoulder segments use
-// the slightly lighter SIDEWALL shade and are not counted.
+// the near-black SIDEWALL shade and are not counted — the whole tyre
+// reads as one full-black surface, tread and sidewall alike.
 function tyreLathe(r, w, sides = 20) {
   const g = emptyGeom();
   const P = [[0.52, -0.5], [0.84, -0.5], [1, -0.18], [1, 0.18], [0.84, 0.5], [0.52, 0.5]];
@@ -828,17 +846,33 @@ function tyreLathe(r, w, sides = 20) {
   return g;
 }
 
-// Round wheel: 20-sided lathe tyre (rounded profile, smooth normals) +
-// a SMALLER bright rim (0.24 x dia, so the tyre reads thick and the rim
-// sits in the middle) + a small bright centre cap on the outer face, so
-// the wheel reads as round from any angle, not a dark polygon. `width`
+// Bright rim for one wheel face, centred on the origin (wheel centre),
+// facing +/-Z. A small rim ring (0.48 of the tyre radius) + 5 neat
+// spokes that stay INSIDE the rim (they end at 0.42R, never crossing the
+// tyre face — the old 0.9-long spokes ran across the whole tyre and read
+// as white lines on the rubber) + a small bright centre cap. Bright
+// colour lives ONLY here, on the rim; no part of the tyre uses it.
+// R = tyre radius; zRing/zSpoke/zCap are the face offsets in the wheel's
+// local frame (already signed for the side).
+function rimGeom(R, side, zRing, zSpoke, zCap) {
+  const g = emptyGeom();
+  addTo(g, xlate(ringZ(12, R * 0.48, R * 0.38, HUB, side < 0), 0, 0, zRing));
+  addTo(g, xlate(fanZ(8, R * 0.18, CHROME, side < 0), 0, 0, zCap));
+  for (let k = 0; k < 5; k++) {
+    const a = (k / 5) * Math.PI * 2;
+    addTo(g, rotZ(xlate(plainBox(R * 0.42, R * 0.12, 0.02, HUB), R * 0.21, 0, zSpoke), a, 0, 0));
+  }
+  return g;
+}
+// Round wheel: 20-sided lathe tyre (rounded profile, smooth normals, full
+// black) + the small bright rim (ring + spokes + cap) on the outer face,
+// so the wheel reads as round from any angle, not a dark polygon. `width`
 // is the tyre thickness; the rim/cap sit just outside the tyre's face.
 function addWheel(g, x, z, dia = 0.55, width = 0.17) {
   addTo(g, xlate(tyreLathe(dia / 2, width), x, dia / 2, z));
   const side = z >= 0 ? 1 : -1;
   const face = width / 2;
-  addTo(g, xlate(fanZ(12, dia * 0.24, HUB, side < 0), x, dia / 2, z + side * (face + 0.005)));
-  addTo(g, xlate(fanZ(8, dia * 0.09, CHROME, side < 0), x, dia / 2, z + side * (face + 0.01)));
+  addTo(g, xlate(rimGeom(dia / 2, side, side * (face + 0.005), side * (face + 0.012), side * (face + 0.01)), x, dia / 2, z));
 }
 // Round headlight facing +X (jeep, trucks): a disc + a dark bezel ring.
 function addRoundHeadlight(g, x, y, z, r = 0.14) {
@@ -1222,11 +1256,14 @@ function bikeGeom({ scooter, withWheels = true }) {
     const helmet = prismY(8, 0.18, 0.14, [0.25, 0.25, 0.3]); // open-face helmet cap
     addTo(headG, xlate(helmet, -0.15, 1.74, 0));
     // Face on the front (+X): eyes, a nose that sticks out, a mouth.
+    // The features are deliberately high-contrast (dark eyes/mouth, a
+    // shaded nose) so the face still reads through the bike's tint and
+    // the scooter's windshield.
     for (const pz of [-0.07, 0.07]) {
-      addTo(headG, xlate(plainBox(0.04, 0.07, 0.05, [0.1, 0.1, 0.12]), 0.018, 1.62, pz));
+      addTo(headG, xlate(plainBox(0.05, 0.09, 0.05, [0.05, 0.05, 0.06]), 0.018, 1.62, pz));
     }
-    addTo(headG, xlate(plainBox(0.05, 0.07, 0.05, [1, 1, 1]), 0.03, 1.57, 0)); // nose
-    addTo(headG, xlate(plainBox(0.02, 0.02, 0.1, [0.3, 0.14, 0.14]), 0.015, 1.5, 0)); // mouth
+    addTo(headG, xlate(plainBox(0.05, 0.08, 0.05, [0.7, 0.7, 0.7]), 0.03, 1.57, 0)); // nose
+    addTo(headG, xlate(plainBox(0.02, 0.035, 0.12, [0.2, 0.08, 0.08]), 0.015, 1.5, 0)); // mouth
     if (!scooter) rotZ(headG, -0.45, -0.35, 0.9);
     addTo(body, headG);
   }
@@ -1395,33 +1432,26 @@ export function buildVehicleBodyGeoms() {
 }
 
 // One shared unit wheel: round 20-sided lathe tyre (dark), a SMALLER
-// bright rim (0.48 of the radius, so the tyre reads thick) + a small
-// bright centre cap + 5 spokes per face so the spin reads. Instances
-// scale it to each wheel size; the per-instance tint stays white so the
-// colours are never muddied.
+// bright rim (ring + 5 spokes + cap, all inside the tyre face, so the
+// tyre stays full black) — the per-instance tint stays white so the
+// colours are never muddied. Instances scale it to each wheel size.
 export function buildWheelGeom() {
   const g = emptyGeom();
   addTo(g, tyreLathe(1, 1));
   for (const side of [1, -1]) {
-    addTo(g, xlate(fanZ(12, 0.48, HUB, side < 0), 0, 0, side * 0.51));
-    addTo(g, xlate(fanZ(8, 0.18, CHROME, side < 0), 0, 0, side * 0.52));
-    for (let k = 0; k < 5; k++) {
-      const a = (k / 5) * Math.PI * 2;
-      const spoke = rotZ(xlate(plainBox(0.9, 0.14, 0.02, HUB), 0.55, 0, side * 0.53), a, 0, 0);
-      addTo(g, spoke);
-    }
+    addTo(g, rimGeom(1, side, side * 0.51, side * 0.53, side * 0.52));
   }
   return g;
 }
 
-// Simple far wheel (10-sided lathe tyre, 8-sided rim, small cap, no
+// Simple far wheel (10-sided lathe tyre, 8-sided rim ring, small cap, no
 // spokes): the far version for cars past 90 m — fewer tyre sides, same
 // silhouette, one shared mesh.
 export function buildWheelGeomFar() {
   const g = emptyGeom();
   addTo(g, tyreLathe(1, 1, 10));
   for (const side of [1, -1]) {
-    addTo(g, xlate(fanZ(8, 0.48, HUB, side < 0), 0, 0, side * 0.51));
+    addTo(g, xlate(ringZ(8, 0.48, 0.38, HUB, side < 0), 0, 0, side * 0.51));
     addTo(g, xlate(fanZ(6, 0.18, CHROME, side < 0), 0, 0, side * 0.52));
   }
   return g;
