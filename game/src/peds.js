@@ -247,7 +247,7 @@ export function createPeds(city, opts = {}) {
     const L = ROAD_LINES[Math.floor(rand() * ROAD_LINES.length)];
     const along = range(rand, -580, 580);
     const side = rand() < 0.5 ? -1 : 1;
-    const off = ASPHALT_HALF(L) + 1.3;
+    const off = ASPHALT_HALF(L) + range(rand, 0.6, 3.0); // full sidewalk width
     const horiz = rand() < 0.5;
     const x = horiz ? along : L + side * off;
     const z = horiz ? L + side * off : along;
@@ -262,10 +262,24 @@ export function createPeds(city, opts = {}) {
     const L = lines[Math.floor(rand() * lines.length)];
     const along = (horiz ? h.x : h.z) + range(rand, -h.r, h.r);
     const side = rand() < 0.5 ? -1 : 1;
-    const off = ASPHALT_HALF(L) + 1.3;
+    const off = ASPHALT_HALF(L) + range(rand, 0.6, 3.0); // full sidewalk width
     const x = horiz ? along : L + side * off;
     const z = horiz ? L + side * off : along;
     return { x, z, horiz, side, line: L };
+  }
+
+  // Pairs walking side by side (Mu): two walkers share one stretch of
+  // sidewalk, same heading and speed, ~1.0–1.4 m apart across the width.
+  function walkerPairSpots() {
+    const horiz = rand() < 0.5;
+    const L = ROAD_LINES[Math.floor(rand() * ROAD_LINES.length)];
+    const along = range(rand, -580, 580);
+    const side = rand() < 0.5 ? -1 : 1;
+    const off1 = ASPHALT_HALF(L) + range(rand, 0.6, 1.6);
+    const off2 = off1 + range(rand, 1.0, 1.4);
+    const heading = horiz ? (rand() < 0.5 ? Math.PI / 2 : -Math.PI / 2) : (rand() < 0.5 ? 0 : Math.PI);
+    const mk = (off) => (horiz ? { x: along, z: L + side * off } : { x: L + side * off, z: along });
+    return { a: mk(off1), b: mk(off2), horiz, side, line: L, heading };
   }
 
   function promenadeSpot() {
@@ -283,6 +297,8 @@ export function createPeds(city, opts = {}) {
 
   // Distribution (Mu): 42% walk the sidewalks (roads less crowded than the
   // old 100%), 58% live in the spaces doing things.
+  // Walkers spread across the FULL sidewalk width (Mu: never a neat single
+  // file along the kerb) — the offset varies 0.6–3.0 m off the asphalt.
   const ACTIVITY_SHARE = [
     ['walk', 0.42], ['chat', 0.20], ['yard', 0.20], ['coffee', 0.04],
     ['fish', 0.03], ['bench', 0.03], ['market', 0.03], ['beachSit', 0.05],
@@ -322,10 +338,12 @@ export function createPeds(city, opts = {}) {
     return { x: s.x + jx, z: s.z + jz, heading: s.heading, spot: s };
   }
 
-  function spawnPed(kind = 'walk') {
-    const activity = kind === 'officer' || kind === 'fish' ? kind : pickActivity();
+  function spawnPed(kind = 'walk', forced = null) {
+    const activity = forced ? 'walk' : (kind === 'officer' || kind === 'fish' ? kind : pickActivity());
     let spot, heading;
-    if (activity === 'walk') {
+    if (forced) {
+      spot = forced; heading = forced.heading;
+    } else if (activity === 'walk') {
       const roll = rand();
       spot = roll < 0.55 ? sidewalkSpot() : roll < 0.95 ? hotspotSpot() : promenadeSpot();
       if (!spot.onPromenade && riverDistance(spot.x, spot.z) < 20) return null;
@@ -342,7 +360,7 @@ export function createPeds(city, opts = {}) {
       activity,
       x: spot.x, z: spot.z,
       heading,
-      speed: range(rand, 1.0, 1.8),
+      speed: forced && forced.speed ? forced.speed : range(rand, 1.0, 1.8),
       shirt: SHIRTS[Math.floor(rand() * SHIRTS.length)],
       pants: PANTS[Math.floor(rand() * PANTS.length)],
       skin: SKINS[Math.floor(rand() * SKINS.length)],
@@ -371,7 +389,19 @@ export function createPeds(city, opts = {}) {
   }
 
   let guard = 0;
-  while (peds.length < PED_COUNT && guard++ < PED_COUNT * 3) spawnPed('walk');
+  while (peds.length < PED_COUNT && guard++ < PED_COUNT * 3) {
+    // ~20% of walkers go out in pairs, side by side (Mu: no single file).
+    if (rand() < 0.20 && peds.length < PED_COUNT - 1) {
+      const pr = walkerPairSpots();
+      if (pr && riverDistance(pr.a.x, pr.a.z) >= 20 && riverDistance(pr.b.x, pr.b.z) >= 20) {
+        const sp = range(rand, 1.0, 1.6);
+        spawnPed('walk', { x: pr.a.x, z: pr.a.z, horiz: pr.horiz, side: pr.side, line: pr.line, heading: pr.heading, speed: sp });
+        spawnPed('walk', { x: pr.b.x, z: pr.b.z, horiz: pr.horiz, side: pr.side, line: pr.line, heading: pr.heading, speed: sp });
+        continue;
+      }
+    }
+    spawnPed('walk');
+  }
   // Two fishermen standing on the pier (x 635-705, z -150).
   for (const fx of [690, 700]) {
     const p = spawnPed('fish');
@@ -615,11 +645,11 @@ export function createPeds(city, opts = {}) {
         heads.matrices.push(seatM); heads.tints.push(p.skin);
         if (p.hairStyle === 'long') { hairL.matrices.push(seatM); hairL.tints.push(p.hair || p.skin); }
         else { hairS.matrices.push(seatM); hairS.tints.push(p.hairStyle === 'bald' ? p.skin : (p.hairStyle === 'hat' ? [0.9, 0.2, 0.2] : (p.hair || p.skin))); }
-        // Arms pivot at the shoulders (±0.25, 1.40): opposite swing to the
+        // Arms pivot at the shoulders (±0.28, 1.40 — the wider torso): opposite swing to the
         // same-side leg. Long sleeves = shirt colour, short = bare skin.
         const armTint = p.sleeves === 'long' ? p.shirt : p.skin;
-        const shoulderL = mat4TRS(-0.25 * s, 1.40 * s, 0, 0, 1, 1, 1);
-        const shoulderR = mat4TRS(0.25 * s, 1.40 * s, 0, 0, 1, 1, 1);
+        const shoulderL = mat4TRS(-0.28 * s, 1.40 * s, 0, 0, 1, 1, 1);
+        const shoulderR = mat4TRS(0.28 * s, 1.40 * s, 0, 0, 1, 1, 1);
         const armBase = seated ? seatM : upper;
         armL.matrices.push(mat4Multiply(mat4Multiply(armBase, shoulderL), mat4RotX(-swing)));
         armL.tints.push(armTint);
@@ -668,47 +698,54 @@ export function createPeds(city, opts = {}) {
 // (shirt / pants / skin / hair) supplies the colour. Darker details use
 // a grey vertex colour so the tint reads darker there.
 // Torso (feet at y=0): hips 0.90, waist 1.08, chest 1.28, shoulders 1.42,
-// neck 1.46 — a taper, not a slab. Collar + placket + belt in grey.
+// neck 1.46 — a WIDE taper, not a slab: the torso is broad enough to
+// balance the legs (Mu: upper body too small before). Collar + placket +
+// belt in grey.
 export function pedTorsoGeom() {
   const g = emptyGeom();
   const at = (part, x, y, z) => { shift(part, x, y, z); g.pos.push(...part.pos); g.nrm.push(...part.nrm); g.col.push(...part.col); };
-  at(plainBox(0.38, 0.18, 0.22, [1, 1, 1]), 0, 0.99, 0); // hips
-  at(plainBox(0.34, 0.16, 0.20, [1, 1, 1]), 0, 1.14, 0); // waist (taper)
-  at(plainBox(0.42, 0.28, 0.24, [1, 1, 1]), 0, 1.30, 0); // chest
-  at(plainBox(0.44, 0.08, 0.26, [1, 1, 1]), 0, 1.44, 0); // shoulders
-  at(plainBox(0.30, 0.04, 0.20, [0.75, 0.75, 0.75]), 0, 1.47, 0); // collar
-  at(plainBox(0.05, 0.24, 0.02, [0.8, 0.8, 0.8]), 0, 1.28, 0.13); // placket
-  at(plainBox(0.36, 0.05, 0.21, [0.6, 0.6, 0.6]), 0, 1.06, 0); // belt
+  at(plainBox(0.46, 0.18, 0.26, [1, 1, 1]), 0, 0.99, 0); // hips
+  at(plainBox(0.40, 0.16, 0.23, [1, 1, 1]), 0, 1.14, 0); // waist (taper)
+  at(plainBox(0.50, 0.28, 0.28, [1, 1, 1]), 0, 1.30, 0); // chest
+  at(plainBox(0.54, 0.08, 0.30, [1, 1, 1]), 0, 1.44, 0); // shoulders
+  at(plainBox(0.34, 0.04, 0.22, [0.75, 0.75, 0.75]), 0, 1.47, 0); // collar
+  at(plainBox(0.05, 0.24, 0.02, [0.8, 0.8, 0.8]), 0, 1.28, 0.15); // placket
+  at(plainBox(0.44, 0.05, 0.24, [0.6, 0.6, 0.6]), 0, 1.06, 0); // belt
   return g; // the neck lives in the head mesh (skin tint, not shirt)
 }
 // One arm (left/right): upper arm + forearm bent ~20° at the elbow + hand.
-// Built with the SHOULDER at the origin, hanging down, so the instance
-// matrix pivots it at the shoulder. side: -1 left, +1 right.
+// LONG enough that the fingertips reach mid-thigh (Mu: arms too short
+// before) and thick enough to read. Built with the SHOULDER at the origin,
+// hanging down, so the instance matrix pivots it at the shoulder.
+// side: -1 left, +1 right.
 export function pedArmGeom(side) {
   const g = emptyGeom();
   const dx = side < 0 ? -0.25 : 0.25;
-  const upper = plainBox(0.11, 0.28, 0.12, [1, 1, 1]);
-  shift(upper, 0, -0.14, 0);
-  const fore = plainBox(0.10, 0.26, 0.11, [1, 1, 1]);
-  shift(fore, 0, -0.41, 0.02);
-  tiltX(fore, 0.35, -0.28); // elbow bend, forearm slightly forward
-  const hand = plainBox(0.09, 0.12, 0.10, [1, 1, 1]);
-  shift(hand, 0, -0.60, 0.06);
+  const upper = plainBox(0.14, 0.34, 0.15, [1, 1, 1]);
+  shift(upper, 0, -0.17, 0);
+  const fore = plainBox(0.13, 0.32, 0.14, [1, 1, 1]);
+  shift(fore, 0, -0.50, 0.02);
+  tiltX(fore, 0.35, -0.34); // elbow bend, forearm slightly forward
+  const hand = plainBox(0.11, 0.15, 0.12, [1, 1, 1]);
+  shift(hand, 0, -0.76, 0.06);
   for (const part of [upper, fore, hand]) { g.pos.push(...part.pos); g.nrm.push(...part.nrm); g.col.push(...part.col); }
   return g;
 }
 // One leg (left/right): thigh + shin bent ~8° at the knee + shoe.
-// Built with the HIP at the origin, hanging down to the foot at -0.90.
+// THICK thighs and calves (Mu: legs were poles before) and a SHOE that is
+// a visible dark block — 0.14 tall, bottom 0.02 BELOW the ground plane so
+// it always reads as touching, never floating. Built with the HIP at the
+// origin, hanging down to the foot at -0.90.
 export function pedLegGeom(side) {
   const g = emptyGeom();
   const dx = side < 0 ? -0.11 : 0.11;
-  const thigh = plainBox(0.16, 0.45, 0.18, [1, 1, 1]);
+  const thigh = plainBox(0.23, 0.45, 0.21, [1, 1, 1]);
   shift(thigh, dx, -0.225, 0);
-  const shin = plainBox(0.14, 0.42, 0.16, [1, 1, 1]);
+  const shin = plainBox(0.20, 0.42, 0.19, [1, 1, 1]);
   shift(shin, dx, -0.66, 0);
   tiltX(shin, 0.14, -0.45); // knee bend, shin slightly forward
-  const shoe = plainBox(0.20, 0.10, 0.30, [0.12, 0.12, 0.13]);
-  shift(shoe, dx, -0.85, 0.04);
+  const shoe = plainBox(0.26, 0.14, 0.38, [0.12, 0.12, 0.13]);
+  shift(shoe, dx, -0.85, 0.05);
   for (const part of [thigh, shin, shoe]) { g.pos.push(...part.pos); g.nrm.push(...part.nrm); g.col.push(...part.col); }
   return g;
 }
@@ -731,7 +768,7 @@ export function pedSkirtGeom() {
   at(prismY(8, 0.20, 0.22, [1, 1, 1]), 0, 0.78, 0); // waist
   at(prismY(8, 0.28, 0.26, [1, 1, 1]), 0, 0.55, 0); // flared hem
   for (const dx of [-0.11, 0.11]) {
-    at(plainBox(0.18, 0.10, 0.28, [0.12, 0.12, 0.13]), dx, 0.05, 0.04); // shoes
+    at(plainBox(0.24, 0.14, 0.36, [0.12, 0.12, 0.13]), dx, 0.07, 0.05); // shoes (block, on the ground)
   }
   return g;
 }
