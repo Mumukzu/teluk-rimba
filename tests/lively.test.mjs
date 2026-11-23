@@ -72,13 +72,57 @@ check('glass + glow matrices and tints are finite',
     });
     check('lobby glow cores are deep amber + bright (Mu 23:31)', deepAmber,
       lobbyIdx.length + ' cores');
+    // The glass tint itself changed (Mu 23 Nov 23:36 — day glass is now
+    // clear blue [0.62,0.80,0.96], not near-white [0.93,0.97,1.0]), so
+    // read it from the lobby glass boxes instead of hardcoding the old
+    // near-white values.
+    const lobbyGlassTint = meshes.glassBandTall.tints[
+      meshes.glassBandTall.matrices.findIndex((m) => tall(m))];
     const warmComposite = lobbyIdx.every((i) => {
       const g = meshes.glassGlow.tints[i];
-      const r = Math.min(1, 0.32 * 0.93 + 0.68 * g[0]);
-      const b = 0.32 * 1.0 + 0.68 * g[2];
+      const r = Math.min(1, 0.32 * lobbyGlassTint[0] + 0.68 * g[0]);
+      const b = 0.32 * lobbyGlassTint[2] + 0.68 * g[2];
       return r - b >= 0.35;
     });
     check('lobby glow reads warm amber through the 0.32 glass (r-b >= 0.35)', warmComposite);
+    // Mu 23 Nov 23:36 — the lobby read as a FLAT GREY WALL by day: the
+    // glass was near-white [0.93,0.97,1.0] over a pale cream core, so the
+    // composite was ~[0.95,0.95,0.92]. The day glass is now clear blue
+    // and the interior core pale blue, so the composite reads blue; and
+    // real lobby furniture (floor band, reception desk, potted plants)
+    // sits just behind the glass so you can see inside the lobby.
+    {
+      const lobbyGlassIdx = meshes.glassBandTall.matrices
+        .map((m, i) => (tall(m) ? i : -1)).filter((i) => i >= 0);
+      const clearBlueGlass = lobbyGlassIdx.every((i) => {
+        const t = meshes.glassBandTall.tints[i];
+        return t[2] - t[0] >= 0.25 && t[0] <= 0.75;
+      });
+      check('lobby day glass is clear blue, not near-white (Mu 23:36)', clearBlueGlass,
+        lobbyGlassIdx.length + ' glass boxes');
+      const lobbyCoreIdx = meshes.glassBand.matrices
+        .map((m, i) => (tall(m) ? i : -1)).filter((i) => i >= 0);
+      const paleBlueCore = lobbyCoreIdx.every((i) => {
+        const t = meshes.glassBand.tints[i];
+        return t[2] > t[0] && t[2] - t[0] >= 0.1;
+      });
+      check('lobby interior core is pale blue daylight (Mu 23:36)', paleBlueCore,
+        lobbyCoreIdx.length + ' interiors');
+      // Furniture lives in the plinth mesh: floor bands (0.5 m tall),
+      // reception desks (1.1 m tall, front face only), plant foliage
+      // (1.0 m tall, one per face). None is 0.6 m tall, so the plinth-band
+      // checks are unaffected.
+      const isH = (h) => (m) => Math.abs(m[5] - h) < 1e-6;
+      check('lobby floor bands on every face (Mu 23:36)',
+        meshes.plinth.matrices.filter(isH(0.5)).length >= downtown.length * 12,
+        meshes.plinth.matrices.filter(isH(0.5)).length + ' floor bands');
+      check('reception desk in every downtown lobby (Mu 23:36)',
+        meshes.plinth.matrices.filter(isH(1.1)).length === downtown.length,
+        meshes.plinth.matrices.filter(isH(1.1)).length + ' desks');
+      check('potted plant in every lobby face (Mu 23:36)',
+        meshes.plinth.matrices.filter(isH(1.0)).length === downtown.length * 4,
+        meshes.plinth.matrices.filter(isH(1.0)).length + ' plants');
+    }
   }
   check('lobby pillars + frames on every downtown tower (plinth mesh, tall parts)',
     meshes.plinth.matrices.filter(tall).length >= downtown.length * 30,

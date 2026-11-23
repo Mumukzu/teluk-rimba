@@ -220,13 +220,24 @@ export function buildBuildingMeshes(gl, progs, city) {
         // behind the glass (night, full 360°), framed by big pillars.
         // Lobby height = the curtain's ground-row height for this class.
         const lobbyH = b.h / BUILDING_CLASSES[cls].segRows;
-        // Bright warm lobby interior, just proud of the facade (+0.02) —
-        // seen through the clear glass by day.
+        // Mu 23 Nov 23:36 — the lobby read as a FLAT GREY WALL by day, not
+        // clear glass: the glass was near-white [0.93,0.97,1.0] over a pale
+        // cream core [0.96,0.94,0.88], so the 0.32-alpha composite landed
+        // at ~[0.95,0.95,0.92] — white-grey, no blue, no interior. Fix:
+        // (1) the glass is now a CLEAR BLUE glass tint [0.62,0.80,0.96],
+        // blue like the curtain wall above it but lighter — never near-
+        // white; (2) the interior core is a pale BLUE daylight interior
+        // [0.78,0.86,0.94] instead of cream, so the composite through the
+        // glass reads blue (b-r ~0.22); (3) real lobby furniture sits just
+        // behind the glass (floor band, reception desk, potted plants, in
+        // the plinth mesh — +0 draws) so you can SEE inside the lobby.
+        // Bright pale-blue lobby interior, just proud of the facade
+        // (+0.02) — seen through the clear glass by day.
         glassBandMatrices.push(mat4TRS(b.x, lobbyH / 2, b.z, b.rot, b.w + 0.04, lobbyH, b.d + 0.04));
-        glassBandTints.push([0.96, 0.94, 0.88]);
-        // Clear bright glass, full lobby height (+0.08 proud).
+        glassBandTints.push([0.78, 0.86, 0.94]);
+        // Clear blue glass, full lobby height (+0.08 proud).
         glassBandTallMatrices.push(mat4TRS(b.x, lobbyH / 2, b.z, b.rot, b.w + 0.16, lobbyH, b.d + 0.16));
-        glassBandTallTints.push([0.93, 0.97, 1.0]);
+        glassBandTallTints.push([0.62, 0.80, 0.96]);
         // Warm glow core BEHIND the glass (+0.05 proud, glass at +0.08),
         // so at night the whole lobby glows through the glass instead of
         // the core hiding it as a flat panel. Mu 23 Nov 23:31 — the old
@@ -242,6 +253,16 @@ export function buildBuildingMeshes(gl, progs, city) {
         // mesh — same unitBox, same lit program, +0 draw calls).
         const pillarTint = [0.88, 0.86, 0.80]; // warm light stone
         const frameTint = [0.28, 0.30, 0.34]; // soft dark frame
+        // Mu 23 Nov 23:36 — lobby furniture tints (day): dark wood floor
+        // band, warm wood reception desk + lighter counter top, terracotta
+        // pot + green foliage. All panels sit just behind the glass.
+        const furnTint = {
+          floor: [0.42, 0.34, 0.26],
+          desk: [0.55, 0.40, 0.24],
+          deskTop: [0.68, 0.53, 0.34],
+          pot: [0.45, 0.32, 0.20],
+          leaf: [0.25, 0.48, 0.22],
+        };
         // Four square corner pillars (read on both faces).
         for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
           const wx = b.x + Math.cos(b.rot) * (sx * b.w / 2) + Math.sin(b.rot) * (sz * b.d / 2);
@@ -286,6 +307,44 @@ export function buildBuildingMeshes(gl, progs, city) {
             const tm = (a + c) / 2;
             plinthMatrices.push(mat4TRS(cx + ax * tm, 0.13, cz + az * tm, rot, c - a, 0.26, 0.18));
             plinthTints.push(frameTint);
+          }
+          // Mu 23 Nov 23:36 — lobby furniture, visible THROUGH the glass
+          // by day (plinth mesh, +0 draws; every part < 3 m tall so the
+          // "tall plinth parts" checks are unaffected, and none is 0.6 m
+          // tall at y 0.3, so the plinth-band checks are unaffected).
+          // Panels sit at +0.03..+0.07: behind the glass (+0.08), in front
+          // of the interior core (+0.02).
+          // Floor band, segmented like the bottom rail (gap at the front
+          // door so it reads as a doorway, not a bar across it).
+          for (let i = 0; i < kept.length - 1; i++) {
+            const a = kept[i], c = kept[i + 1];
+            if (turn === 0 && a < 1.6 && c > -1.6) continue;
+            const tm = (a + c) / 2;
+            plinthMatrices.push(mat4TRS(cx + ax * tm + nx * 0.05, 0.25, cz + az * tm + nz * 0.05, rot, c - a, 0.5, 0.04));
+            plinthTints.push(furnTint.floor);
+          }
+          // One potted plant per face, at the first panel midpoint clear
+          // of the front door, nudged 1.2 m off the mullion so the slim
+          // frame line does not cut through the foliage.
+          for (let i = 0; i < kept.length - 1; i++) {
+            const tm = (kept[i] + kept[i + 1]) / 2;
+            if (turn === 0 && Math.abs(tm) < 1.6) continue;
+            const pt = tm + 1.2;
+            plinthMatrices.push(mat4TRS(cx + ax * pt + nx * 0.05, 0.725, cz + az * pt + nz * 0.05, rot, 0.5, 0.45, 0.04));
+            plinthTints.push(furnTint.pot);
+            plinthMatrices.push(mat4TRS(cx + ax * pt + nx * 0.05, 1.45, cz + az * pt + nz * 0.05, rot, 0.55, 1.0, 0.04));
+            plinthTints.push(furnTint.leaf);
+            break;
+          }
+          // Reception desk on the front face only, beside the entrance
+          // door (never across it): warm wood counter + lighter top.
+          if (turn === 0) {
+            const side = hash01(b.x + 11, b.z + 3) < 0.5 ? -1 : 1;
+            const dt = side * 2.8;
+            plinthMatrices.push(mat4TRS(cx + ax * dt + nx * 0.05, 1.05, cz + az * dt + nz * 0.05, rot, 2.6, 1.1, 0.04));
+            plinthTints.push(furnTint.desk);
+            plinthMatrices.push(mat4TRS(cx + ax * dt + nx * 0.05, 1.66, cz + az * dt + nz * 0.05, rot, 2.8, 0.12, 0.04));
+            plinthTints.push(furnTint.deskTop);
           }
         }
       } else {
