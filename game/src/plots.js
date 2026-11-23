@@ -108,6 +108,7 @@ const YARD_TRUNK = [0.4, 0.28, 0.16];
 const YARD_LEAF = [0.2, 0.48, 0.2];
 const YARD_LEAF_LT = [0.27, 0.56, 0.25];
 const YARD_STONE = [0.42, 0.42, 0.4]; // fountain stone — dark enough to read against the soft light yard paving (was 0.6, camouflaged)
+const LAWN = [0.30, 0.58, 0.26]; // kept-lawn green — a green patch in the yard, distinct from the terrain grass and from the light paving
 
 // Small broadleaf yard tree (same shape as the street trees, smaller):
 // trunk + two leaning branches + three overlapping crown blobs.
@@ -376,7 +377,7 @@ export function buildPlotDressing(city) {
 
   const yardRand = mulberry32(20261131);
   const fountainSpots = [];
-  let yardTrees = 0, yardBenches = 0, yardCars = 0, yardFlowers = 0, yardFountains = 0, yardDressed = 0;
+  let yardTrees = 0, yardBenches = 0, yardCars = 0, yardFlowers = 0, yardFountains = 0, yardDressed = 0, yardLawns = 0;
   // Buildings per block, for fast local clearance checks.
   const blockOf = new Map();
   const buildingsByBlock = new Map();
@@ -425,6 +426,22 @@ export function buildPlotDressing(city) {
       }
       return null;
     };
+    // Green lawn patch (Mu): a kept lawn in the yard — a MIX with the
+    // paving, trees, cars and flowers, never all-paving and never
+    // all-green. Placed FIRST so it gets a real patch of yard (placed
+    // last it starved: only 94 lawns); trees/cars/items then fill
+    // around it (fits() keeps them off the lawn). Flat quad on the
+    // paving mesh at y 0.08, just above the tiles.
+    if (yardRand() < 0.65) {
+      const lhw = range(yardRand, 2.5, 4.0), lhd = range(yardRand, 2.0, 3.0);
+      const s = tryPlace(lhw, lhd, 1.5, 14, 10);
+      if (s) {
+        const j = range(yardRand, -0.03, 0.03);
+        quadUp(paving, s.x - lhw, s.z - lhd, s.x + lhw, s.z + lhd, 0.08,
+          [LAWN[0] + j, LAWN[1] + j, LAWN[2] + j]);
+        yardLawns++;
+      }
+    }
     // Trees first (Mu: several trees per yard, not one or two): 2-4 per
     // building, mixed sizes, in the ring around the footprint. Scale the
     // tree (addPart has no scale): fresh geom per tree, uniform scale
@@ -570,6 +587,6 @@ export function buildPlotDressing(city) {
   return {
     paving, props, fountainSpots,
     parkingSymbols: parking.symbols,
-    counts: { blocks: dressed.length, cars, fences, flowerBeds: flowers, benches, bins, pots, yardTrees, yardBenches, yardCars, yardFlowers, yardFountains, yardDressed, streetTrees: streetTrees2, kerbCars, simpleCars, parkingLots: parking.counts.lots, parkingCars: parking.counts.cars, parkingBays: parking.counts.bays, parkingSymbols: parking.counts.symbols },
+    counts: { blocks: dressed.length, cars, fences, flowerBeds: flowers, benches, bins, pots, yardTrees, yardBenches, yardCars, yardFlowers, yardFountains, yardDressed, yardLawns, streetTrees: streetTrees2, kerbCars, simpleCars, parkingLots: parking.counts.lots, parkingCars: parking.counts.cars, parkingBays: parking.counts.bays, parkingSymbols: parking.counts.symbols },
   };
 }
