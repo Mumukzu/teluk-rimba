@@ -178,7 +178,7 @@ export function createRenderer(canvas, city) {
   // distance, so the pool is a soft glow — never a hard washed-out patch.
   addDyn(progs.transpInst, beamPoolGeom(), 220, 'headbeams');
   addDyn(progs.transpInst, flatQuadGeom, 48, 'flow'); // river + surf
-  addDyn(progs.transpInst, flatQuadGeom, 80, 'sea'); // sea ripple bands (own alpha)
+  addDyn(progs.transpInst, flatQuadGeom, 96, 'sea'); // sea ripple bands + swell (own alpha)
 
   let calls = 0, tris = 0;
 

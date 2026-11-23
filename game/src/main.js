@@ -725,7 +725,18 @@ if (params.sim) {
       // Own mesh ('sea', alpha 0.45) so they read clearly against the
       // blue water. Far bands cover the open sea; near-shore bands sit
       // in [620, 900] so several are always in the bay view.
+      // Swell patches (drawn first, bands over them): broad lighter-blue
+      // areas drifting slowly across the sea — gentle swell that reads
+      // even at a grazing angle, where thin bands collapse to a line.
       const sr = { matrices: [], tints: [] };
+      for (let k = 0; k < 8; k++) {
+        const px = 600 + ((k * 337 + game.elapsed * 2) % 1500);
+        const pz = -700 + ((k * 251) % 1400);
+        const plen = 150 + ((k * 53) % 150);
+        const pwdt = 15 + ((k * 11) % 10);
+        sr.matrices.push(mat4TRS(px, -1.08, pz, 0, pwdt, 1, plen));
+        sr.tints.push([0.35, 0.6, 0.8]);
+      }
       for (let k = 0; k < 36; k++) {
         const x = 2100 - ((game.elapsed * 3 + k * 47) % 1480);
         const z = -850 + ((k * 173) % 1700);
