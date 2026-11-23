@@ -731,15 +731,32 @@ if (params.sim) {
       if (bl.matrices.length) dyn.bikelights = bl;
     }
     // River flow streaks + beach wave lines (light animation, always on).
+    // Mu (river cleanup): the river read as a flat blue sheet — the old
+    // streaks were tiny (0.5 x 3.2 m, 36 of them). Now 72 longer/wider
+    // streaks + 8 broad current patches drifting downstream, same
+    // treatment as the lively sea.
     {
       const fl = { matrices: [], tints: [] };
-      for (let k = 0; k < 36; k++) {
-        const base = (k * 53.7) % riverTotal;
-        const drift = (game.elapsed * 2.5 + k * 17.3) % 120;
+      for (let k = 0; k < 72; k++) {
+        const base = (k * 27.3) % riverTotal;
+        const drift = (game.elapsed * 2.5 + k * 8.7) % 120;
         const pt = riverPointAt(base + drift);
         if (Math.hypot(pt.x - camX, pt.z - camZ) > cull + 60) continue;
-        fl.matrices.push(mat4TRS(pt.x, -0.7, pt.z, Math.atan2(pt.dx, pt.dz), 0.5, 1, 3.2));
+        fl.matrices.push(mat4TRS(pt.x, -0.7, pt.z, Math.atan2(pt.dx, pt.dz), 1.2, 1, 8));
         fl.tints.push([0.9, 0.97, 1]);
+      }
+      // Broad current patches: lighter-blue drift areas, 6-10 m wide,
+      // 30-60 m long, spread along the river — read even at a grazing
+      // angle, where thin streaks collapse to a line.
+      for (let k = 0; k < 8; k++) {
+        const base = (k * 173.1) % riverTotal;
+        const drift = (game.elapsed * 2.5 + k * 31.7) % 240;
+        const pt = riverPointAt(base + drift);
+        if (Math.hypot(pt.x - camX, pt.z - camZ) > cull + 60) continue;
+        const pw = 6 + ((k * 7) % 5);
+        const pl = 30 + ((k * 13) % 31);
+        fl.matrices.push(mat4TRS(pt.x, -0.72, pt.z, Math.atan2(pt.dx, pt.dz), pw, 1, pl));
+        fl.tints.push([0.62, 0.8, 0.95]);
       }
       for (let k = 0; k < 6; k++) {
         const wx = 632 + k * 8 + 5 * Math.sin(game.elapsed * 0.35 + k * 1.7);

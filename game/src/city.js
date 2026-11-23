@@ -59,10 +59,12 @@ export function terrainHeight(x, z) {
   h += 1.2 * Math.sin(x * 0.045) * Math.cos(z * 0.05) * outside;
   // Beach: slope down east of the city into the sea.
   h -= smoothstep(600, 800, x) * 5.0;
-  // River channel.
+  // River channel: deeper + steeper (was -3.0 over rd<20) so the bridge
+  // reads as a REAL bridge over a sunken river, not a road over a flat
+  // blue strip. Waterline (y -0.85) now sits at rd ~8.6, banks drop 4 m.
   const rd = riverDistance(x, z);
-  if (rd < 20 && x < 660) {
-    h -= 3.0 * Math.pow(1 - rd / 20, 2);
+  if (rd < 16 && x < 660) {
+    h -= 4.0 * Math.pow(1 - rd / 16, 2);
   }
   return h;
 }

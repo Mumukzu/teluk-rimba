@@ -115,9 +115,26 @@ export function createPeds(city, opts = {}) {
   const beachSitSpots = [];
   const yardSpots = [];
   {
-    // Market stalls: block (6,5) spans x[0,100], z[-100,0]; rows z=-78,-38.
-    // (The stalls themselves sit in the river — see landmarks.js; the
-    // COFFEE tables go on the market's dry NE corner instead.)
+    // Market stalls: block (6,5) spans x[0,100], z[-100,0]; rows z=-15,-31
+    // on the dry strip south of the river (see landmarks.js). Standers in
+    // front of each row + a crowd in the aisle — all filtered by openSpot
+    // (rd >= 20), so nobody stands in the water.
+    for (let k = 0; k < 8; k++) {
+      marketSpots.push({ x: 13 + k * 10, z: -10, heading: Math.PI });
+    }
+    for (let k = 0; k < 5; k++) { // x=13..53: rd >= 20 (x=63 would be rd 16.9)
+      marketSpots.push({ x: 13 + k * 10, z: -36, heading: 0 });
+    }
+    {
+      let tries = 0;
+      while (marketSpots.length < 84 && tries++ < 2000) {
+        const x = range(rand, 13, 89), z = range(rand, -36, -8);
+        if (!openSpot(x, z)) continue;
+        marketSpots.push({ x, z, heading: range(rand, 0, Math.PI * 2) });
+      }
+    }
+    // Coffee tables: 15 at the market's dry NE corner (x 55-87, z -22..-6,
+    // all rd >= 27), 15 at the town square, 10 at the beach promenade.
     for (let i = 0; i < 15; i++) {
       const x = 55 + (i % 5) * 8, z = -22 + Math.floor(i / 5) * 8;
       coffeeTables.push({ x, z, heading: range(rand, 0, Math.PI * 2) });
@@ -175,15 +192,8 @@ export function createPeds(city, opts = {}) {
       if (!openSpot(x, z)) continue;
       chatSpots.push({ x, z, heading: range(rand, 0, Math.PI * 2) });
     }
-    // Market stall standers: in front of the stalls on dry land (NE rows).
-    for (let k = 0; k < 7; k++) {
-      const x = 10 + k * 11;
-      marketSpots.push({ x, z: -30, heading: Math.PI });
-      marketSpots.push({ x, z: -70, heading: 0 });
-    }
-    for (let i = 0; i < 70; i++) {
-      marketSpots.push({ x: 20 + (i % 8) * 9, z: -15 - Math.floor(i / 8) * 7, heading: range(rand, 0, Math.PI * 2) });
-    }
+    // (Market standers + crowd are placed above, in front of the new dry
+    // stall rows — the old z=-70 row stood in the river.)
     // Beach sitters: on the sand near the umbrellas (x 615-645).
     for (let i = 0; i < 120; i++) {
       beachSitSpots.push({ x: range(rand, 615, 645), z: range(rand, -500, 500), heading: range(rand, 0, Math.PI * 2) });

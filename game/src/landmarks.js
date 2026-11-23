@@ -27,6 +27,10 @@ export function buildLandmarks(city) {
   const add = (g, part) => { g.pos.push(...part.pos); g.nrm.push(...part.nrm); g.col.push(...part.col); };
 
   // ---------- Night market: 14 stalls in 2 rows inside the market block ----------
+  // Mu (river cleanup): the old rows (z=-78,-38) sat IN the river — the
+  // river cuts the block diagonally. The rows now sit on the dry strip
+  // south of the river (z=-15 and z=-31, every stall rd >= 21), facing
+  // each other across the aisle at z=-23.
   const market = blockAt(city, 6, 5);
   const stallGeom = (() => {
     const g = emptyGeom();
@@ -52,10 +56,12 @@ export function buildLandmarks(city) {
   const lightDots = { matrices: [], tints: [] };
   const LIGHT_COLS = [[1, 0.85, 0.5], [1, 0.55, 0.65], [0.5, 0.9, 1], [0.65, 1, 0.55], [0.85, 0.65, 1]];
   if (market) {
+    // Row 0 (south, z=-15): 8 stalls; row 1 (north, z=-31): 6 stalls.
+    const ROWS = [{ z: market.z0 + 78, n: 8 }, { z: market.z0 + 62, n: 6 }];
     for (let row = 0; row < 2; row++) {
-      const z = market.z0 + 22 + row * 40;
-      for (let k = 0; k < 7; k++) {
-        const x = market.x0 + 10 + k * 11;
+      const z = ROWS[row].z;
+      for (let k = 0; k < ROWS[row].n; k++) {
+        const x = market.x0 + 4 + k * 10;
         stallMatrices.push(mat4TRS(x, 0, z, row === 0 ? 0 : Math.PI, 1, 1, 1));
         stallTints.push(PASTEL[(row * 7 + k) % PASTEL.length]);
       }

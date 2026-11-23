@@ -9,7 +9,7 @@ import { terrainHeight } from './city.js';
 import { mat4TRS } from './gl.js';
 
 // ---------------------------------------------------------------- shop ---
-export const SHOP_POS = { x: 51, z: -51 }; // Rimba Market block centre
+export const SHOP_POS = { x: 51, z: -23 }; // Rimba Market aisle, dry land (rd 33) between the two stall rows
 
 export const SHOP_ITEMS = [
   { id: 'pistol', name: 'Pistol', price: 250, rank: 0, kind: 'weapon', desc: 'Fire with F — 12 rounds included' },

@@ -17,7 +17,7 @@
 // No graph changes: the road graph stays ONE connected component via the
 // 4 bridges. Two merged static meshes (hard + green) = +2 draw calls.
 import { mulberry32, range, rangeInt } from './rng.js';
-import { RIVER_POINTS, RIVER_HALF_WIDTH, riverDistance, distToSegment, IS_MAIN, ASPHALT_HALF } from './city.js';
+import { RIVER_POINTS, RIVER_HALF_WIDTH, riverDistance, distToSegment, IS_MAIN, ASPHALT_HALF, terrainHeight } from './city.js';
 import { emptyGeom, plainBox } from './gl.js';
 import { buildParking } from './parking.js';
 
@@ -199,7 +199,17 @@ export function buildRiverfront(city) {
       const arc = [];
       for (let i = 0; i <= 10; i++) {
         const a = a0 - Math.PI / 2 + (i / 10) * Math.PI;
-        arc.push([px + Math.cos(a) * r, pz + Math.sin(a) * r]);
+        // Mu (river cleanup): the fan bulged toward the river and its arc
+        // could jut INTO the water. Pull any arc point back toward the
+        // node until it sits on dry land (rd >= 14) — no paving in the
+        // river.
+        let cx = px + Math.cos(a) * r, cz = pz + Math.sin(a) * r;
+        while (riverDistance(cx, cz) < 14 && Math.hypot(cx - px, cz - pz) > 0.5) {
+          const d = Math.hypot(cx - px, cz - pz);
+          cx = px + (cx - px) / d * (d - 0.5);
+          cz = pz + (cz - pz) / d * (d - 0.5);
+        }
+        arc.push([cx, cz]);
       }
       for (let i = 0; i < arc.length - 1; i++) {
         triBoth(hard, [px, pz], arc[i], arc[i + 1], 0.05, CAP_COL);
@@ -274,7 +284,9 @@ export function buildRiverfront(city) {
     for (const side of [1, -1]) {
       const pA = [ax + nx * 11.5 * side, az + nz * 11.5 * side];
       const pB = [bx + nx * 11.5 * side, bz + nz * 11.5 * side];
-      wallQuad(hard, pA[0], pA[1], pB[0], pB[1], -1.0, 0.15, WALL_COL);
+      // Embankment wall: a clear stone lip (top y 0.35) so the sunken
+      // channel reads as a real river, not a blue sheet on the grass.
+      wallQuad(hard, pA[0], pA[1], pB[0], pB[1], -1.0, 0.35, WALL_COL);
       counts.wallM += segM;
       // Promenade: 3.5 m wide strip, rd 13-16.5.
       const prA = [ax + nx * 13 * side, az + nz * 13 * side];
@@ -283,14 +295,17 @@ export function buildRiverfront(city) {
       const prD = [ax + nx * 16.5 * side, az + nz * 16.5 * side];
       quadBoth(hard, [prA, prB, prC, prD], 0.06, PROM_COL);
       counts.promenadeM += segM;
-      // Fence at rd 17.5: posts every ~4 m + a thin rail.
+      // Fence at rd 17.5: posts every ~4 m + TWO rails, so it reads as a
+      // fence from the air — not one thin stray black line on the grass.
       const fA = [ax + nx * 17.5 * side, az + nz * 17.5 * side];
       const fB = [bx + nx * 17.5 * side, bz + nz * 17.5 * side];
       const rot = Math.atan2(-(fB[0] - fA[0]), fB[1] - fA[1]);
-      addPart(hard, plainBox(0.07, 0.07, len + 0.1, FENCE_COL), (fA[0] + fB[0]) / 2, 0.62, (fA[1] + fB[1]) / 2, rot);
+      addPart(hard, plainBox(0.1, 0.1, len + 0.1, FENCE_COL), (fA[0] + fB[0]) / 2, 0.62, (fA[1] + fB[1]) / 2, rot);
+      addPart(hard, plainBox(0.1, 0.1, len + 0.1, FENCE_COL), (fA[0] + fB[0]) / 2, 0.35, (fA[1] + fB[1]) / 2, rot);
       counts.fenceM += segM;
-      // One post per step (8 m spacing keeps the count sane).
+      // One post per step (8 m) + a midpoint post (4 m spacing).
       addPart(hard, plainBox(0.09, 0.75, 0.09, FENCE_COL), fA[0], 0.38, fA[1], 0);
+      addPart(hard, plainBox(0.09, 0.75, 0.09, FENCE_COL), (fA[0] + fB[0]) / 2, 0.38, (fA[1] + fB[1]) / 2, 0);
     }
   }
 
@@ -318,10 +333,13 @@ export function buildRiverfront(city) {
       }
       counts.docks++;
     } else {
-      // Wooden steps down from the promenade to the water.
+      // Wooden steps down from the promenade to the water. Each step sits
+      // on the bank slope (terrainHeight + 0.12), so it follows the deeper
+      // channel instead of floating or burying.
       for (let i = 0; i < 3; i++) {
-        const rd = 14.5 - i * 1.5, y = -0.2 - i * 0.35;
-        addPart(hard, plainBox(2.5, 0.3, 1.3, WOOD_COL), rp.x + nx * rd, y, rp.z + nz * rd, rot);
+        const rd = 14.5 - i * 1.5;
+        const sx = rp.x + nx * rd, sz = rp.z + nz * rd;
+        addPart(hard, plainBox(2.5, 0.3, 1.3, WOOD_COL), sx, terrainHeight(sx, sz) + 0.12, sz, rot);
       }
       counts.steps++;
     }
