@@ -368,7 +368,9 @@ export function createPeds(city, opts = {}) {
       hairStyle,
       // Variant system (ONE base model): sleeves, skirt, body scale.
       sleeves: rand() < 0.5 ? 'long' : 'short',
-      skirt: rand() < 0.15,
+      // No skirts (Mu's refs: pants only — the skirt read as a barrel
+      // and glided without a leg swing). Every NPC wears pants now.
+      skirt: false,
       scale: range(rand, 0.94, 1.06),
       pose: (activity === 'coffee' || activity === 'bench' || activity === 'beachSit') ? 'sit' : 'stand',
       state: activity === 'walk' ? 'walk' : 'stand',
