@@ -229,11 +229,14 @@ export function buildPalmMesh(city) {
 }
 
 export function buildLitWindows(city) {
-  // Warm lit windows: small bright quads on building facades, drawn with
-  // the unlit program ONLY at night, so the city glitters after dark while
-  // the sky and horizon stay dark. One instanced draw call, ~10,500
-  // windows (was ~3,300): every face of every building carries lights,
-  // warm yellow mostly, some white, some windows left dark for contrast.
+  // Warm lit windows: a random SUBSET of the building's OWN dark window
+  // cells — the exact same grid subdividedBox() draws (same class, same
+  // segFront/segRows/sideCols, same cell (i,j), same centre). The lit quad
+  // is drawn slightly INSET inside the glass quad (40% of the cell vs the
+  // glass's 56%) and a touch more proud of the wall, so at night every
+  // glowing square sits precisely inside a dark window frame — never
+  // between windows, never outside a frame. Drawn with the unlit program
+  // ONLY at night, one instanced draw call, ~10,500 windows.
   const quad = (() => {
     const g = { pos: [], nrm: [], col: [] };
     const white = [1, 1, 1];
@@ -248,44 +251,61 @@ export function buildLitWindows(city) {
   const WARM = [[1, 0.85, 0.55], [1, 0.78, 0.45], [0.95, 0.9, 0.65], [1, 0.95, 0.8]];
   const COOL = [[0.7, 0.85, 1], [0.8, 0.9, 1]];
   const perZone = { downtown: 24, commercial: 15, residential: 7, beach: 12, port: 6, forest: 3 };
+  // Every window cell of one building, in the SAME local frame
+  // subdividedBox() uses: front/back faces nx=segFront (cell width
+  // w/segFront), side faces nx=sideCols (cell width d/sideCols), all faces
+  // ny=segRows (cell height h/segRows). Window cells: j>0, j<segRows-1,
+  // i%2==0, j%2==0 — never the ground floor or the top floor.
+  const windowCells = (cls) => {
+    const cells = [];
+    for (let j = 2; j < cls.segRows - 1; j += 2) {
+      for (let i = 0; i < cls.segFront; i += 2) cells.push({ face: 0, i, j, nx: cls.segFront });
+      for (let i = 0; i < cls.segFront; i += 2) cells.push({ face: 1, i, j, nx: cls.segFront });
+      for (let i = 0; i < cls.sideCols; i += 2) cells.push({ face: 2, i, j, nx: cls.sideCols });
+      for (let i = 0; i < cls.sideCols; i += 2) cells.push({ face: 3, i, j, nx: cls.sideCols });
+    }
+    return cells;
+  };
   for (const b of city.buildings) {
-    const n = perZone[b.zone] || 3;
-    // Grid-snapped random placement: each lit window picks a random
-    // column and a random floor row on one of the four faces, from a
-    // per-building RNG. Column and row are drawn INDEPENDENTLY, so the
-    // windows scatter like real lit windows in neat rows/columns —
-    // never a diagonal function of row+column (the old linear hash
-    // marched both together and drew staircase diagonals).
+    const cls = BUILDING_CLASSES[buildingClass(b.h)];
+    const cells = windowCells(cls);
+    const n = Math.min(perZone[b.zone] || 3, cells.length);
+    // Random subset of the REAL cells (per-building seeded RNG, so the
+    // pattern is stable frame to frame) — partial Fisher-Yates shuffle.
     const rand = mulberry32(Math.floor(Math.abs(b.x) * 131 + Math.abs(b.z) * 17 + 7));
-    const rows = Math.max(1, Math.floor((b.h - 4) / 3));
     for (let k = 0; k < n; k++) {
-      const face = k % 4; // 0:+d, 1:-d, 2:+w, 3:-w — windows wrap the building
-      const faceW = face < 2 ? b.w : b.d;
-      const cols = Math.max(2, Math.round(faceW / 3));
-      const col = Math.floor(rand() * cols);
-      const row = Math.floor(rand() * rows);
-      const along = (col + 0.5) / cols - 0.5;
-      const y = Math.min(3.5 + row * 3, b.h - 1.5);
-      const sr = Math.sin(b.rot), cr = Math.cos(b.rot);
-      let fx, fz, rotY;
-      if (face === 0) { // +d face
-        fx = b.x + sr * (b.d / 2 + 0.08) + cr * along * b.w * 0.7;
-        fz = b.z + cr * (b.d / 2 + 0.08) - sr * along * b.w * 0.7;
-        rotY = b.rot;
-      } else if (face === 1) { // -d face
-        fx = b.x - sr * (b.d / 2 + 0.08) + cr * along * b.w * 0.7;
-        fz = b.z - cr * (b.d / 2 + 0.08) - sr * along * b.w * 0.7;
-        rotY = b.rot + Math.PI;
-      } else if (face === 2) { // +w face
-        fx = b.x + cr * (b.w / 2 + 0.08) + sr * along * b.d * 0.7;
-        fz = b.z - sr * (b.w / 2 + 0.08) + cr * along * b.d * 0.7;
-        rotY = b.rot + Math.PI / 2;
+      const pick = k + Math.floor(rand() * (cells.length - k));
+      const tmp = cells[k]; cells[k] = cells[pick]; cells[pick] = tmp;
+    }
+    const sr = Math.sin(b.rot), cr = Math.cos(b.rot);
+    for (let k = 0; k < n; k++) {
+      const c = cells[k];
+      const u = (c.i + 0.5) / c.nx - 0.5; // cell centre, fraction across the face
+      const v = (c.j + 0.5) / cls.segRows - 0.5; // cell centre, fraction up the facade
+      const faceW = c.face < 2 ? b.w : b.d; // face width in metres
+      const cellW = faceW / c.nx, cellH = b.h / cls.segRows;
+      // Local centre of the cell (building frame): the glass quad in
+      // subdividedBox sits at this same centre, 0.005 proud; the lit quad
+      // sits 0.012 proud so it renders on top of the glass, never
+      // z-fighting. Back/right/left faces mirror the local x/z exactly as
+      // subdividedBox builds them (the old code mirrored them wrong, so
+      // lit squares landed between the dark windows).
+      let lx, lz, rotY;
+      if (c.face === 0) { // +d face
+        lx = u * b.w; lz = b.d / 2 + 0.012 * b.d; rotY = b.rot;
+      } else if (c.face === 1) { // -d face
+        lx = -u * b.w; lz = -(b.d / 2 + 0.012 * b.d); rotY = b.rot + Math.PI;
+      } else if (c.face === 2) { // +w face
+        lx = b.w / 2 + 0.012 * b.w; lz = -u * b.d; rotY = b.rot + Math.PI / 2;
       } else { // -w face
-        fx = b.x - cr * (b.w / 2 + 0.08) + sr * along * b.d * 0.7;
-        fz = b.z + sr * (b.w / 2 + 0.08) + cr * along * b.d * 0.7;
-        rotY = b.rot - Math.PI / 2;
+        lx = -(b.w / 2 + 0.012 * b.w); lz = u * b.d; rotY = b.rot - Math.PI / 2;
       }
-      matrices.push(mat4TRS(fx, y, fz, rotY, 1, 1, 1));
+      const fx = b.x + lx * cr + lz * sr;
+      const fz = b.z - lx * sr + lz * cr;
+      const y = b.h / 2 + v * b.h;
+      // Quad geometry is 1.8 x 1.3 m; scale it to 40% of the cell so the
+      // glow sits INSIDE the 56% glass quad with a dark frame around it.
+      matrices.push(mat4TRS(fx, y, fz, rotY, 0.40 * cellW / 1.8, 0.40 * cellH / 1.3, 1));
       const warm = rand() < 0.8; // ~80% warm yellow, rest cool white
       const pal = warm ? WARM : COOL;
       tints.push(pal[Math.floor(rand() * pal.length)]);
