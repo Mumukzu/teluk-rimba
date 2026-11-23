@@ -119,6 +119,15 @@ export function createRenderer(canvas, city) {
     const shopPanelMesh = createTexturedMesh(gl, progs.textured, shopSigns.panelGeom);
     meshes.push({ mesh: shopPanelMesh, prog: progs.textured, model: mat4Identity(), textured: true, texture: shopSignTexture });
   }
+  // Parking zone symbols (Phase I): P letters + disabled pictograms on
+  // the lot pads, one shared atlas (1 textured draw). The atlas canvas
+  // only exists in the browser (Node tests get null) — skip the mesh
+  // there; the pad + lines + cars are already in the paving/props meshes.
+  if (plotDressing.parkingSymbols.atlasCanvas) {
+    const parkingTexture = createCanvasTexture(gl, plotDressing.parkingSymbols.atlasCanvas);
+    const parkingMesh = createTexturedMesh(gl, progs.textured, plotDressing.parkingSymbols.panelGeom);
+    meshes.push({ mesh: parkingMesh, prog: progs.textured, model: mat4Identity(), textured: true, texture: parkingTexture });
+  }
   addStatic(progs.lit, beachMeshes.poles, mat4Identity());
   addInst(progs.litInst, beachMeshes.umbrella);
   addInst(progs.litInst, beachMeshes.lounger);

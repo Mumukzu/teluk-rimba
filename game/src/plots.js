@@ -5,8 +5,9 @@
 // Pure geometry (no WebGL, no DOM) — the renderer draws it as static meshes.
 import { mulberry32, range, rangeInt } from './rng.js';
 import { riverDistance, ROAD_LINES, ASPHALT_HALF } from './city.js';
-import { emptyGeom, plainBox, prismY } from './gl.js';
+import { emptyGeom, plainBox } from './gl.js';
 import { distinctColor, parkedCarGeom } from './vehicles.js';
+import { buildParking, simpleParkedCarGeom } from './parking.js';
 
 // Yard paving (Mu: subtle and calm — no more chessboard): small 4x2 m
 // rectangular blocks in running bond, all nearly the same soft tone
@@ -90,23 +91,6 @@ function tiltZ(part, a) {
   return part;
 }
 
-// Tilt a part around the X axis (local space): rotates positions and
-// normals. Used for the simple parked cars' wheels (prismY axis -> Z).
-function tiltX(part, a) {
-  const c = Math.cos(a), s = Math.sin(a);
-  for (let i = 0; i < part.pos.length; i += 3) {
-    const y = part.pos[i + 1], z = part.pos[i + 2];
-    part.pos[i + 1] = y * c - z * s;
-    part.pos[i + 2] = y * s + z * c;
-  }
-  for (let i = 0; i < part.nrm.length; i += 3) {
-    const ny = part.nrm[i + 1], nz = part.nrm[i + 2];
-    part.nrm[i + 1] = ny * c - nz * s;
-    part.nrm[i + 2] = ny * s + nz * c;
-  }
-  return part;
-}
-
 // Door strip in front of a building's entrance/shopfront: the door sits
 // at the front-face centre (local +z after rotY, same frame as the
 // entrance kits), canopy reaching ~1 m out. An item is clear when it is
@@ -178,34 +162,6 @@ function yardBenchGeom() {
   return g;
 }
 
-const SIMPLE_TYRE = [0.07, 0.07, 0.08];
-const SIMPLE_GLASS = [0.12, 0.16, 0.22];
-const SIMPLE_LAMP = [1.0, 0.95, 0.75];
-const SIMPLE_TAIL = [0.8, 0.15, 0.1];
-
-// Low-poly parked car (~230 tris vs ~2,100 for the sculpted one): body +
-// glass cabin + 10-sided ROUND wheels (never square tyres) + lamps.
-// Used for the mass yard / kerb parking; the detailed parkedCarGeom
-// stays for the block dressing. Built fresh per car (plainBox is
-// trivial, no template cache needed).
-function simpleParkedCarGeom(color) {
-  const g = emptyGeom();
-  const at = (part, x, y, z) => {
-    for (let i = 0; i < part.pos.length; i += 3) { part.pos[i] += x; part.pos[i + 1] += y; part.pos[i + 2] += z; }
-    g.pos.push(...part.pos); g.nrm.push(...part.nrm); g.col.push(...part.col);
-  };
-  at(plainBox(4.0, 0.5, 1.85, color), 0, 0.55, 0); // body
-  at(plainBox(2.0, 0.45, 1.6, SIMPLE_GLASS), -0.15, 1.0, 0); // cabin
-  for (const [wx, wz] of [[1.35, 0.82], [1.35, -0.82], [-1.35, 0.82], [-1.35, -0.82]]) {
-    at(tiltX(prismY(10, 0.32, 0.24, SIMPLE_TYRE), -Math.PI / 2), wx, 0.32, wz);
-  }
-  at(plainBox(0.1, 0.12, 0.3, SIMPLE_LAMP), 2.0, 0.55, 0.6); // headlights
-  at(plainBox(0.1, 0.12, 0.3, SIMPLE_LAMP), 2.0, 0.55, -0.6);
-  at(plainBox(0.1, 0.12, 0.3, SIMPLE_TAIL), -2.0, 0.55, 0.6); // taillights
-  at(plainBox(0.1, 0.12, 0.3, SIMPLE_TAIL), -2.0, 0.55, -0.6);
-  return g;
-}
-
 // Parked-car template: the sculpted body is identical for every parked
 // car — only the paint differs. Rebuilding carGeom per car costs ~7 ms;
 // 434 cars was ~3 s of load time. Build once, stamp tinted copies (same
@@ -230,6 +186,15 @@ export function buildPlotDressing(city) {
   let cars = 0, fences = 0, flowers = 0, benches = 0, bins = 0, pots = 0;
   let kerbCars = 0, simpleCars = 0; // kerb-row cars + all simple-geometry cars
   const blockCarSpots = []; // {blk, x, z} of every block-pass parked car (kerb + block)
+  // Parking zones (Mu): computed FIRST so the block pass and the yard
+  // pass keep their trees/cars/fences out of the lots. The pad + bay
+  // lines + arrows merge into the paving mesh; the lot cars merge into
+  // the props mesh; the P / wheelchair symbols ride one textured mesh.
+  const parking = buildParking(city);
+  paving.pos.push(...parking.markings.pos); paving.nrm.push(...parking.markings.nrm); paving.col.push(...parking.markings.col);
+  props.pos.push(...parking.cars.pos); props.nrm.push(...parking.cars.nrm); props.col.push(...parking.cars.col);
+  const lotRects = parking.lots.map((l) => l.rect);
+  const lotHit = (x0, z0, x1, z1, m = 0) => lotRects.some((r) => x0 - m < r.x1 && x1 + m > r.x0 && z0 - m < r.z1 && z1 + m > r.z0);
   // Decorative parked cars get distinct colours too (same allocator as
   // the traffic fleet, continuing its sequence).
   let colorIdx = 1000;
@@ -276,6 +241,7 @@ export function buildPlotDressing(city) {
         const z = range(rand, b.z0 + 4, b.z1 - 4);
         if (!inBlock(x, z)) continue;
         if (riverDistance(x, z) < 25) continue;
+        if (lotHit(x - hw, z - hd, x + hw, z + hd, 1)) continue;
         if (!clearOfBuildings(city.buildings, x, z, hw, hd, 2)) continue;
         return { x, z };
       }
@@ -301,6 +267,7 @@ export function buildPlotDressing(city) {
     const kerbOk = (x, z) => {
       if (x < b.x0 + 3 || x > b.x1 - 3 || z < b.z0 + 3 || z > b.z1 - 3) return false;
       if (riverDistance(x, z) < 25) return false;
+      if (lotHit(x - 2.2, z - 1.2, x + 2.2, z + 1.2, 1)) return false;
       if (!clearOfBuildings(city.buildings, x, z, 2.2, 1.2, 2)) return false;
       for (const bd of blkBuildings) if (!doorClear(bd, x, z, 2.2)) return false;
       for (const c of carSpots) if (Math.hypot(c.x - x, c.z - z) < 5.5) return false;
@@ -328,6 +295,7 @@ export function buildPlotDressing(city) {
       [b.x0 + 2, b.cz, (b.z1 - b.z0) * 0.45, Math.PI / 2],
     ]) {
       if (riverDistance(fx, fz) < 25) continue;
+      if (lotHit(fx - (rot === 0 ? len / 2 : 0.5), fz - (rot === 0 ? 0.5 : len / 2), fx + (rot === 0 ? len / 2 : 0.5), fz + (rot === 0 ? 0.5 : len / 2), 1)) continue;
       if (!clearOfBuildings(city.buildings, fx, fz, rot === 0 ? len / 2 : 0.5, rot === 0 ? 0.5 : len / 2, 1)) continue;
       const fence = plainBox(len, 0.9, 0.12, FENCE_COL);
       for (let i = 0; i < fence.pos.length; i += 3) fence.pos[i + 1] += 0.51;
@@ -431,6 +399,7 @@ export function buildPlotDressing(city) {
     const fits = (x, z, hw, hd, m) => {
       if (x - hw < blk.x0 + 3 || x + hw > blk.x1 - 3 || z - hd < blk.z0 + 3 || z + hd > blk.z1 - 3) return false;
       if (riverDistance(x, z) < 20) return false;
+      if (lotHit(x - hw, z - hd, x + hw, z + hd, 1)) return false;
       for (const s of sibs) if (!doorClear(s, x, z, Math.max(hw, hd))) return false;
       for (const s of sibs) {
         const f = footprint(s);
@@ -596,6 +565,7 @@ export function buildPlotDressing(city) {
 
   return {
     paving, props, fountainSpots,
-    counts: { blocks: dressed.length, cars, fences, flowerBeds: flowers, benches, bins, pots, yardTrees, yardBenches, yardCars, yardFlowers, yardFountains, yardDressed, streetTrees: streetTrees2, kerbCars, simpleCars },
+    parkingSymbols: parking.symbols,
+    counts: { blocks: dressed.length, cars, fences, flowerBeds: flowers, benches, bins, pots, yardTrees, yardBenches, yardCars, yardFlowers, yardFountains, yardDressed, streetTrees: streetTrees2, kerbCars, simpleCars, parkingLots: parking.counts.lots, parkingCars: parking.counts.cars, parkingBays: parking.counts.bays, parkingSymbols: parking.counts.symbols },
   };
 }
