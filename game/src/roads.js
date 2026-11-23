@@ -34,6 +34,14 @@ function quad(g, a, b, c, d, y, col) {
   for (let k = 0; k < 6; k++) g.col.push(...col);
 }
 
+function vquad(g, a, b, c, d, n, col) {
+  // Vertical quad from four 3D points [x, y, z]; points must be ordered
+  // counter-clockwise as seen from the normal side (a->b->c->d).
+  g.pos.push(...a, ...b, ...c, ...a, ...c, ...d);
+  for (let k = 0; k < 6; k++) g.nrm.push(...n);
+  for (let k = 0; k < 6; k++) g.col.push(...col);
+}
+
 // One zebra crossing on ONE approach to an intersection: stripes run
 // across the road at `dir * 10` m from the centre, with a solid stop line
 // at `dir * 6.5` m (between the intersection and the zebra). One crossing
@@ -186,6 +194,20 @@ export function buildRoadMesh(city) {
       const kLo = Math.min(inner, inner + side * 0.45), kHi = Math.max(inner, inner + side * 0.45);
       if (horiz) quad(g, [s0, kLo], [s1, kLo], [s1, kHi], [s0, kHi], 0.19, KERB);
       else quad(g, [kLo, s0], [kHi, s0], [kHi, s1], [kLo, s1], 0.19, KERB);
+      // Vertical kerb face: closes the slit between the asphalt (y 0.03)
+      // and the raised kerb lip (y 0.19) — without it the grass terrain
+      // shows through as a bright green strip along every road edge.
+      const riser = (sd) => {
+        const inn = fixed + sd * ah, y0 = 0.03, y1 = 0.19;
+        if (horiz) {
+          if (sd < 0) vquad(g, [s0, y0, inn], [s1, y0, inn], [s1, y1, inn], [s0, y1, inn], [0, 0, 1], KERB);
+          else vquad(g, [s1, y0, inn], [s0, y0, inn], [s0, y1, inn], [s1, y1, inn], [0, 0, -1], KERB);
+        } else {
+          if (sd < 0) vquad(g, [inn, y0, s1], [inn, y0, s0], [inn, y1, s0], [inn, y1, s1], [1, 0, 0], KERB);
+          else vquad(g, [inn, y0, s0], [inn, y0, s1], [inn, y1, s1], [inn, y1, s0], [-1, 0, 0], KERB);
+        }
+      };
+      riser(-1); riser(1);
     };
     sidewalkStrip(-1);
     sidewalkStrip(1);
