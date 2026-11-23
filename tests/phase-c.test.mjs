@@ -27,10 +27,10 @@ check('props geometry is non-empty', plots.props.pos.length > 0, `${plots.props.
 // --- CBD iconic towers: taller, bigger, recognisable ---
 const towers = city.buildings.filter((b) => b.shape);
 check('exactly 10 iconic CBD towers', towers.length === 10, `${towers.length}`);
-check('tower shapes cover all 4 kinds', ['tiered', 'spire', 'crown', 'glass'].every((k) => towers.some((b) => b.shape === k)),
+check('tower shapes cover all 6 kinds', ['tiered', 'spire', 'crown', 'glass', 'twist', 'taper'].every((k) => towers.some((b) => b.shape === k)),
   [...new Set(towers.map((b) => b.shape))].join(','));
 const tallest = city.buildings.reduce((a, b) => (b.h > a.h ? b : a));
-check('tallest tower is 78-105 m (was 67 m)', tallest.h >= 78 && tallest.h <= 105, `${tallest.h} m at (${tallest.x},${tallest.z}) ${tallest.shape}`);
+check('tallest tower is 150-200 m (was 78-105 m; Mu 23 Nov 21:03: CBD 2x taller)', tallest.h >= 150 && tallest.h <= 200, `${tallest.h} m at (${tallest.x},${tallest.z}) ${tallest.shape}`);
 check('towers are bigger than ordinary downtown blocks', towers.every((b) => b.w >= 24 && b.d >= 24),
   `w ${Math.min(...towers.map((b) => b.w))}-${Math.max(...towers.map((b) => b.w))}`);
 

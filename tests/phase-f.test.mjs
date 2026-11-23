@@ -131,11 +131,11 @@ check('bridges are the 4 whitelisted crossings',
 // Job B: realistic buildings — height classes, windows on all faces,
 // zone roof colours, entrance/shopfront kits, balconies, roof clutter.
 {
-  const counts = { short: 0, mid: 0, tall: 0 };
+  const counts = { short: 0, mid: 0, tall: 0, skyscraper: 0 };
   for (const b of city.buildings) counts[buildingClass(b.h)]++;
-  check('building classes: 611 short / 306 mid / 83 tall', counts.short === 611 && counts.mid === 306 && counts.tall === 83);
+  check('building classes: 616 short / 310 mid / 64 tall / 10 skyscraper', counts.short === 616 && counts.mid === 310 && counts.tall === 64 && counts.skyscraper === 10);
   // Window cells stay small: max cell height/width per class.
-  const maxH = { short: 0, mid: 0, tall: 0 }, maxW = { short: 0, mid: 0, tall: 0 };
+  const maxH = { short: 0, mid: 0, tall: 0, skyscraper: 0 }, maxW = { short: 0, mid: 0, tall: 0, skyscraper: 0 };
   for (const b of city.buildings) {
     const c = buildingClass(b.h);
     maxH[c] = Math.max(maxH[c], b.h); maxW[c] = Math.max(maxW[c], b.w, b.d);
@@ -161,8 +161,8 @@ check('bridges are the 4 whitelisted crossings',
   // Detail meshes (buildBuildingMeshes is pure geometry — no GL calls —
   // so it runs in Node with a stubbed progs object).
   const meshes = buildBuildingMeshes(null, { litInst: 'LIT' }, city);
-  check('3 base geometries cover all 1000 buildings',
-    meshes.bases[0].matrices.length + meshes.bases[1].matrices.length + meshes.bases[2].matrices.length === 1000);
+  check('4 base geometries cover all 1000 buildings',
+    meshes.bases.reduce((a, s) => a + s.matrices.length, 0) === 1000);
   const distinctRoofTints = new Set(meshes.roofs.tints.map((t) => t.join(','))).size;
   check('roof tints vary by zone (not one grey)', distinctRoofTints > 10);
   check('plinth + cornice on every building', meshes.plinth.matrices.length === 1000 && meshes.cornice.matrices.length === 1000);

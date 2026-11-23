@@ -21,20 +21,20 @@ const allFinT = (t) => t.every((c) => c.every((v) => Number.isFinite(v)));
 const allFinG = (g) => g.pos.every(Number.isFinite) && g.nrm.every(Number.isFinite) && g.col.every(Number.isFinite);
 
 // ---- Feature 1: varied building shapes ----
-check('stepped tiers on tall unshaped blocks', lv.counts.stepped === 234, lv.counts.stepped + ' tiers');
-check('pitched roofs on low houses/shops', lv.counts.pitched === 152, lv.counts.pitched + ' roofs');
+check('stepped tiers on tall unshaped blocks', lv.counts.stepped === 229, lv.counts.stepped + ' tiers');
+check('pitched roofs on low houses/shops', lv.counts.pitched === 135, lv.counts.pitched + ' roofs');
 check('pitched roof geometry is a closed prism (6 tris)', lv.pitched.geom.pos.length / 9 === 6);
 check('stepped + pitched matrices are finite', allFin(lv.stepped.matrices) && allFin(lv.pitched.matrices));
 check('stepped tiers only on h>=20 unshaped blocks',
   lv.stepped.matrices.every((m) => m[13] >= 20 + 1.5 - 0.01));
 
 // ---- Ground-floor glass for tall buildings (Mu) ----
-check('glass band covers all 1000 buildings (611 dark + 389 tall)',
-  meshes.glassBand.matrices.length === 611
-  && meshes.glassBandTall.matrices.length === 389
+check('glass band covers all 1000 buildings (616 dark + 384 tall)',
+  meshes.glassBand.matrices.length === 616
+  && meshes.glassBandTall.matrices.length === 384
   && meshes.glassBand.matrices.length + meshes.glassBandTall.matrices.length === 1000,
   `${meshes.glassBand.matrices.length} + ${meshes.glassBandTall.matrices.length}`);
-check('warm interior glow core on every tall building', meshes.glassGlow.matrices.length === 389);
+check('warm interior glow core on every tall building', meshes.glassGlow.matrices.length === 384);
 check('glass + glow matrices and tints are finite',
   allFin(meshes.glassBandTall.matrices) && allFin(meshes.glassGlow.matrices)
   && allFinT(meshes.glassBandTall.tints) && allFinT(meshes.glassGlow.tints));
@@ -48,7 +48,7 @@ check('mural panels carry UVs', lv.muralGeom.uv.length === lv.muralGeom.pos.leng
 check('laundry pieces fit the 200-capacity dynamic mesh', lv.counts.laundry <= 200, lv.counts.laundry + ' pieces');
 
 // ---- Feature 3: vertical neon ----
-check('vertical neon panels on commercial/CBD facades', lv.counts.neon === 130, lv.counts.neon + ' panels');
+check('vertical neon panels on commercial/CBD facades', lv.counts.neon === 140, lv.counts.neon + ' panels');
 check('one neon halo per panel', lv.neonGlow.matrices.length === lv.counts.neon);
 check('neon halos fit the 160-capacity dynamic mesh', lv.neonGlow.matrices.length <= 160);
 check('neon geometry + halos are finite',
@@ -63,7 +63,7 @@ check('street life stays out of the river (>= 20 m)',
   lv.streetSpots.length + ' spots, min rd ' + Math.min(...lv.streetSpots.map((s) => riverDistance(s.x, s.z))).toFixed(1));
 
 // ---- Feature 5: used roofs ----
-check('roofs in use (gardens + pools + helipads + courts)', lv.counts.roofUse === 235, lv.counts.roofUse + ' roofs');
+check('roofs in use (gardens + pools + helipads + courts)', lv.counts.roofUse === 221, lv.counts.roofUse + ' roofs');
 check('roof-use kinds add up',
   lv.counts.roofUseKinds.garden + lv.counts.roofUseKinds.pool
   + lv.counts.roofUseKinds.helipad + lv.counts.roofUseKinds.court === lv.counts.roofUse,

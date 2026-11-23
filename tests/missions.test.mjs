@@ -57,7 +57,7 @@ check('mission 5 boat escape target is in the sea', missionById(5).steps[2].x > 
 {
   const { missions } = freshCtx();
   const t = missions.tallestTower();
-  check('tallest downtown tower is 78-105 m', t.h >= 78 && t.h <= 105, `${t.h} m at (${t.x},${t.z})`);
+  check('tallest downtown tower is 150-200 m (was 78-105 m; Mu 23 Nov 21:03: CBD 2x taller)', t.h >= 150 && t.h <= 200, `${t.h} m at (${t.x},${t.z})`);
   const e = missions.towerEntrance();
   const inside = city.buildings.some((b) =>
     e.x > b.x - b.w / 2 && e.x < b.x + b.w / 2 && e.z > b.z - b.d / 2 && e.z < b.z + b.d / 2);
@@ -329,7 +329,9 @@ check('mission 5 boat escape target is in the sea', missionById(5).steps[2].x > 
   air.step(60, { player: { x: 0, z: 0 }, wanted: 0, isDay: true });
   const day2 = air.matricesFor(0, 0, true, 70);
   check('plane crosses by day', day2.plane.matrices.length === 1);
-  check('plane flies at 185 m (high, never covers the streets)', air.state.plane.y === 185);
+  check('plane flies at 260 m (was 185 m; Mu 23 Nov 21:03: CBD towers are 150-200 m, so the plane must stay above them)', air.state.plane.y === 260);
+  const tallestH = Math.max(...city.buildings.map((b) => b.h));
+  check('heli orbits above the tallest tower', air.state.heliY > tallestH + 20, `heli ${air.state.heliY.toFixed(0)} m vs tallest ${tallestH} m`);
   const night = air.matricesFor(0, 0, false, 70);
   check('heli spotlight cone shines at night', night.heliBeam.matrices.length === 1);
   check('plane does not fly at night', night.plane.matrices.length === 0);

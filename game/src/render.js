@@ -96,6 +96,8 @@ export function createRenderer(canvas, city) {
   addInst(progs.litInst, buildingMeshes.tiers);
   addInst(progs.litInst, buildingMeshes.spires);
   addInst(progs.litInst, buildingMeshes.crowns);
+  addInst(progs.litInst, buildingMeshes.twists);
+  addInst(progs.litInst, buildingMeshes.tapers);
   // Phase F building detail: plinth + cornice bands, entrance kits,
   // shopfronts, balconies, roof clutter — one instanced draw each.
   addInst(progs.litInst, buildingMeshes.plinth);

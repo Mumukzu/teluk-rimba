@@ -10,11 +10,15 @@ export function createAircraft(city, opts = {}) {
   const rand = opts.rand || Math.random;
   const state = {
     heliAngle: 0,
-    heliX: 0, heliZ: 0, heliY: 112,
+    heliX: 0, heliZ: 0, heliY: 235,
     rotor: 0,
     beamAngle: 0,
     plane: {
-      active: false, x: -900, z: -150, y: 185, dir: 1,
+      // Mu 23 Nov 21:03: CBD towers are 150-200 m now (tops ~225 m with
+      // spires/tiers) — the plane and the heli must fly ABOVE them, or
+      // they would clip straight through the towers. Plane 260 m, heli
+      // 235 m; the spotlight cone is lengthened to match (baseY -230).
+      active: false, x: -900, z: -150, y: 260, dir: 1,
       nextIn: 45 + rand() * 30, // first crossing ~45-75 s in
     },
   };
@@ -30,8 +34,8 @@ export function createAircraft(city, opts = {}) {
     const r = wanted >= 2 ? 130 : 260;
     state.heliX = cx + Math.cos(state.heliAngle) * r;
     state.heliZ = cz + Math.sin(state.heliAngle) * r;
-    state.heliY = 112 + Math.sin(state.heliAngle * 2) * 6;
-    // Plane: day only, back and forth across the city at 185 m.
+    state.heliY = 235 + Math.sin(state.heliAngle * 2) * 6;
+    // Plane: day only, back and forth across the city at 260 m.
     const p = state.plane;
     if (!isDay) { p.active = false; return; }
     if (!p.active) {
@@ -154,14 +158,15 @@ export function planeGeom() {
   return g;
 }
 
-// Spotlight cone: apex at the helicopter, base ring on the ground 110 m
-// below. The matrix places the apex; the cone leans slightly so the sweep
+// Spotlight cone: apex at the helicopter, base ring on the ground ~230 m
+// below (the heli flies at 235 m now, above the 200 m CBD towers).
+// The matrix places the apex; the cone leans slightly so the sweep
 // reads as a moving searchlight.
 export function heliBeamConeGeom() {
   const g = emptyGeom();
   const SEG = 12;
   const apex = [0, 0, 0];
-  const baseY = -110, baseR = 13, leanX = 14;
+  const baseY = -230, baseR = 26, leanX = 28;
   const ring = [];
   for (let k = 0; k < SEG; k++) {
     const a = (k / SEG) * Math.PI * 2;

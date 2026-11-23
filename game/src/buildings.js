@@ -11,11 +11,19 @@ import { mulberry32 } from './rng.js';
 
 export const BUILDING_CLASSES = {
   short: { segFront: 6, segRows: 4, sideCols: 4 },
+  // Mu 23 Nov 21:03: downtown towers are up to 48 m wide now — the old
+  // tall grid (8 front / 6 side cols) would stretch window cells to
+  // 5.9 m wide (phase-f caps at 5.5 m). 10 cols keeps them at 4.7 m.
   mid: { segFront: 8, segRows: 8, sideCols: 6 },
-  tall: { segFront: 8, segRows: 12, sideCols: 6 },
+  tall: { segFront: 10, segRows: 12, sideCols: 10 },
+  // Mu 23 Nov 21:03: CBD towers are 150-200 m now — they need their own
+  // class, or the window cells would stretch to 16 m tall (the phase-f
+  // test caps cells at 8.5 m tall / 5.5 m wide): 200/24 = 8.3 m rows,
+  // 56/12 = 4.7 m columns.
+  skyscraper: { segFront: 12, segRows: 24, sideCols: 12 },
 };
 export function buildingClass(h) {
-  return h < 12 ? 'short' : h < 30 ? 'mid' : 'tall';
+  return h < 12 ? 'short' : h < 30 ? 'mid' : h < 100 ? 'tall' : 'skyscraper';
 }
 // Roof colours by zone (varied a touch per building by hash).
 // Mu 23 Nov: freshened with the wall palette — still darker than the walls,
@@ -110,6 +118,11 @@ export function buildBuildingMeshes(gl, progs, city) {
   const tierMatrices = [], tierTints = [];
   const spireMatrices = [], spireTints = [];
   const crownMatrices = [], crownTints = [];
+  // Mu 23 Nov 21:03: two more iconic shapes for the 150-200 m CBD towers —
+  // 'twist' (stacked tiers rotating a little at each level) and 'taper'
+  // (stacked boxes shrinking to a point, modern tapered silhouette).
+  const twistMatrices = [], twistTints = [];
+  const taperMatrices = [], taperTints = [];
   const plinthMatrices = [], plinthTints = [];
   const corniceMatrices = [], corniceTints = [];
   const entranceMatrices = [], entranceTints = [];
@@ -232,14 +245,39 @@ export function buildBuildingMeshes(gl, progs, city) {
       crownMatrices.push(mat4TRS(b.x, b.h + 6, b.z, b.rot, 1.6, 12, 1.6));
       crownTints.push([0.3, 0.32, 0.38]);
     }
+    if (b.shape === 'twist') {
+      // Three stacked tiers, each rotated a little further and smaller —
+      // a modern twisted tower. Rotations are absolute (base rot + twist).
+      twistMatrices.push(mat4TRS(b.x, b.h + b.h * 0.07, b.z, b.rot + 0.10, b.w * 0.72, b.h * 0.14, b.d * 0.72));
+      twistTints.push(darken(b.color, 0.88));
+      twistMatrices.push(mat4TRS(b.x, b.h + b.h * 0.17, b.z, b.rot + 0.22, b.w * 0.5, b.h * 0.1, b.d * 0.5));
+      twistTints.push(darken(b.color, 0.76));
+      twistMatrices.push(mat4TRS(b.x, b.h + b.h * 0.25, b.z, b.rot + 0.34, b.w * 0.32, b.h * 0.08, b.d * 0.32));
+      twistTints.push(darken(b.color, 0.66));
+      twistMatrices.push(mat4TRS(b.x, b.h + b.h * 0.32, b.z, b.rot + 0.34, 1.2, 10, 1.2));
+      twistTints.push([0.3, 0.32, 0.38]);
+    }
+    if (b.shape === 'taper') {
+      // Stacked boxes shrinking toward a point — a tapered modern tower.
+      taperMatrices.push(mat4TRS(b.x, b.h + b.h * 0.08, b.z, b.rot, b.w * 0.8, b.h * 0.16, b.d * 0.8));
+      taperTints.push(darken(b.color, 0.9));
+      taperMatrices.push(mat4TRS(b.x, b.h + b.h * 0.2, b.z, b.rot, b.w * 0.55, b.h * 0.12, b.d * 0.55));
+      taperTints.push(darken(b.color, 0.78));
+      taperMatrices.push(mat4TRS(b.x, b.h + b.h * 0.3, b.z, b.rot, b.w * 0.32, b.h * 0.1, b.d * 0.32));
+      taperTints.push(darken(b.color, 0.68));
+      taperMatrices.push(mat4TRS(b.x, b.h + b.h * 0.38, b.z, b.rot, 1.4, 12, 1.4));
+      taperTints.push([0.9, 0.75, 0.4]);
+    }
   }
   const part = (geom, matrices, tints) => ({ geom, matrices, tints, prog: progs.litInst });
   return {
-    bases: [bases.short, bases.mid, bases.tall],
+    bases: [bases.short, bases.mid, bases.tall, bases.skyscraper],
     roofs: part(unitBox, roofMatrices, roofTints),
     tiers: part(unitBox, tierMatrices, tierTints),
     spires: part(unitBox, spireMatrices, spireTints),
     crowns: part(unitBox, crownMatrices, crownTints),
+    twists: part(unitBox, twistMatrices, twistTints),
+    tapers: part(unitBox, taperMatrices, taperTints),
     plinth: part(unitBox, plinthMatrices, plinthTints),
     cornice: part(unitBox, corniceMatrices, corniceTints),
     entrance: part(buildEntranceKitGeom(), entranceMatrices, entranceTints),

@@ -180,7 +180,10 @@ export function placeNameAt(city, x, z) {
 }
 
 const ZONE_COUNT = {
-  downtown: [1, 2],
+  // Mu 23 Nov 21:03: CBD towers must DIFFER from the rest — one BIG tower
+  // per downtown block, using the empty space around them (was 1-2 smaller
+  // buildings per block). The top-up loop still keeps the total at 1000.
+  downtown: [1, 1],
   commercial: [6, 10],
   residential: [12, 18],
   beach: [3, 5],
@@ -189,7 +192,10 @@ const ZONE_COUNT = {
 };
 
 const ZONE_SIZE = {
-  downtown: { w: [20, 32], d: [20, 32], h: [30, 68] },
+  // Mu 23 Nov 21:03: downtown towers ~2x taller and much bigger than
+  // before (was w/d 20-32, h 30-68) — modern iconic skyline, clearly
+  // different from every other zone. Other zones UNCHANGED.
+  downtown: { w: [30, 48], d: [30, 48], h: [60, 115] },
   commercial: { w: [12, 20], d: [12, 20], h: [10, 26] },
   residential: { w: [8, 13], d: [8, 13], h: [4, 8] },
   beach: { w: [16, 26], d: [14, 22], h: [20, 42] },
@@ -335,6 +341,54 @@ export function generateCity(seed = SEED) {
     return pts.every(([x, z]) => riverDistance(x, z) > RIVER_HALF_WIDTH + 2);
   };
   buildings = buildings.filter(clearOfRiver);
+  // Repair: a block whose only building was dropped by the river filter
+  // must not stay empty (the connectivity test requires every non-river
+  // block to hold a building). This bites downtown now that towers are
+  // 30-48 m wide: a tower near the river can lose a corner to the water.
+  // Place one building at the spot in the block farthest from the river,
+  // sized to fit with the 3 m setback and >14 m river clearance.
+  // Separate rand stream, so the rest of the city is unchanged.
+  {
+    const rrand = mulberry32(20261131);
+    for (const blk of blocks) {
+      if (blk.zone === 'river' || blk.zone === 'plaza' || blk.zone === 'market') continue;
+      const has = buildings.some((b) => b.x >= blk.x0 && b.x <= blk.x1 && b.z >= blk.z0 && b.z <= blk.z1);
+      if (has) continue;
+      const size = ZONE_SIZE[blk.zone] || ZONE_SIZE.residential;
+      const colors = ZONE_COLORS[blk.zone] || ZONE_COLORS.residential;
+      const cands = [];
+      for (let gy = 0; gy < 5; gy++) {
+        for (let gx = 0; gx < 5; gx++) {
+          const x = blk.x0 + (blk.x1 - blk.x0) * (gx + 0.5) / 5;
+          const z = blk.z0 + (blk.z1 - blk.z0) * (gy + 0.5) / 5;
+          cands.push({ x, z, rd: riverDistance(x, z) });
+        }
+      }
+      cands.sort((a, c) => c.rd - a.rd);
+      for (const c of cands) {
+        let placed = false;
+        for (let w = Math.min(size.w[1], 40); w >= 12; w -= 4) {
+          // 0.5 m margin past the 3 m setback, so the setback never
+          // lands exactly on the boundary (floating-point edge).
+          if (c.x - w / 2 < blk.x0 + SETBACK_M + 0.5 || c.x + w / 2 > blk.x1 - SETBACK_M - 0.5) continue;
+          if (c.z - w / 2 < blk.z0 + SETBACK_M + 0.5 || c.z + w / 2 > blk.z1 - SETBACK_M - 0.5) continue;
+          const pts = [[c.x, c.z],
+            [c.x - w / 2, c.z - w / 2], [c.x + w / 2, c.z - w / 2],
+            [c.x - w / 2, c.z + w / 2], [c.x + w / 2, c.z + w / 2]];
+          if (!pts.every(([x, z]) => riverDistance(x, z) > 14)) continue;
+          const h = range(rrand, size.h[0], size.h[1]);
+          buildings.push({
+            x: c.x, z: c.z, w, d: w, h, rot: 0, zone: blk.zone,
+            color: colors[Math.floor(rrand() * colors.length)],
+            floors: Math.max(1, Math.round(h / 3.2)),
+          });
+          placed = true;
+          break;
+        }
+        if (placed) break;
+      }
+    }
+  }
   const residentialBlocks = blocks.filter((b) => b.zone === 'residential');
   let topTries = 0;
   while (buildings.length < TARGET_BUILDINGS && topTries++ < 20000) {
@@ -356,13 +410,18 @@ export function generateCity(seed = SEED) {
   }
 
   // --- CBD iconic towers (Mu): the 10 tallest downtown buildings become
-  // taller, bigger, recognisable landmarks — tiered / spire / crown / glass.
+  // taller, bigger, recognisable landmarks — tiered / spire / crown /
+  // glass / twist / taper. Mu 23 Nov 21:03: CBD must DIFFER from every
+  // other zone — bigger footprints (using the empty space around them,
+  // still inside their blocks) and ~2x taller, modern + iconic.
+  // Regular downtown is 60-115 m; the 10 icons are 150-200 m (was
+  // 78-105 m). Shapes are assigned by height rank so all 6 shapes appear.
   // Separate rand stream, so the rest of the city is unchanged. Towers too
   // close to the river are skipped: growing the footprint must not push a
   // corner into the water (the connectivity test needs >13 m clearance).
   {
     const trand = mulberry32(20261130);
-    const shapes = ['tiered', 'spire', 'crown', 'glass'];
+    const shapes = ['twist', 'taper', 'spire', 'glass', 'crown', 'tiered'];
     const cands = buildings
       .filter((b) => b.zone === 'downtown')
       .filter((b) => {
@@ -373,12 +432,13 @@ export function generateCity(seed = SEED) {
       })
       .sort((a, b) => b.h - a.h)
       .slice(0, 10);
-    for (const b of cands) {
-      b.h = Math.round(range(trand, 78, 105));
-      b.w = Math.min(40, Math.round(b.w * 1.25));
-      b.d = Math.min(40, Math.round(b.d * 1.25));
+    for (let i = 0; i < cands.length; i++) {
+      const b = cands[i];
+      b.h = Math.round(range(trand, 150, 200));
+      b.w = Math.min(56, Math.round(b.w * 1.6));
+      b.d = Math.min(56, Math.round(b.d * 1.6));
       b.floors = Math.max(1, Math.round(b.h / 3.2));
-      b.shape = shapes[Math.floor(trand() * shapes.length)];
+      b.shape = shapes[i % shapes.length];
       if (b.shape === 'glass') b.color = [0.4, 0.7, 0.98]; // glass blue (fresher, Mu 23 Nov)
       // No facade flush against a road — the grown tower must sit back
       // from its block edge like every other building. Shrink the
@@ -393,6 +453,19 @@ export function generateCity(seed = SEED) {
         const fw2 = Math.min(fw, 2 * Math.min(b.x - blk.x0 - SETBACK_M, blk.x1 - b.x - SETBACK_M));
         const fd2 = Math.min(fd, 2 * Math.min(b.z - blk.z0 - SETBACK_M, blk.z1 - b.z - SETBACK_M));
         if (b.rot) { b.d = fw2; b.w = fd2; } else { b.w = fw2; b.d = fd2; }
+      }
+      // Growing the footprint can push a corner toward the river (the
+      // clearance filter above ran on the pre-growth footprint) — shrink
+      // back until every corner clears the river by >16 m. (Corners are
+      // sampled with the stored w/d as x/z extents, the same convention
+      // the river filter and the connectivity test use.)
+      for (let guard = 0; guard < 25; guard++) {
+        const pts = [[b.x, b.z],
+          [b.x - b.w / 2, b.z - b.d / 2], [b.x + b.w / 2, b.z - b.d / 2],
+          [b.x - b.w / 2, b.z + b.d / 2], [b.x + b.w / 2, b.z + b.d / 2]];
+        if (pts.every(([x, z]) => riverDistance(x, z) > 16)) break;
+        b.w = Math.max(12, b.w - 2);
+        b.d = Math.max(12, b.d - 2);
       }
     }
   }

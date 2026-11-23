@@ -19,9 +19,9 @@ check('every block has buildings or is a reserved open block', city.blocks.every
   const n = city.buildings.filter((bd) => bd.x >= b.x0 && bd.x <= b.x1 && bd.z >= b.z0 && bd.z <= b.z1).length;
   return (b.zone === 'river' || b.zone === 'plaza' || b.zone === 'market') ? n === 0 : n > 0;
 }));
-check('downtown blocks hold 1-2 buildings each', city.blocks.filter((b) => b.zone === 'downtown').every((b) => {
+check('downtown blocks hold exactly 1 big tower each (Mu 23 Nov 21:03: one big tower per block, using the empty space)', city.blocks.filter((b) => b.zone === 'downtown').every((b) => {
   const n = city.buildings.filter((bd) => bd.x >= b.x0 && bd.x <= b.x1 && bd.z >= b.z0 && bd.z <= b.z1).length;
-  return n >= 1 && n <= 2;
+  return n === 1;
 }));
 check('no building sits on a road or in the river', city.buildings.every((b) => {
   for (const L of ROAD_LINES) {
