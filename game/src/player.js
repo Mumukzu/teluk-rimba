@@ -5,19 +5,6 @@ import { terrainHeight, buildingAABBs } from './city.js';
 import { plainBox, mat4TRS, mat4RotX, mat4Multiply } from './gl.js';
 import { pedTorsoGeom, pedArmGeom, pedLegGeom, pedHeadGeom, pedHairShortGeom } from './peds.js';
 
-  // Backpack: main pack + a front flap + a top handle (on the back).
-  // Module-level so render.js can build the player's backpack mesh.
-  function backpackGeom() {
-    const g = { pos: [], nrm: [], col: [] };
-    const add = (p) => { g.pos.push(...p.pos); g.nrm.push(...p.nrm); g.col.push(...p.col); };
-    add(plainBox(0.34, 0.44, 0.14, [1, 1, 1]));
-    const flap = plainBox(0.34, 0.14, 0.15, [0.75, 0.75, 0.75]);
-    for (let i = 0; i < flap.pos.length; i += 3) flap.pos[i + 1] += 0.14;
-    add(flap);
-    return g;
-  }
-export { backpackGeom };
-
 export function createPlayer(city, startX, startZ) {
   const aabbs = buildingAABBs(city);
   const state = {
@@ -96,12 +83,13 @@ export function createPlayer(city, startX, startZ) {
     return { eye, center };
   }
 
-  // Wowok's colours (distinctive — no NPC uses this exact set): bright
-  // orange jacket, dark blue pants, red cap, dark blue backpack.
+  // Wowok's look (Mu's reference: red jacket open over a white shirt,
+  // dark navy pants, black block shoes, short black hair, ears visible).
+  // Distinctive — no NPC uses this exact set.
   const WOWOK = {
-    shirt: [0.95, 0.35, 0.1], pants: [0.15, 0.2, 0.35],
-    skin: [0.85, 0.65, 0.5], cap: [0.9, 0.2, 0.2],
-    pack: [0.2, 0.25, 0.4],
+    jacket: [0.85, 0.16, 0.14], shirt: [0.95, 0.93, 0.88],
+    pants: [0.12, 0.14, 0.28], skin: [0.85, 0.65, 0.5],
+    hair: [0.12, 0.1, 0.1],
   };
   // Walk phase (advances while moving — drives the arm/leg swing).
   state.phase = 0;
@@ -123,7 +111,7 @@ export function createPlayer(city, startX, startZ) {
 
   // Per-part matrices for the animated player (one instance per part, 8
   // instanced draws): torso / armL / armR / legL / legR / head / hair /
-  // backpack. Walk/run: opposite arm/leg swing + a slight run lean; idle:
+  // shirtFront. Walk/run: opposite arm/leg swing + a slight run lean; idle:
   // slow breathing; driving: SEATED in the vehicle, hands forward on the
   // wheel / handlebar, thighs forward, shins down.
   function partMatrices(driving) {
@@ -174,19 +162,19 @@ export function createPlayer(city, startX, startZ) {
     const legSwingR = seated ? 0.8 : -swing;
     const legL = mat4Multiply(mat4Multiply(legBase, hipL), mat4RotX(legSwingL));
     const legR = mat4Multiply(mat4Multiply(legBase, hipR), mat4RotX(legSwingR));
-    // Backpack rides on the torso (behind, z -0.16), so it follows the
-    // lean and the breathing — the marker that makes Wowok readable from
-    // behind in the cover shot.
-    const pack = mat4Multiply(torsoM, mat4TRS(0, 1.25, -0.18, 0, 1, 1, 1));
+    // White shirt front (open red jacket): a thin panel on the chest, so
+    // Wowok reads as jacket-over-shirt from the front (Mu's reference).
+    // It rides on the torso matrix, so it follows the lean + breathing.
+    const shirtM = mat4Multiply(torsoM, mat4TRS(0, 1.25, 0.16, 0, 1, 1, 1));
     return {
-      torso: { matrices: [torsoM], tints: [WOWOK.shirt] },
-      armL: { matrices: [armL], tints: [WOWOK.shirt] },
-      armR: { matrices: [armR], tints: [WOWOK.shirt] },
+      torso: { matrices: [torsoM], tints: [WOWOK.jacket] },
+      armL: { matrices: [armL], tints: [WOWOK.jacket] },
+      armR: { matrices: [armR], tints: [WOWOK.jacket] },
       legL: { matrices: [legL], tints: [WOWOK.pants] },
       legR: { matrices: [legR], tints: [WOWOK.pants] },
       head: { matrices: [torsoM], tints: [WOWOK.skin] },
-      hair: { matrices: [torsoM], tints: [WOWOK.cap] },
-      backpack: { matrices: [pack], tints: [WOWOK.pack] },
+      hair: { matrices: [torsoM], tints: [WOWOK.hair] },
+      shirtFront: { matrices: [shirtM], tints: [WOWOK.shirt] },
     };
   }
 
@@ -204,14 +192,14 @@ export function createPlayer(city, startX, startZ) {
       return part;
     };
     const add = (p) => { g.pos.push(...p.pos); g.nrm.push(...p.nrm); g.col.push(...p.col); };
-    add(tint(pedTorsoGeom(), WOWOK.shirt));
-    add(tint(shift(pedArmGeom(-1), -0.28, 1.40, 0), WOWOK.shirt));
-    add(tint(shift(pedArmGeom(1), 0.28, 1.40, 0), WOWOK.shirt));
+    add(tint(pedTorsoGeom(), WOWOK.jacket));
+    add(tint(shift(pedArmGeom(-1), -0.28, 1.40, 0), WOWOK.jacket));
+    add(tint(shift(pedArmGeom(1), 0.28, 1.40, 0), WOWOK.jacket));
     add(tint(shift(pedLegGeom(-1), 0, 0.90, 0), WOWOK.pants));
     add(tint(shift(pedLegGeom(1), 0, 0.90, 0), WOWOK.pants));
     add(tint(pedHeadGeom(), WOWOK.skin));
-    add(tint(pedHairShortGeom(), WOWOK.cap));
-    add(tint(shift(backpackGeom(), 0, 1.25, -0.18), WOWOK.pack));
+    add(tint(pedHairShortGeom(), WOWOK.hair));
+    add(tint(shift(plainBox(0.30, 0.45, 0.03, [1, 1, 1]), 0, 1.25, 0.16), WOWOK.shirt));
     return g;
   }
 

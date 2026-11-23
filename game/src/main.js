@@ -597,7 +597,7 @@ if (params.sim) {
       dyn.player_legsR = pp.legR;
       dyn.player_head = pp.head;
       dyn.player_hair = pp.hair;
-      dyn.player_backpack = pp.backpack;
+      dyn.player_shirt = pp.shirtFront;
     }
     // Phase E2: hidden coins (spinning gold discs) + stunt ramps (wedges).
     dyn.coins = coins.matrices(game.elapsed);

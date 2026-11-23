@@ -10,12 +10,12 @@ import { buildBuildingMeshes, buildTreeMesh, buildPalmMesh, buildLitWindows } fr
 import { buildRoadMesh, buildLampMeshes, buildTrafficLightMesh } from './roads.js';
 import { buildDirectionSigns } from './signs.js';
 import { buildShopSigns } from './shopsigns.js';
+import { buildRooftopSigns } from './rooftopsigns.js';
 import { buildBeachPropMeshes } from './beach.js';
 import { buildLandmarks } from './landmarks.js';
 import { buildMoonGeom, buildStarsSpec, buildSkyDomeGeom, buildCloudSpec, skyColors } from './sky.js';
 import { buildVehicleBodyGeoms, buildVehicleGlassGeoms, headlightGeom, buildWheelGeom, buildWheelGeomFar, buildBikeFrontGeom, beamConeGeom, beamPoolGeom, tailGeom, beaconGeom } from './vehicles.js';
 import { pedTorsoGeom, pedArmGeom, pedLegGeom, pedSkirtGeom, pedHeadGeom, pedHairShortGeom, pedHairLongGeom, pedBadgeGeom, fishingRodGeom } from './peds.js';
-import { backpackGeom } from './player.js';
 import { buildWetGeoms } from './weather.js';
 import { buildNightLightGeoms } from './nightlights.js';
 import { buildPlotDressing } from './plots.js';
@@ -47,6 +47,9 @@ export function createRenderer(canvas, city) {
   const signTexture = createCanvasTexture(gl, signs.atlasCanvas);
   const shopSigns = buildShopSigns(city);
   const shopSignTexture = createCanvasTexture(gl, shopSigns.atlasCanvas);
+  const rooftopSigns = buildRooftopSigns(city);
+  const rooftopSignTexture = rooftopSigns.atlasCanvas
+    ? createCanvasTexture(gl, rooftopSigns.atlasCanvas) : null;
   const stars = buildStarsSpec();
   const wet = buildWetGeoms();
   const nightPools = buildNightLightGeoms(city, landmarks);
@@ -126,6 +129,15 @@ export function createRenderer(canvas, city) {
   {
     const shopPanelMesh = createTexturedMesh(gl, progs.textured, shopSigns.panelGeom);
     meshes.push({ mesh: shopPanelMesh, prog: progs.textured, model: mat4Identity(), textured: true, texture: shopSignTexture });
+  }
+  // Rooftop name signs (Phase I): dark backing boxes on 9 landmark roofs
+  // (1 static lit draw) + the name boards from the shared atlas
+  // (1 textured draw). The atlas canvas only exists in the browser
+  // (Node tests get null) — skip the textured mesh there.
+  addStatic(progs.lit, rooftopSigns.boxGeom, mat4Identity());
+  if (rooftopSignTexture) {
+    const rooftopPanelMesh = createTexturedMesh(gl, progs.textured, rooftopSigns.panelGeom);
+    meshes.push({ mesh: rooftopPanelMesh, prog: progs.textured, model: mat4Identity(), textured: true, texture: rooftopSignTexture });
   }
   // Parking zone symbols (Phase I): P letters + disabled pictograms on
   // the lot pads, one shared atlas (1 textured draw). The atlas canvas
@@ -211,7 +223,7 @@ export function createRenderer(canvas, city) {
   addDyn(progs.litInst, pedLegGeom(1), 1, 'player_legsR');
   addDyn(progs.litInst, pedHeadGeom(), 1, 'player_head');
   addDyn(progs.litInst, pedHairShortGeom(), 1, 'player_hair');
-  addDyn(progs.litInst, backpackGeom(), 1, 'player_backpack');
+  addDyn(progs.litInst, plainBox(0.30, 0.45, 0.03, [1, 1, 1]), 1, 'player_shirt');
   addDyn(progs.litInst, plainBox(0.06, 1.2, 0.06, [1, 1, 1]), 260, 'rain');
   addDyn(progs.unlitInst, headlightGeom(), 240, 'headlights');
   // Phase F polish: shared spinning/steering wheels, bike steering
@@ -362,7 +374,7 @@ export function createRenderer(canvas, city) {
     // Activity props (coffee tables + chairs + cups, benches): one static
     // mesh built from the same spot lists the activity NPCs use, so props
     // and sitters always agree. The player figure is drawn per-part from
-    // state.dynamics (player_torso … player_backpack) — see main.js.
+    // state.dynamics (player_torso … player_shirt) — see main.js.
     if (activityPropsMesh) {
       tris += drawMesh(gl, progs.lit, activityPropsMesh, { ...common, uModel: mat4Identity() });
       calls++;
