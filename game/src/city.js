@@ -215,29 +215,35 @@ const ZONE_SIZE = {
 // Mu 23 Nov 22:17 — ivory KURANG: balik ke BIRU LANGIT PUCAT seperti
 // a6c2f8d, tapi LEBIH MUDA lagi — nyaris putih-biru, birunya tetap terasa
 // (b > g > r), nyambung dengan langit + krem sekitar.
-// Mu 23 Nov 21:21 — NON-CBD: SATU warna seragam per zona (opsi 1):
-// komersial krem hangat, perumahan putih, pantai putih pasir, pelabuhan
-// abu-biru, hutan coklat kayu. (Tint = warna dinding; kaca jendela tetap
-// gelap.) Landmark overrides (hospital/police/school) still apply after.
+// Mu 23 Nov 22:35 — NON-CBD: PASTEL LEMBUT per zona (opsi 1):
+// tiap zona 5 varian pastel yang saling nyambung, dipilih acak per
+// gedung (bukan satu warna datar lagi) — tetap SOFT, jangan gonjreng
+// (aturan 22 Nov masih berlaku). Landmark overrides (hospital/police/
+// school) still apply after.
 const ZONE_COLORS = {
   downtown: [ // menara kaca BIRU LANGIT PUCAT — lebih muda dari a6c2f8d, nyaris putih-biru (b > g > r)
     [0.82, 0.90, 0.97], [0.85, 0.91, 0.98], [0.80, 0.89, 0.96],
     [0.88, 0.93, 0.99], [0.90, 0.94, 0.99], [0.84, 0.91, 0.98],
   ],
-  commercial: [ // SATU warna: krem hangat
-    [0.96, 0.88, 0.72],
+  commercial: [ // pastel hangat: krem, peach, kuning mentega, terakota pucat, rosé pucat
+    [0.96, 0.88, 0.72], [0.97, 0.82, 0.68], [0.98, 0.92, 0.74],
+    [0.93, 0.76, 0.66], [0.96, 0.84, 0.80],
   ],
-  residential: [ // SATU warna: putih
-    [0.97, 0.97, 0.96],
+  residential: [ // pastel sejuk: putih, mint, biru langit pucat, pink blush, lavender pucat
+    [0.97, 0.97, 0.96], [0.88, 0.95, 0.90], [0.86, 0.92, 0.97],
+    [0.97, 0.88, 0.88], [0.92, 0.90, 0.96],
   ],
-  beach: [ // SATU warna: putih pasir
-    [0.97, 0.93, 0.82],
+  beach: [ // pastel pantai: putih pasir, aqua pucat, koral lembut, krem laut, hijau laut pucat
+    [0.97, 0.93, 0.82], [0.82, 0.93, 0.92], [0.97, 0.82, 0.74],
+    [0.95, 0.90, 0.80], [0.88, 0.94, 0.88],
   ],
-  port: [ // SATU warna: abu-biru
-    [0.55, 0.63, 0.73],
+  port: [ // pastel pelabuhan: abu-biru, slate pastel, biru dusty, abu hangat, teal pucat
+    [0.55, 0.63, 0.73], [0.62, 0.68, 0.76], [0.66, 0.72, 0.82],
+    [0.72, 0.70, 0.68], [0.60, 0.70, 0.72],
   ],
-  forest: [ // SATU warna: coklat kayu
-    [0.62, 0.45, 0.28],
+  forest: [ // pastel hutan: coklat kayu, sage green, lumut pucat, krem kayu, coklat muda
+    [0.62, 0.45, 0.28], [0.72, 0.78, 0.62], [0.78, 0.82, 0.66],
+    [0.82, 0.70, 0.52], [0.68, 0.60, 0.44],
   ],
 };
 

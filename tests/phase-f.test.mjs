@@ -187,19 +187,30 @@ check('bridges are the 4 whitelisted crossings',
     check('curtain-wall geometry: lighter pale sky-blue glass on every cell + soft light blue-grey mullions',
       glassVerts > 0 && mullionVerts > 0, glassVerts + ' glass verts, ' + mullionVerts + ' mullion verts');
   }
-  // Mu 23 Nov 21:21 — NON-CBD: exactly ONE wall colour per zone
-  // (landmarks keep their own identifying colour, so they are excluded).
+  // Mu 23 Nov 22:35 — NON-CBD: PASTEL LEMBUT per zona (opsi 1):
+  // tiap zona 5 varian pastel (bukan satu warna datar lagi); setiap
+  // gedung memakai satu warna dari palet zonanya. Landmarks keep
+  // their own identifying colour, so they are excluded.
   {
-    const want = {
-      commercial: '0.96,0.88,0.72', residential: '0.97,0.97,0.96',
-      beach: '0.97,0.93,0.82', port: '0.55,0.63,0.73', forest: '0.62,0.45,0.28',
+    const palettes = {
+      commercial: ['0.96,0.88,0.72', '0.97,0.82,0.68', '0.98,0.92,0.74', '0.93,0.76,0.66', '0.96,0.84,0.8'],
+      residential: ['0.97,0.97,0.96', '0.88,0.95,0.9', '0.86,0.92,0.97', '0.97,0.88,0.88', '0.92,0.9,0.96'],
+      beach: ['0.97,0.93,0.82', '0.82,0.93,0.92', '0.97,0.82,0.74', '0.95,0.9,0.8', '0.88,0.94,0.88'],
+      port: ['0.55,0.63,0.73', '0.62,0.68,0.76', '0.66,0.72,0.82', '0.72,0.7,0.68', '0.6,0.7,0.72'],
+      forest: ['0.62,0.45,0.28', '0.72,0.78,0.62', '0.78,0.82,0.66', '0.82,0.7,0.52', '0.68,0.6,0.44'],
     };
-    let uniformOk = true;
-    for (const [zone, col] of Object.entries(want)) {
-      const cols = new Set(city.buildings.filter((b) => b.zone === zone && !b.landmark).map((b) => b.color.join(',')));
-      if (cols.size !== 1 || !cols.has(col)) uniformOk = false;
+    let pastelOk = true, detail = '';
+    for (const [zone, palette] of Object.entries(palettes)) {
+      const bs = city.buildings.filter((b) => b.zone === zone && !b.landmark);
+      const cols = new Set(bs.map((b) => b.color.join(',')));
+      // Every used colour is in the palette, and the zone actually
+      // varies: >= 4 distinct where the zone is big enough (port has
+      // 7 buildings, forest 4 — for those, >= 2 proves it is not flat).
+      const inPalette = [...cols].every((c) => palette.includes(c));
+      const need = bs.length >= 50 ? 4 : 2;
+      if (!inPalette || cols.size < need) { pastelOk = false; detail += zone + ':' + cols.size + ' '; }
     }
-    check('non-CBD zones: one uniform wall colour each (cream / white / sand-white / blue-grey / wood-brown)', uniformOk);
+    check('non-CBD zones: soft pastel palette per zone (5 variants each, varied per building)', pastelOk, detail || '5 variants/zone');
     const downtownCols = new Set(city.buildings.filter((b) => b.zone === 'downtown').map((b) => b.color.join(',')));
     // Every downtown tint is lighter pale sky-blue (all channels bright,
     // blue b > g > r) — the only exception is the white hospital
