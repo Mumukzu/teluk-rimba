@@ -81,6 +81,7 @@ export function createRenderer(canvas, city) {
   addStatic(progs.lit, world.terrain, mat4Identity());
   addStatic(progs.lit, world.sea, mat4Identity());
   addStatic(progs.lit, world.river, mat4Identity());
+  addStatic(progs.lit, world.waterfall, mat4Identity());
   addStatic(progs.lit, world.volcano, mat4Identity());
   addStatic(progs.lit, world.dirtTrack, mat4Identity()); // mountain road (mission 6)
   addStatic(progs.lit, buildRoadMesh(city), mat4Identity());

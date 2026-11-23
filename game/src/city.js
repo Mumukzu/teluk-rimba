@@ -66,6 +66,12 @@ export function terrainHeight(x, z) {
   if (rd < 16 && x < 660) {
     h -= 4.0 * Math.pow(1 - rd / 16, 2);
   }
+  // Lake basin below the waterfall (Mu): a bowl on the river at
+  // (-440,-440) where the mountain river widens before the city.
+  // Nearest building is 57 m away, the M6 dirt track never reaches
+  // here (it stops at (-580,-580)), so the bowl floods nothing.
+  const ld = Math.hypot(x + 440, z + 440);
+  if (ld < 45) h -= 3.0 * Math.pow(1 - ld / 45, 2);
   return h;
 }
 

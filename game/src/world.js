@@ -83,6 +83,71 @@ export function buildRiver() {
     for (let k = 0; k < 6; k++) g.nrm.push(0, 1, 0);
     for (let k = 0; k < 6; k++) g.col.push(...col);
   }
+  // Lake (Mu): a water disc over the bowl at (-440,-440), 0.05 above
+  // the river ribbon so it renders on top where they overlap.
+  const SEG = 16, R = 40, ly = SEA_LEVEL + 0.40;
+  for (let i = 0; i < SEG; i++) {
+    const a0 = (i / SEG) * Math.PI * 2, a1 = ((i + 1) / SEG) * Math.PI * 2;
+    const c0 = [-440, ly, -440];
+    const p0 = [-440 + Math.cos(a0) * R, ly, -440 + Math.sin(a0) * R];
+    const p1 = [-440 + Math.cos(a1) * R, ly, -440 + Math.sin(a1) * R];
+    g.pos.push(...c0, ...p0, ...p1);
+    for (let k = 0; k < 3; k++) g.nrm.push(0, 1, 0);
+    for (let k = 0; k < 3; k++) g.col.push(...col);
+  }
+  return g;
+}
+
+// Waterfall (Mu): a cascade down the volcano flank where the river
+// drops from the summit (180 m) to the city (0 m) along the segment
+// (-780,-780) -> (-630,-630). Seven vertical falling-water sheets,
+// each spanning the local drop, both windings so it reads from the
+// city side and the mountain side, plus white foam patches at the
+// base of each sheet and a big foam pool where the cascade meets
+// the flat river.
+export function buildWaterfall() {
+  const g = emptyGeom();
+  const water = [0.85, 0.92, 0.98];
+  const foam = [0.95, 0.97, 1.0];
+  const nSE = [0.707, 0, 0.707], nNW = [-0.707, 0, -0.707];
+  // Across the flow: the river runs NW->SE, so across is NE-SW.
+  const ax = -0.707, az = 0.707, HALF = 2.5;
+  const at = (t) => {
+    const x = -780 + t * 150, z = -780 + t * 150;
+    return [x, z];
+  };
+  for (const t of [0.08, 0.22, 0.36, 0.5, 0.64, 0.78, 0.92]) {
+    const [cx, cz] = at(t);
+    const [ux, uz] = at(Math.max(0, t - 0.04));
+    const [dx2, dz2] = at(Math.min(1, t + 0.04));
+    const topY = terrainHeight(ux, uz) + 0.5;
+    const botY = terrainHeight(dx2, dz2) + 0.5;
+    const tl = [cx - ax * HALF, topY, cz - az * HALF];
+    const tr = [cx + ax * HALF, topY, cz + az * HALF];
+    const br = [cx + ax * HALF, botY, cz + az * HALF];
+    const bl = [cx - ax * HALF, botY, cz - az * HALF];
+    // Front (faces the city, SE) + back (faces the mountain, NW).
+    g.pos.push(...tl, ...bl, ...br, ...tl, ...br, ...tr);
+    for (let k = 0; k < 6; k++) g.nrm.push(...nSE);
+    for (let k = 0; k < 6; k++) g.col.push(...water);
+    g.pos.push(...tl, ...tr, ...br, ...tl, ...br, ...bl);
+    for (let k = 0; k < 6; k++) g.nrm.push(...nNW);
+    for (let k = 0; k < 6; k++) g.col.push(...water);
+    // Foam patch at the foot of this sheet.
+    const fy = terrainHeight(dx2, dz2) + 0.15;
+    const f = 2.2;
+    const p = [[cx - f, fy, cz - f], [cx + f, fy, cz - f], [cx + f, fy, cz + f], [cx - f, fy, cz + f]];
+    g.pos.push(...p[0], ...p[1], ...p[2], ...p[0], ...p[2], ...p[3]);
+    for (let k = 0; k < 6; k++) g.nrm.push(0, 1, 0);
+    for (let k = 0; k < 6; k++) g.col.push(...foam);
+  }
+  // Big foam pool where the cascade meets the flat river.
+  const fy = SEA_LEVEL + 0.5, f = 7;
+  const cx = -630, cz = -630;
+  const p = [[cx - f, fy, cz - f], [cx + f, fy, cz - f], [cx + f, fy, cz + f], [cx - f, fy, cz + f]];
+  g.pos.push(...p[0], ...p[1], ...p[2], ...p[0], ...p[2], ...p[3]);
+  for (let k = 0; k < 6; k++) g.nrm.push(0, 1, 0);
+  for (let k = 0; k < 6; k++) g.col.push(...foam);
   return g;
 }
 
@@ -149,6 +214,7 @@ export function buildWorldGeoms() {
     terrain: buildTerrain(),
     sea: buildSea(),
     river: buildRiver(),
+    waterfall: buildWaterfall(),
     volcano: buildVolcano(),
     dirtTrack: buildDirtTrack(),
     // A few distant clouds: flat pale boxes drifting high up.
