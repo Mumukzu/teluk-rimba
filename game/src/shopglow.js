@@ -34,10 +34,15 @@ export function buildShopGlow(city) {
     if (b.zone !== 'commercial' && b.zone !== 'downtown') continue;
     const nx = Math.sin(b.rot), nz = Math.cos(b.rot);
     const w = Math.min(b.w * 0.75, 10);
-    const h = 2.6; // ground floor, y 0.3–2.9 (sign band + canopy above it)
-    const fx = b.x + nx * (b.d / 2 + 0.05);
-    const fz = b.z + nz * (b.d / 2 + 0.05);
-    matrices.push(mat4TRS(fx, 1.6, fz, b.rot, w, h, 1));
+    // Ground floor, y 0.3–2.4 (below the sign band at 2.45+, so the shop
+    // name and awning stay visible). Proud of the facade at +0.13 so it
+    // sits IN FRONT of the shopfront glass (+0.12) — at +0.05 the glass
+    // hid the panel's centre and only its pale edges showed. The dark
+    // door (+0.17) still pokes through the glow, like a real shopfront.
+    const h = 2.1;
+    const fx = b.x + nx * (b.d / 2 + 0.13);
+    const fz = b.z + nz * (b.d / 2 + 0.13);
+    matrices.push(mat4TRS(fx, 1.35, fz, b.rot, w, h, 1));
     const base = GLOW_TINTS[Math.floor(rand() * GLOW_TINTS.length)];
     const j = 0.85 + rand() * 0.15;
     tints.push([base[0] * j, base[1] * j, base[2] * j]);
