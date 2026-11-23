@@ -11,6 +11,9 @@ import { distinctColor, parkedCarGeom } from './vehicles.js';
 const PAVE = [0.78, 0.78, 0.76]; // light grey paving
 const FENCE_COL = [0.85, 0.82, 0.72];
 const BENCH_COL = [0.55, 0.42, 0.28];
+const BIN_COL = [0.15, 0.3, 0.2]; // dark green trash bin
+const POT_COL = [0.7, 0.4, 0.28]; // terracotta plant pot
+const SHRUB_COL = [0.25, 0.5, 0.25]; // potted shrub
 const FLOWERS = [
   [0.95, 0.45, 0.55], [0.95, 0.8, 0.25], [0.9, 0.35, 0.3],
   [0.95, 0.95, 0.9], [0.65, 0.45, 0.9], [0.95, 0.6, 0.3],
@@ -64,7 +67,7 @@ export function buildPlotDressing(city) {
   const paving = emptyGeom();
   const props = emptyGeom();
   const dressed = [];
-  let cars = 0, fences = 0, flowers = 0, benches = 0;
+  let cars = 0, fences = 0, flowers = 0, benches = 0, bins = 0, pots = 0;
   // Decorative parked cars get distinct colours too (same allocator as
   // the traffic fleet, continuing its sequence).
   let colorIdx = 1000;
@@ -142,10 +145,36 @@ export function buildPlotDressing(city) {
         benches++;
       }
     }
+    // Trash bins: 1-2 dark green bins with lids, inside the block (never
+    // on a road or sidewalk, never blocking movement).
+    for (let k = 0; k < rangeInt(rand, 1, 2); k++) {
+      const s = spot(0.6, 0.6);
+      if (!s) continue;
+      const brot = range(rand, 0, Math.PI * 2);
+      const bin = plainBox(0.55, 0.9, 0.55, BIN_COL);
+      for (let i = 0; i < bin.pos.length; i += 3) bin.pos[i + 1] += 0.51;
+      const lid = plainBox(0.6, 0.08, 0.6, [0.12, 0.14, 0.12]);
+      for (let i = 0; i < lid.pos.length; i += 3) lid.pos[i + 1] += 0.99;
+      addPart(props, bin, s.x, 0.06, s.z, brot);
+      addPart(props, lid, s.x, 0.06, s.z, brot);
+      bins++;
+    }
+    // Plant pots: a terracotta pot + a small green shrub, along the walk.
+    for (let k = 0; k < rangeInt(rand, 2, 3); k++) {
+      const s = spot(0.7, 0.7);
+      if (!s) continue;
+      const pot = plainBox(0.6, 0.5, 0.6, POT_COL);
+      for (let i = 0; i < pot.pos.length; i += 3) pot.pos[i + 1] += 0.31;
+      const shrub = plainBox(0.7, 0.55, 0.7, SHRUB_COL);
+      for (let i = 0; i < shrub.pos.length; i += 3) shrub.pos[i + 1] += 0.8;
+      addPart(props, pot, s.x, 0.06, s.z, 0);
+      addPart(props, shrub, s.x, 0.06, s.z, 0);
+      pots++;
+    }
   }
 
   return {
     paving, props,
-    counts: { blocks: dressed.length, cars, fences, flowerBeds: flowers, benches },
+    counts: { blocks: dressed.length, cars, fences, flowerBeds: flowers, benches, bins, pots },
   };
 }

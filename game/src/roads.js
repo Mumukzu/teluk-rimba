@@ -123,6 +123,17 @@ export function buildRoadMesh(city) {
       else quad(g, [fixed + off - 0.075, m0], [fixed + off + 0.075, m0], [fixed + off + 0.075, m1], [fixed + off - 0.075, m1], 0.06, DASH_MINOR);
     };
     edge(-ah + 0.35); edge(ah - 0.35);
+    // Drain covers: dark grates on the sidewalk edge (kerb side), every
+    // ~35 m, clear of intersections — same merged ground mesh, no extra
+    // draw call. Offset ah+0.45 sits between the asphalt edge and the
+    // lamp line (ah+0.9), so covers never sit under a lamp or a tree.
+    const DRAIN = [0.16, 0.16, 0.17];
+    for (let s = m0 + 8; s < m1; s += 35) {
+      for (const off of [-ah - 0.45, ah + 0.45]) {
+        if (horiz) quad(g, [s - 0.45, fixed + off - 0.25], [s + 0.45, fixed + off - 0.25], [s + 0.45, fixed + off + 0.25], [s - 0.45, fixed + off + 0.25], 0.11, DRAIN);
+        else quad(g, [fixed + off - 0.25, s - 0.45], [fixed + off + 0.25, s - 0.45], [fixed + off + 0.25, s + 0.45], [fixed + off - 0.25, s + 0.45], 0.11, DRAIN);
+      }
+    }
     // Centre line: main roads get a double solid yellow line (4 lanes, 2
     // per direction), minor roads a single white dashed line.
     if (main) {
