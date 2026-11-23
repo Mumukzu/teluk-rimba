@@ -51,13 +51,17 @@ check('no road node sits in the river channel', city.nodes.every((n) => riverDis
 
 // --- NPC behaviour variety: runners + idle chat/wait/look ---
 const peds = createPeds(city);
+// Population is 2000 NPCs (Mu, 23 Nov — was 300), so these two checks are
+// fractions of the population, not the absolute counts that only fit 300:
+// ~15% runners = 10-20% of the total; crossing at once stays a small
+// share (the old <=45 cap was 15% of 300 — the bar here is stricter).
 const runners = peds.peds.filter((p) => p.pace === 'run').length;
-check('~15% of NPCs run instead of walking', runners >= 30 && runners <= 60, `${runners} runners of ${peds.count()}`);
+check('~15% of NPCs run instead of walking', runners / peds.count() >= 0.10 && runners / peds.count() <= 0.20, `${runners} runners of ${peds.count()} (${(runners / peds.count() * 100).toFixed(1)}%)`);
 for (let i = 0; i < 3600; i++) peds.step(1 / 60); // 60 s of street life
 const states = peds.peds.reduce((m, p) => { m[p.state] = (m[p.state] || 0) + 1; return m; }, {});
 const idle = (states.idle_chat || 0) + (states.idle_wait || 0) + (states.idle_look || 0);
 check('NPCs pause to chat / wait / look around', idle >= 10, `${idle} idling (${JSON.stringify(states)})`);
-check('NPCs do not ping-pong across one intersection', (states.cross || 0) <= 45, `${states.cross || 0} crossing`);
+check('NPCs do not ping-pong across one intersection', (states.cross || 0) / peds.count() <= 0.10, `${states.cross || 0} crossing of ${peds.count()} (${((states.cross || 0) / peds.count() * 100).toFixed(1)}%)`);
 
 if (failures > 0) { console.error(`${failures} check(s) FAILED`); process.exit(1); }
 console.log('ALL PHASE C CHECKS PASSED');

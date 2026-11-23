@@ -1,11 +1,11 @@
-// Teluk Rimba — pedestrians. 300 NPCs walking the sidewalks, crossing at
+// Teluk Rimba — pedestrians. 2000 NPCs walking the sidewalks, crossing at
 // zebras, fleeing gunshots. Every NPC wears different clothes: shirt, pants
 // and skin tones all vary per NPC, so the city feels alive. Pure logic
 // (no WebGL, no DOM); geometry builders at the bottom.
 import { mulberry32, range, rangeInt, clamp } from './rng.js';
 import { PED_COUNT } from './config.js';
-import { ROAD_LINES, ASPHALT_HALF, terrainHeight, riverDistance } from './city.js';
-import { emptyGeom, plainBox, prismY, mat4TRS } from './gl.js';
+import { ROAD_LINES, RIVER_POINTS, ASPHALT_HALF, terrainHeight, riverDistance } from './city.js';
+import { emptyGeom, plainBox, prismY, mat4TRS, mat4RotX, mat4Multiply } from './gl.js';
 
 // Any colour goes for shirts — bright and varied, not just pastels.
 const SHIRTS = [
@@ -32,6 +32,40 @@ export function createPeds(city, opts = {}) {
   const peds = [];
   let nextId = 1;
 
+  // Zone of a world point: the block that contains it (blocks carry the
+  // zone: downtown / commercial / residential / beach / port / forest /
+  // river / plaza / market). Sidewalks sit in the road corridor between
+  // blocks, so a point in no block takes the NEAREST block's zone — the
+  // sidewalk belongs to the block it fronts. Used for the per-zone
+  // population report.
+  function zoneAt(x, z) {
+    for (const b of city.blocks) {
+      if (x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1) return b.zone;
+    }
+    let best = null, bestD = Infinity;
+    for (const b of city.blocks) {
+      const dx = Math.max(b.x0 - x, 0, x - b.x1), dz = Math.max(b.z0 - z, 0, z - b.z1);
+      const d = dx * dx + dz * dz;
+      if (d < bestD) { bestD = d; best = b; }
+    }
+    return best ? best.zone : 'street';
+  }
+
+  // Busy hotspots (Mu: market, square, beachfront, downtown, port denser
+  // than the rest, but every zone still populated). Weights sum to 1.
+  const HOTSPOTS = [
+    { x: 51, z: -51, r: 80, w: 0.25 },   // Rimba Market
+    { x: 50, z: 50, r: 80, w: 0.20 },    // Town Square (plaza block 5,5)
+    { x: 620, z: 0, r: 200, w: 0.20 },   // Beachfront
+    { x: 0, z: 0, r: 150, w: 0.20 },     // Downtown core
+    { x: 600, z: 400, r: 100, w: 0.15 }, // Port / lighthouse end
+  ];
+  function pickHotspot() {
+    let roll = rand(), acc = 0;
+    for (const h of HOTSPOTS) { acc += h.w; if (roll <= acc) return h; }
+    return HOTSPOTS[HOTSPOTS.length - 1];
+  }
+
   function sidewalkSpot() {
     // A point on a sidewalk: next to a road line, on the kerb-side strip.
     const L = ROAD_LINES[Math.floor(rand() * ROAD_LINES.length)];
@@ -44,13 +78,48 @@ export function createPeds(city, opts = {}) {
     return { x, z, horiz, side, line: L };
   }
 
+  function hotspotSpot() {
+    // A sidewalk spot near a busy hotspot: a road line within the
+    // hotspot's radius, along-coordinate within the radius.
+    const h = pickHotspot();
+    const horiz = rand() < 0.5;
+    const lines = ROAD_LINES.filter((L) => Math.abs(L - (horiz ? h.z : h.x)) <= h.r);
+    if (!lines.length) return sidewalkSpot();
+    const L = lines[Math.floor(rand() * lines.length)];
+    const along = (horiz ? h.x : h.z) + range(rand, -h.r, h.r);
+    const side = rand() < 0.5 ? -1 : 1;
+    const off = ASPHALT_HALF(L) + 1.3;
+    const x = horiz ? along : L + side * off;
+    const z = horiz ? L + side * off : along;
+    return { x, z, horiz, side, line: L };
+  }
+
+  function promenadeSpot() {
+    // A walker on the riverfront promenade: a point on the river polyline,
+    // offset 14.75 m (the promenade centre) to either bank, heading along
+    // the river. (Mu: the riverfront reads alive too.)
+    const seg = rangeInt(rand, 0, RIVER_POINTS.length - 2);
+    const [ax, az] = RIVER_POINTS[seg], [bx, bz] = RIVER_POINTS[seg + 1];
+    const t = range(rand, 0, 1);
+    const px = ax + (bx - ax) * t, pz = az + (bz - az) * t;
+    const segLen = Math.hypot(bx - ax, bz - az);
+    const nx = -(bz - az) / segLen, nz = (bx - ax) / segLen;
+    const side = rand() < 0.5 ? 1 : -1;
+    const x = px + nx * 14.75 * side, z = pz + nz * 14.75 * side;
+    const heading = Math.atan2(bx - ax, bz - az) * (rand() < 0.5 ? 1 : -1);
+    return { x, z, horiz: false, side, line: null, heading, onPromenade: true };
+  }
+
   function spawnPed(kind = 'walk') {
-    const spot = sidewalkSpot();
-    if (riverDistance(spot.x, spot.z) < 20) return null;
+    // 50% uniform sidewalk (every zone populated), 45% busy hotspot,
+    // 5% riverfront promenade.
+    const roll = rand();
+    const spot = roll < 0.5 ? sidewalkSpot() : roll < 0.95 ? hotspotSpot() : promenadeSpot();
+    if (!spot.onPromenade && riverDistance(spot.x, spot.z) < 20) return null;
     const p = {
       id: nextId++, kind,
       x: spot.x, z: spot.z,
-      heading: spot.horiz ? (rand() < 0.5 ? Math.PI / 2 : -Math.PI / 2) : (rand() < 0.5 ? 0 : Math.PI),
+      heading: spot.heading !== undefined ? spot.heading : (spot.horiz ? (rand() < 0.5 ? Math.PI / 2 : -Math.PI / 2) : (rand() < 0.5 ? 0 : Math.PI)),
       speed: range(rand, 1.0, 1.8),
       shirt: SHIRTS[Math.floor(rand() * SHIRTS.length)],
       pants: PANTS[Math.floor(rand() * PANTS.length)],
@@ -196,6 +265,10 @@ export function createPeds(city, opts = {}) {
       for (let i = peds.length - 1; i >= 0; i--) {
         if (peds[i].boarded) peds.splice(i, 1);
       }
+      // Keep the population at PED_COUNT (Mu: 2000 alive in the city):
+      // boarded peds are replaced by fresh walkers, a few per step.
+      let guard = 0;
+      while (peds.length < PED_COUNT && guard++ < 4) spawnPed('walk');
     },
     triggerFlee(x, z, radius = 40) {
       let n = 0;
@@ -243,24 +316,55 @@ export function createPeds(city, opts = {}) {
         if (peds[i].kind === 'officer') peds.splice(i, 1);
       }
     },
-    // Visible instances, culled by distance; four tintable parts so every
-    // NPC is a distinct humanoid: shirt / pants / skin (face + hands) / hair.
+    // Live population report (Mu: per-zone counts + behaviour mix, from
+    // live state, not a guess).
+    zoneCounts() {
+      const counts = {};
+      for (const p of peds) {
+        const z = zoneAt(p.x, p.z);
+        counts[z] = (counts[z] || 0) + 1;
+      }
+      return counts;
+    },
+    stateMix() {
+      const counts = {};
+      for (const p of peds) {
+        const key = (p.state === 'walk' || p.state === 'cross') ? (p.pace === 'run' ? 'run' : 'walk') : p.state;
+        counts[key] = (counts[key] || 0) + 1;
+      }
+      return counts;
+    },
+    // Visible instances, culled by distance; five tintable parts so every
+    // NPC is a distinct humanoid: shirt / pants (two swinging legs) /
+    // skin (face + hands) / hair.
     matricesFor(camX, camZ, maxDist) {
       const torso = { matrices: [], tints: [] };
-      const legs = { matrices: [], tints: [] };
+      const legsL = { matrices: [], tints: [] };
+      const legsR = { matrices: [], tints: [] };
       const heads = { matrices: [], tints: [] };
       const hair = { matrices: [], tints: [] };
+      const t = performance.now() / 160;
       for (const p of peds) {
         const d = Math.hypot(p.x - camX, p.z - camZ);
         if (d > maxDist) continue;
-        const bob = Math.sin(p.walkPhase + performance.now() / 160) * 0.04;
+        // Limb swing (Mu: NPCs must read as walking, not statues): the two
+        // legs swing in opposite phase around the hip; the bob matches the
+        // same phase. Runners swing faster and wider. Idle peds stand still.
+        const moving = p.state === 'walk' || p.state === 'cross' || p.state === 'flee' || p.state === 'board' || p.state === 'chase';
+        const amp = moving ? (p.pace === 'run' ? 0.55 : 0.38) : 0;
+        const phase = p.walkPhase + t * (p.pace === 'run' ? 1.6 : 1);
+        const bob = Math.sin(phase) * 0.04 * (moving ? 1 : 0);
         const m = mat4TRS(p.x, (p.y || 0) + bob, p.z, p.heading, 1, 1, 1);
         torso.matrices.push(m); torso.tints.push(p.shirt);
-        legs.matrices.push(m); legs.tints.push(p.pants);
         heads.matrices.push(m); heads.tints.push(p.skin);
         hair.matrices.push(m); hair.tints.push(p.hair);
+        // Legs pivot at the hip (y + 0.6): T(hip) * R_y(heading) * R_x(swing).
+        const hip = mat4TRS(p.x, (p.y || 0) + 0.6 + bob, p.z, p.heading, 1, 1, 1);
+        const swing = Math.sin(phase) * amp;
+        legsL.matrices.push(mat4Multiply(hip, mat4RotX(swing))); legsL.tints.push(p.pants);
+        legsR.matrices.push(mat4Multiply(hip, mat4RotX(-swing))); legsR.tints.push(p.pants);
       }
-      return { torso, legs, heads, hair };
+      return { torso, legsL, legsR, heads, hair };
     },
     count() { return peds.length; },
   };
@@ -279,6 +383,21 @@ export function pedTorsoGeom() {
     g.pos.push(...arm.pos); g.nrm.push(...arm.nrm); g.col.push(...arm.col);
   }
   for (const p of [body]) { g.pos.push(...p.pos); g.nrm.push(...p.nrm); g.col.push(...p.col); }
+  return g;
+}
+// One leg (left/right) for the limb-swing animation: built with the HIP at
+// the origin, hanging down to the foot, so the instance matrix can pivot it
+// at the hip (T(hip) * R_y * R_x(swing)). Tinted as pants; the shoe is dark,
+// like the combined legs below.
+export function pedLegGeom(side) {
+  const g = emptyGeom();
+  const dx = side < 0 ? -0.14 : 0.14;
+  const leg = prismY(6, 0.11, 0.6, [1, 1, 1]);
+  for (let i = 0; i < leg.pos.length; i += 3) { leg.pos[i] += dx; leg.pos[i + 1] -= 0.3; }
+  g.pos.push(...leg.pos); g.nrm.push(...leg.nrm); g.col.push(...leg.col);
+  const shoe = plainBox(0.22, 0.12, 0.36, [0.12, 0.12, 0.13]);
+  for (let i = 0; i < shoe.pos.length; i += 3) { shoe.pos[i] += dx; shoe.pos[i + 1] -= 0.54; shoe.pos[i + 2] += 0.04; }
+  g.pos.push(...shoe.pos); g.nrm.push(...shoe.nrm); g.col.push(...shoe.col);
   return g;
 }
 // Legs: two separate rounded legs (not one block, not square bars) +

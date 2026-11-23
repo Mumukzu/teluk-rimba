@@ -44,5 +44,5 @@ export const VEHICLES = {
 };
 export const TRAFFIC_COUNT = 224; // moving road vehicles (dense on main roads)
 export const PARKED_COUNT = 24;
-export const PED_COUNT = 300;
+export const PED_COUNT = 2000; // Mu: 2000 NPCs, spread over every zone (was 300)
 export const CULL_DIST = 160; // hide far peds/vehicles (rendered only)

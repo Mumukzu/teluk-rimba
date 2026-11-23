@@ -572,7 +572,8 @@ if (params.sim) {
     }
     const ped = peds.matricesFor(camX, camZ, cull);
     dyn.ped_torso = ped.torso;
-    dyn.ped_legs = ped.legs;
+    dyn.ped_legsL = ped.legsL;
+    dyn.ped_legsR = ped.legsR;
     dyn.ped_heads = ped.heads;
     dyn.ped_hair = ped.hair;
     // Phase E2: hidden coins (spinning gold discs) + stunt ramps (wedges).
@@ -846,6 +847,13 @@ if (params.sim) {
     }
   }
   window.__PERF__ = { fps: 0, calls: 0, tris: 0, timeHours: game.timeHours };
+  // Live ped introspection for the NPC report (Mu: per-zone counts +
+  // behaviour mix from live state): read-only, same pattern as __PERF__.
+  window.__PEDS__ = {
+    count: () => peds.count(),
+    zoneCounts: () => peds.zoneCounts(),
+    stateMix: () => peds.stateMix(),
+  };
   // Test-only sound counter (?audiodebug=1): which sounds fired + how many
   // voices are live. Audio cannot be heard headless, so the counter is the
   // check. Never shown in normal play.

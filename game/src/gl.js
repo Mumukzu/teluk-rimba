@@ -50,6 +50,17 @@ export function mat4LookAt(eye, center, up) {
   return m;
 }
 
+// Rotation around the X axis (ped leg swing pivots at the hip).
+export function mat4RotX(a) {
+  const c = Math.cos(a), s = Math.sin(a);
+  const m = new Float32Array(16);
+  m[0] = 1; m[1] = 0; m[2] = 0; m[3] = 0;
+  m[4] = 0; m[5] = c; m[6] = s; m[7] = 0;
+  m[8] = 0; m[9] = -s; m[10] = c; m[11] = 0;
+  m[12] = 0; m[13] = 0; m[14] = 0; m[15] = 1;
+  return m;
+}
+
 export function mat4TRS(x, y, z, rotY, sx, sy, sz) {
   const c = Math.cos(rotY), s = Math.sin(rotY);
   const m = new Float32Array(16);

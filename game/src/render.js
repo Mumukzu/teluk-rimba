@@ -14,7 +14,7 @@ import { buildBeachPropMeshes } from './beach.js';
 import { buildLandmarks } from './landmarks.js';
 import { buildMoonGeom, buildStarsSpec, buildSkyDomeGeom, buildCloudSpec, skyColors } from './sky.js';
 import { buildVehicleBodyGeoms, buildVehicleGlassGeoms, headlightGeom, buildWheelGeom, buildWheelGeomFar, buildBikeFrontGeom, beamConeGeom, beamPoolGeom, tailGeom, beaconGeom } from './vehicles.js';
-import { pedTorsoGeom, pedLegsGeom, pedHeadGeom, pedHairGeom } from './peds.js';
+import { pedTorsoGeom, pedLegGeom, pedHeadGeom, pedHairGeom } from './peds.js';
 import { buildWetGeoms } from './weather.js';
 import { buildNightLightGeoms } from './nightlights.js';
 import { buildPlotDressing } from './plots.js';
@@ -183,10 +183,14 @@ export function createRenderer(canvas, city) {
     if (!geom.pos.length) continue;
     addDyn(progs.transpInst, geom, type === 'motorbike' ? 100 : type === 'scooter' ? 50 : type === 'car' ? 40 : 30, 'vehglass_' + type);
   }
-  addDyn(progs.litInst, pedTorsoGeom(), 340, 'ped_torso');
-  addDyn(progs.litInst, pedLegsGeom(), 340, 'ped_legs');
-  addDyn(progs.litInst, pedHeadGeom(), 340, 'ped_heads');
-  addDyn(progs.litInst, pedHairGeom(), 340, 'ped_hair');
+  // Peds: 2000 NPCs (Mu) — 5 instanced parts (torso, two swinging legs,
+  // head, hair). Capacity 2000: the 160 m cull keeps the visible count
+  // near ~500 in the busiest view, but the buffer must never clip a crowd.
+  addDyn(progs.litInst, pedTorsoGeom(), 2000, 'ped_torso');
+  addDyn(progs.litInst, pedLegGeom(-1), 2000, 'ped_legsL');
+  addDyn(progs.litInst, pedLegGeom(1), 2000, 'ped_legsR');
+  addDyn(progs.litInst, pedHeadGeom(), 2000, 'ped_heads');
+  addDyn(progs.litInst, pedHairGeom(), 2000, 'ped_hair');
   addDyn(progs.litInst, plainBox(0.06, 1.2, 0.06, [1, 1, 1]), 260, 'rain');
   addDyn(progs.unlitInst, headlightGeom(), 240, 'headlights');
   // Phase F polish: shared spinning/steering wheels, bike steering
