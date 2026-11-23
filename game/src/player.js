@@ -149,13 +149,13 @@ export function createPlayer(city, startX, startZ) {
       : base;
     const seated = !!driving;
     const torsoM = seated ? base : upper;
-    const shoulderL = mat4TRS(-0.28, 1.22, 0, 0, 1, 1, 1);
-    const shoulderR = mat4TRS(0.28, 1.22, 0, 0, 1, 1, 1);
+    const shoulderL = mat4TRS(-0.28, 1.32, 0, 0, 1, 1, 1);
+    const shoulderR = mat4TRS(0.28, 1.32, 0, 0, 1, 1, 1);
     const armSwingL = seated ? -1.0 : -swing; // driving: both arms forward
     const armSwingR = seated ? -1.0 : swing;
     const armL = mat4Multiply(mat4Multiply(torsoM, shoulderL), mat4RotX(armSwingL));
     const armR = mat4Multiply(mat4Multiply(torsoM, shoulderR), mat4RotX(armSwingR));
-    const wrist = mat4TRS(0, -0.39, 0, 0, 1, 1, 1);
+    const wrist = mat4TRS(0, -0.69, 0, 0, 1, 1, 1); // hands at mid-thigh
     const handL = mat4Multiply(armL, wrist);
     const handR = mat4Multiply(armR, wrist);
     const hipM = mat4TRS(0, 0.88, 0, 0, 1, 1, 1);
@@ -193,10 +193,10 @@ export function createPlayer(city, startX, startZ) {
     };
     const add = (p) => { g.pos.push(...p.pos); g.nrm.push(...p.nrm); g.col.push(...p.col); };
     add(pedWowokTorsoGeom()); // baked red jacket + white shirt panels, no tint
-    add(tint(shift(pedArmGeom(-1), -0.28, 1.22, 0), WOWOK.jacket));
-    add(tint(shift(pedArmGeom(1), 0.28, 1.22, 0), WOWOK.jacket));
-    add(tint(shift(pedHandGeom(), -0.28, 0.83, 0), WOWOK.skin)); // hands at the wrists
-    add(tint(shift(pedHandGeom(), 0.28, 0.83, 0), WOWOK.skin));
+    add(tint(shift(pedArmGeom(-1), -0.28, 1.32, 0), WOWOK.jacket));
+    add(tint(shift(pedArmGeom(1), 0.28, 1.32, 0), WOWOK.jacket));
+    add(tint(shift(pedHandGeom(), -0.28, 0.63, 0), WOWOK.skin)); // hands at the wrists (mid-thigh)
+    add(tint(shift(pedHandGeom(), 0.28, 0.63, 0), WOWOK.skin));
     add(tint(shift(pedLegGeom(-1), 0, 0.88, 0), WOWOK.pants));
     add(tint(shift(pedLegGeom(1), 0, 0.88, 0), WOWOK.pants));
     add(tint(pedHeadGeom(), WOWOK.skin));

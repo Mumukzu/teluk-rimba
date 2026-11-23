@@ -6,6 +6,10 @@ import { emptyGeom, mergeGeoms, plainBox } from './gl.js';
 function groundColor(x, z, h) {
   const rd = riverDistance(x, z);
   if (h < -0.6) return [0.76, 0.7, 0.55]; // sand, under/near the waterline
+  // Mountain river channel (Mu): the waterfall's bed must read as DARK
+  // GREY mountain rock, not tan/brown — so the blue-white water stands
+  // out against it. Flat-land banks keep the tan sand colour.
+  if (rd < 15 && h > 25) return [0.42, 0.4, 0.38]; // waterfall channel rock
   if (rd < 15) return [0.72, 0.66, 0.5]; // river bank
   if (h > 60) return [0.42, 0.4, 0.38]; // volcano rock
   if (h > 25) return [0.32, 0.48, 0.26]; // forested slope
@@ -84,7 +88,10 @@ export function buildRiver() {
     for (let k = 0; k < 6; k++) g.col.push(...col);
   }
   // Lake (Mu): a water disc over the bowl at (-440,-440), 0.05 above
-  // the river ribbon so it renders on top where they overlap.
+  // the river ribbon so it renders on top where they overlap. CLEAR
+  // BLUE (Mu: the lake must read blue, not brown) — brighter than the
+  // river's [0.2,0.5,0.66] so it reads as clear still water.
+  const lakeCol = [0.28, 0.62, 0.88];
   const SEG = 16, R = 40, ly = SEA_LEVEL + 0.40;
   for (let i = 0; i < SEG; i++) {
     const a0 = (i / SEG) * Math.PI * 2, a1 = ((i + 1) / SEG) * Math.PI * 2;
@@ -93,7 +100,7 @@ export function buildRiver() {
     const p1 = [-440 + Math.cos(a1) * R, ly, -440 + Math.sin(a1) * R];
     g.pos.push(...c0, ...p0, ...p1);
     for (let k = 0; k < 3; k++) g.nrm.push(0, 1, 0);
-    for (let k = 0; k < 3; k++) g.col.push(...col);
+    for (let k = 0; k < 3; k++) g.col.push(...lakeCol);
   }
   return g;
 }
@@ -105,34 +112,48 @@ export function buildRiver() {
 // city side and the mountain side, plus white foam patches at the
 // base of each sheet and a big foam pool where the cascade meets
 // the flat river.
+// COLOUR (Mu, 23 Nov — the old near-white sheets read CREAM/BROWN in
+// the sun, and the brown dirt track ran straight down the middle of
+// the channel): the sheets are LIGHT BLUE [0.5,0.75,0.95] with WHITE
+// foam streaks baked in as vertical bands (blue/foam/blue/foam/blue),
+// 10 m wide so they cover the channel — what you see is blue-white
+// water, not the rock or the track behind it. The dirt track now
+// curves around the cascade's NE side (see buildDirtTrack), and the
+// channel bed itself is dark grey rock (groundColor).
 export function buildWaterfall() {
   const g = emptyGeom();
-  const water = [0.85, 0.92, 0.98];
+  const water = [0.5, 0.75, 0.95]; // light blue flowing water (Mu)
   const foam = [0.95, 0.97, 1.0];
   const nSE = [0.707, 0, 0.707], nNW = [-0.707, 0, -0.707];
   // Across the flow: the river runs NW->SE, so across is NE-SW.
-  const ax = -0.707, az = 0.707, HALF = 2.5;
+  const ax = -0.707, az = 0.707, HALF = 5.0; // 10 m wide — covers the channel
   const at = (t) => {
     const x = -780 + t * 150, z = -780 + t * 150;
     return [x, z];
   };
+  // Five vertical strips per sheet: blue / foam streak / blue / foam
+  // streak / blue — the white streaks read as foam running down the
+  // falling water. Strip edges as fractions of the half-width.
+  const STRIPS = [[-1, -0.55, water], [-0.55, -0.25, foam], [-0.25, 0.25, water], [0.25, 0.55, foam], [0.55, 1, water]];
   for (const t of [0.08, 0.22, 0.36, 0.5, 0.64, 0.78, 0.92]) {
     const [cx, cz] = at(t);
     const [ux, uz] = at(Math.max(0, t - 0.04));
     const [dx2, dz2] = at(Math.min(1, t + 0.04));
     const topY = terrainHeight(ux, uz) + 0.5;
     const botY = terrainHeight(dx2, dz2) + 0.5;
-    const tl = [cx - ax * HALF, topY, cz - az * HALF];
-    const tr = [cx + ax * HALF, topY, cz + az * HALF];
-    const br = [cx + ax * HALF, botY, cz + az * HALF];
-    const bl = [cx - ax * HALF, botY, cz - az * HALF];
-    // Front (faces the city, SE) + back (faces the mountain, NW).
-    g.pos.push(...tl, ...bl, ...br, ...tl, ...br, ...tr);
-    for (let k = 0; k < 6; k++) g.nrm.push(...nSE);
-    for (let k = 0; k < 6; k++) g.col.push(...water);
-    g.pos.push(...tl, ...tr, ...br, ...tl, ...br, ...bl);
-    for (let k = 0; k < 6; k++) g.nrm.push(...nNW);
-    for (let k = 0; k < 6; k++) g.col.push(...water);
+    for (const [f0, f1, col] of STRIPS) {
+      const tl = [cx + ax * HALF * f0, topY, cz + az * HALF * f0];
+      const tr = [cx + ax * HALF * f1, topY, cz + az * HALF * f1];
+      const br = [cx + ax * HALF * f1, botY, cz + az * HALF * f1];
+      const bl = [cx + ax * HALF * f0, botY, cz + az * HALF * f0];
+      // Front (faces the city, SE) + back (faces the mountain, NW).
+      g.pos.push(...tl, ...bl, ...br, ...tl, ...br, ...tr);
+      for (let k = 0; k < 6; k++) g.nrm.push(...nSE);
+      for (let k = 0; k < 6; k++) g.col.push(...col);
+      g.pos.push(...tl, ...tr, ...br, ...tl, ...br, ...bl);
+      for (let k = 0; k < 6; k++) g.nrm.push(...nNW);
+      for (let k = 0; k < 6; k++) g.col.push(...col);
+    }
     // Foam patch at the foot of this sheet.
     const fy = terrainHeight(dx2, dz2) + 0.15;
     const f = 2.2;
@@ -187,10 +208,17 @@ export function buildVolcano() {
 
 // Mountain dirt track: a dirt ribbon up the volcano slope for the final
 // mission (mountain road). Follows the terrain so the jeep can climb it.
+// ROUTE (Mu, 23 Nov — the old straight line ran down the MIDDLE of the
+// waterfall channel, so the cascade read as a brown stripe): the middle
+// points are offset ~20 m to the NE side of the river line, so the track
+// curves AROUND the cascade instead of through it. Endpoints stay on
+// the mission line (base (-580,-580), summit (-800,-800)). The track is
+// VISUAL ONLY (missions use coordinates, not this geometry), so the
+// reroute cannot break mission 6.
 export function buildDirtTrack() {
   const g = emptyGeom();
   const col = [0.5, 0.38, 0.26];
-  const pts = [[-580, -580], [-660, -660], [-740, -740], [-800, -800]];
+  const pts = [[-580, -580], [-674, -646], [-754, -726], [-800, -800]];
   const HALF = 3.5;
   for (let i = 0; i < pts.length - 1; i++) {
     const [ax, az] = pts[i], [bx, bz] = pts[i + 1];
