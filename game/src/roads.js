@@ -8,8 +8,14 @@ const ASPHALT = [0.29, 0.29, 0.3]; // mid-tone grey, clearly darker than sidewal
 // Sidewalks: mid grey, clearly darker than the old near-white so the road
 // edge reads; alternate 8 m tile shades for a paver read. Kerb: a darker
 // raised lip (0.19) along the asphalt edge.
-const SIDEWALK = [0.54, 0.53, 0.5];
-const SIDEWALK_ALT = [0.47, 0.46, 0.43];
+// Sidewalk tiles (Mu): two CLEARLY distinct tones (0.28 apart) in a
+// 2 m x 1.5 m checker + thin dark grout lines, so the pattern reads
+// from street level and from the air. The old 8 m slabs were only 0.07
+// apart and read as flat. SIDEWALK is the light tile (also the rounded
+// corner fans at intersections).
+const SIDEWALK = [0.72, 0.71, 0.67];
+const TILE_DARK = [0.44, 0.43, 0.4];
+const TILE_GROUT = [0.32, 0.31, 0.29];
 const KERB = [0.42, 0.41, 0.39];
 const DASH_MAIN = [0.85, 0.72, 0.25]; // thin yellow dashes on main roads
 const DASH_MINOR = [0.88, 0.88, 0.86]; // thin white dashes on small roads
@@ -184,13 +190,30 @@ export function buildRoadMesh(city) {
       if (s1 - s0 < 2) return;
       const inner = fixed + side * ah, outer = fixed + side * ch;
       const lo = Math.min(inner, outer), hi = Math.max(inner, outer);
-      let k = 0;
-      for (let s = s0; s < s1; s += 8, k++) {
-        const e = Math.min(s + 8, s1);
-        const col = k % 2 === 0 ? SIDEWALK : SIDEWALK_ALT;
-        if (horiz) quad(g, [s, lo], [e, lo], [e, hi], [s, hi], 0.16, col);
-        else quad(g, [lo, s], [hi, s], [hi, e], [lo, e], 0.16, col);
+      // Tile pattern: 2 m long x 1.5 m wide checker (2 rows), tones
+      // alternating by (column + row) parity, so the grid reads from
+      // street level and from the air.
+      const TILE = 2, ROWS = 2, rowW = (hi - lo) / ROWS;
+      let col = 0;
+      for (let s = s0; s < s1; s += TILE, col++) {
+        const e = Math.min(s + TILE, s1);
+        for (let r = 0; r < ROWS; r++) {
+          const rlo = lo + r * rowW, rhi = rlo + rowW;
+          const tone = (col + r) % 2 === 0 ? SIDEWALK : TILE_DARK;
+          if (horiz) quad(g, [s, rlo], [e, rlo], [e, rhi], [s, rhi], 0.16, tone);
+          else quad(g, [rlo, s], [rhi, s], [rhi, e], [rlo, e], 0.16, tone);
+        }
       }
+      // Grout: thin dark transverse lines at each tile boundary + one
+      // longitudinal line down the middle of the strip (y 0.17, above
+      // the tiles, below the kerb lip).
+      for (let s = s0 + TILE; s < s1; s += TILE) {
+        if (horiz) quad(g, [s - 0.06, lo], [s + 0.06, lo], [s + 0.06, hi], [s - 0.06, hi], 0.17, TILE_GROUT);
+        else quad(g, [lo, s - 0.06], [hi, s - 0.06], [hi, s + 0.06], [lo, s + 0.06], 0.17, TILE_GROUT);
+      }
+      const mid = (lo + hi) / 2;
+      if (horiz) quad(g, [s0, mid - 0.06], [s1, mid - 0.06], [s1, mid + 0.06], [s0, mid + 0.06], 0.17, TILE_GROUT);
+      else quad(g, [mid - 0.06, s0], [mid + 0.06, s0], [mid + 0.06, s1], [mid - 0.06, s1], 0.17, TILE_GROUT);
       const kLo = Math.min(inner, inner + side * 0.45), kHi = Math.max(inner, inner + side * 0.45);
       if (horiz) quad(g, [s0, kLo], [s1, kLo], [s1, kHi], [s0, kHi], 0.19, KERB);
       else quad(g, [kLo, s0], [kHi, s0], [kHi, s1], [kLo, s1], 0.19, KERB);
@@ -220,12 +243,13 @@ export function buildRoadMesh(city) {
     edge(-ah + 0.35); edge(ah - 0.35);
     // Drain covers: dark grates on the sidewalk (clear of the kerb lip and
     // the lamp line), every ~35 m, clear of intersections — same merged
-    // ground mesh, no extra draw call.
+    // ground mesh, no extra draw call. At y 0.18, above the tile grout
+    // lines (0.17), so a drain never z-fights a grout line.
     const DRAIN = [0.16, 0.16, 0.17];
     for (let s = m0 + 8; s < m1; s += 35) {
       for (const off of [-ah - 0.75, ah + 0.75]) {
-        if (horiz) quad(g, [s - 0.45, fixed + off - 0.25], [s + 0.45, fixed + off - 0.25], [s + 0.45, fixed + off + 0.25], [s - 0.45, fixed + off + 0.25], 0.17, DRAIN);
-        else quad(g, [fixed + off - 0.25, s - 0.45], [fixed + off + 0.25, s - 0.45], [fixed + off + 0.25, s + 0.45], [fixed + off - 0.25, s + 0.45], 0.17, DRAIN);
+        if (horiz) quad(g, [s - 0.45, fixed + off - 0.25], [s + 0.45, fixed + off - 0.25], [s + 0.45, fixed + off + 0.25], [s - 0.45, fixed + off + 0.25], 0.18, DRAIN);
+        else quad(g, [fixed + off - 0.25, s - 0.45], [fixed + off + 0.25, s - 0.45], [fixed + off + 0.25, s + 0.45], [fixed + off - 0.25, s + 0.45], 0.18, DRAIN);
       }
     }
     // Centre line: main roads get a double solid yellow line (4 lanes, 2

@@ -8,9 +8,17 @@ import { riverDistance, ROAD_LINES, ASPHALT_HALF } from './city.js';
 import { emptyGeom, plainBox } from './gl.js';
 import { distinctColor, parkedCarGeom } from './vehicles.js';
 
-const PAVE = [0.58, 0.58, 0.56]; // light grey paving — dark enough to read
-// as paving in bright daylight, never a glaring white strip at the bases.
-const PAVE_VAR = 0.05; // per-slab shade variation, so slabs read as tiles
+// Yard paving (Mu): a visible 4 m paving-block grid in a two-tone
+// checker, plus a darker border strip around each yard edge. Tone
+// varies slightly per zone but stays tidy; the two tones are far apart
+// (0.2+) so the grid reads from street level and from the air — the old
+// 2x2 slabs with +/-0.05 variation read as flat.
+const PAVE_ZONE = {
+  downtown: { light: [0.66, 0.66, 0.64], dark: [0.46, 0.46, 0.44] },
+  commercial: { light: [0.7, 0.66, 0.6], dark: [0.48, 0.45, 0.4] },
+  residential: { light: [0.72, 0.7, 0.64], dark: [0.5, 0.48, 0.43] },
+};
+const PAVE_BORDER = [0.4, 0.4, 0.38]; // border strip tone (darker)
 const FENCE_COL = [0.85, 0.82, 0.72];
 const BENCH_COL = [0.55, 0.42, 0.28];
 const BIN_COL = [0.15, 0.3, 0.2]; // dark green trash bin
@@ -173,12 +181,28 @@ export function buildPlotDressing(city) {
     if (corners.some(([x, z]) => riverDistance(x, z) < 25)) continue;
     dressed.push(b);
 
-    // Paving: 2x2 light-grey slabs with a slight shade variation.
-    const mx = (b.x0 + b.x1) / 2, mz = (b.z0 + b.z1) / 2;
-    for (const [x0, z0, x1, z1] of [[b.x0, b.z0, mx, mz], [mx, b.z0, b.x1, mz], [b.x0, mz, mx, b.z1], [mx, mz, b.x1, b.z1]]) {
-      const v = range(rand, -PAVE_VAR, PAVE_VAR);
-      quadUp(paving, x0, z0, x1, z1, 0.06, [PAVE[0] + v, PAVE[1] + v, PAVE[2] + v]);
+    // Paving-block grid: 4 m squares in a two-tone checker, with a
+    // darker border strip around the yard edge.
+    const pal = PAVE_ZONE[b.zone] || PAVE_ZONE.residential;
+    const pv = range(rand, -0.02, 0.02);
+    const paveLight = [pal.light[0] + pv, pal.light[1] + pv, pal.light[2] + pv];
+    const paveDark = [pal.dark[0] + pv, pal.dark[1] + pv, pal.dark[2] + pv];
+    const TS = 4;
+    let pix = 0;
+    for (let x = b.x0; x < b.x1; x += TS, pix++) {
+      const px1 = Math.min(x + TS, b.x1);
+      let piz = 0;
+      for (let z = b.z0; z < b.z1; z += TS, piz++) {
+        const pz1 = Math.min(z + TS, b.z1);
+        quadUp(paving, x, z, px1, pz1, 0.06, (pix + piz) % 2 === 0 ? paveLight : paveDark);
+      }
     }
+    // Border strip: darker frame 0.8 m wide around the yard edge.
+    const bw = 0.8, by = 0.07;
+    quadUp(paving, b.x0, b.z0, b.x1, b.z0 + bw, by, PAVE_BORDER);
+    quadUp(paving, b.x0, b.z1 - bw, b.x1, b.z1, by, PAVE_BORDER);
+    quadUp(paving, b.x0, b.z0, b.x0 + bw, b.z1, by, PAVE_BORDER);
+    quadUp(paving, b.x1 - bw, b.z0, b.x1, b.z1, by, PAVE_BORDER);
 
     const inBlock = (x, z, m = 3) => x > b.x0 + m && x < b.x1 - m && z > b.z0 + m && z < b.z1 - m;
     const spot = (hw, hd, tries = 12) => {
