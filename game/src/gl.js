@@ -176,6 +176,7 @@ export function createPrograms(gl) {
     transp: compileProgram(gl, TRANSP_VS, TRANSP_FS),
     transpInst: compileProgram(gl, TRANSP_INST_VS, TRANSP_FS),
     sky: compileProgram(gl, SKY_VS, SKY_FS),
+    textured: compileProgram(gl, TEXTURED_VS, TEXTURED_FS),
   };
 }
 
@@ -239,6 +240,31 @@ const TRANSP_FS = FOG_FS + `
   uniform float uAlpha;
   void main() {
     gl_FragColor = vec4(applyFog(vColor), uAlpha);
+  }
+`;
+
+// Textured quads (direction signs): one shared atlas texture, unlit +
+// fogged like the other unlit meshes. aUV is baked per vertex, so one
+// static mesh draws every sign panel in a single call.
+const TEXTURED_VS = `
+  attribute vec3 aPos; attribute vec2 aUV;
+  uniform mat4 uProj; uniform mat4 uView; uniform mat4 uModel;
+  varying vec2 vUV; varying float vDist;
+  void main() {
+    vec4 wp = uModel * vec4(aPos, 1.0);
+    vUV = aUV;
+    vec4 vp = uView * wp;
+    vDist = -vp.z;
+    gl_Position = uProj * vp;
+  }
+`;
+
+const TEXTURED_FS = FOG_FS + `
+  varying vec2 vUV;
+  uniform sampler2D uTex;
+  void main() {
+    vec3 col = texture2D(uTex, vUV).rgb;
+    gl_FragColor = vec4(applyFog(col), 1.0);
   }
 `;
 
@@ -467,6 +493,37 @@ export function updateDynamicInstancedMesh(gl, mesh, matrices, tints) {
   gl.bindBuffer(gl.ARRAY_BUFFER, mesh._tintBuf);
   gl.bufferSubData(gl.ARRAY_BUFFER, 0, tintData);
   mesh.instances = n;
+}
+
+// Upload a static textured mesh (positions + UVs, no normals needed).
+export function createTexturedMesh(gl, prog, geom) {
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+  const bind = (loc, data, size) => {
+    if (loc < 0) return;
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0);
+  };
+  bind(gl.getAttribLocation(prog, 'aPos'), geom.pos, 3);
+  bind(gl.getAttribLocation(prog, 'aUV'), geom.uv, 2);
+  gl.bindVertexArray(null);
+  return { vao, count: geom.pos.length / 3, tris: geom.pos.length / 9, instanced: false };
+}
+
+// Upload a 2D canvas as a WebGL texture (flip Y so canvas row 0 is v=1).
+export function createCanvasTexture(gl, canvas) {
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return tex;
 }
 
 export function drawMesh(gl, prog, mesh, uniforms) {

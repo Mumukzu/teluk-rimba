@@ -4,10 +4,11 @@
 // lighthouse beam are dynamic instanced meshes refilled every frame.
 // Night-only meshes (lit windows, moon, stars, headlights) are skipped in
 // daylight. Nothing here knows about missions or input; main.js drives it.
-import { createPrograms, createMesh, createInstancedMesh, createDynamicInstancedMesh, updateDynamicInstancedMesh, drawMesh, mat4Identity, mat4Perspective, mat4LookAt, mat4TRS, plainBox } from './gl.js';
+import { createPrograms, createMesh, createInstancedMesh, createDynamicInstancedMesh, updateDynamicInstancedMesh, drawMesh, createTexturedMesh, createCanvasTexture, mat4Identity, mat4Perspective, mat4LookAt, mat4TRS, plainBox } from './gl.js';
 import { buildWorldGeoms } from './world.js';
 import { buildBuildingMeshes, buildTreeMesh, buildPalmMesh, buildLitWindows } from './buildings.js';
 import { buildRoadMesh, buildLampMeshes, buildTrafficLightMesh } from './roads.js';
+import { buildDirectionSigns } from './signs.js';
 import { buildBeachPropMeshes } from './beach.js';
 import { buildLandmarks } from './landmarks.js';
 import { buildMoonGeom, buildStarsSpec, buildSkyDomeGeom, buildCloudSpec, skyColors } from './sky.js';
@@ -39,6 +40,8 @@ export function createRenderer(canvas, city) {
   const trafficMesh = buildTrafficLightMesh(city);
   const beachMeshes = buildBeachPropMeshes(city);
   const landmarks = buildLandmarks(city);
+  const signs = buildDirectionSigns(city);
+  const signTexture = createCanvasTexture(gl, signs.atlasCanvas);
   const stars = buildStarsSpec();
   const wet = buildWetGeoms();
   const nightPools = buildNightLightGeoms(city, landmarks);
@@ -83,6 +86,12 @@ export function createRenderer(canvas, city) {
   addInst(progs.litInst, buildingMeshes.shopfront);
   addInst(progs.litInst, buildingMeshes.balconies);
   addInst(progs.litInst, buildingMeshes.roofUnits);
+  // Phase H building detail: ground-floor glass bands + roof decks +
+  // parapet walls — one instanced draw each.
+  addInst(progs.litInst, buildingMeshes.glassBand);
+  addInst(progs.litInst, buildingMeshes.roofDeck);
+  addInst(progs.litInst, buildingMeshes.parapetNS);
+  addInst(progs.litInst, buildingMeshes.parapetEW);
   // Plot dressing: light-grey paving + parked cars, fences, flowers,
   // benches in dense and residential blocks (Mu: no plain green yards).
   addStatic(progs.lit, plotDressing.paving, mat4Identity());
@@ -92,6 +101,13 @@ export function createRenderer(canvas, city) {
   addInst(progs.litInst, lampMeshes.poles);
   addInst(progs.unlitInst, lampMeshes.heads);
   addInst(progs.unlitInst, trafficMesh);
+  // Direction signs (Phase H): poles + gantry frames (1 static lit draw)
+  // and the text panels from the shared atlas (1 textured draw).
+  addStatic(progs.lit, signs.poleGeom, mat4Identity());
+  {
+    const panelMesh = createTexturedMesh(gl, progs.textured, signs.panelGeom);
+    meshes.push({ mesh: panelMesh, prog: progs.textured, model: mat4Identity(), textured: true, texture: signTexture });
+  }
   addStatic(progs.lit, beachMeshes.poles, mat4Identity());
   addInst(progs.litInst, beachMeshes.umbrella);
   addInst(progs.litInst, beachMeshes.lounger);
@@ -272,6 +288,13 @@ export function createRenderer(canvas, city) {
       if (entry.nightOnly && light.isDay) return;
       if (entry.wetOnly && wetAmt < 0.05) return;
       const uniforms = { ...common, uModel: entry.model };
+      if (entry.textured) {
+        // Bind the shared sign atlas (sampler uniform, not a float).
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, entry.texture);
+        gl.useProgram(entry.prog);
+        gl.uniform1i(gl.getUniformLocation(entry.prog, 'uTex'), 0);
+      }
       if (entry.transparent) {
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
