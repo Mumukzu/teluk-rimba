@@ -18,13 +18,15 @@ export function buildingClass(h) {
   return h < 12 ? 'short' : h < 30 ? 'mid' : 'tall';
 }
 // Roof colours by zone (varied a touch per building by hash).
+// Mu 23 Nov: freshened with the wall palette — still darker than the walls,
+// but with clear hue identity (slate blue / terracotta / brick / sand / teal / moss).
 const ROOF_COLORS = {
-  downtown: [0.25, 0.28, 0.35],
-  commercial: [0.45, 0.3, 0.22],
-  residential: [0.4, 0.28, 0.26],
-  beach: [0.75, 0.7, 0.6],
-  port: [0.3, 0.32, 0.3],
-  forest: [0.25, 0.3, 0.25],
+  downtown: [0.3, 0.42, 0.6],
+  commercial: [0.6, 0.32, 0.2],
+  residential: [0.55, 0.3, 0.28],
+  beach: [0.85, 0.72, 0.5],
+  port: [0.35, 0.45, 0.42],
+  forest: [0.3, 0.42, 0.3],
 };
 const SHOP_ACCENTS = [
   [0.9, 0.3, 0.25], [0.2, 0.6, 0.9], [0.95, 0.7, 0.15], [0.3, 0.7, 0.35], [0.85, 0.4, 0.6],

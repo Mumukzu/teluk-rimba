@@ -198,31 +198,34 @@ const ZONE_SIZE = {
 };
 
 // Mu: WARNA-WARNI tapi SOFT / pastel lembut — jangan gonjreng mencolok.
-// Variasi per zona, tetap rapi. (Tint = warna dinding; kaca jendela tetap gelap.)
+// 23 Nov 21:00 — Mu: jangan kusam/pudar. Palet disegarkan: saturasi naik
+// (spread antar channel lebih lebar, warna terbaca jelas), lightness tetap
+// pastel (bukan neon). Variasi per zona, tetap harmonis. (Tint = warna
+// dinding; kaca jendela tetap gelap.)
 const ZONE_COLORS = {
-  downtown: [ // menara kaca pastel: biru langit, teal lembut, lavendel, sage, peach
-    [0.62, 0.74, 0.84], [0.58, 0.76, 0.74], [0.68, 0.66, 0.82],
-    [0.62, 0.78, 0.68], [0.84, 0.72, 0.62], [0.72, 0.7, 0.78],
+  downtown: [ // menara kaca pastel SEGAR: biru langit, teal, lavendel, mint, peach
+    [0.45, 0.72, 0.94], [0.32, 0.82, 0.78], [0.62, 0.58, 0.94],
+    [0.42, 0.88, 0.58], [0.98, 0.68, 0.45], [0.72, 0.62, 0.92],
   ],
-  commercial: [ // toko pastel: koral lembut, kuning mentega, mint, turquoise, lilac, peach
-    [0.88, 0.66, 0.6], [0.92, 0.84, 0.6], [0.64, 0.84, 0.7],
-    [0.6, 0.82, 0.8], [0.78, 0.7, 0.86], [0.9, 0.74, 0.58],
+  commercial: [ // toko pastel SEGAR: koral, kuning mentega, mint, turquoise, lilac, peach
+    [0.98, 0.55, 0.45], [1.0, 0.82, 0.35], [0.45, 0.9, 0.6],
+    [0.3, 0.85, 0.82], [0.72, 0.58, 0.95], [0.98, 0.66, 0.4],
   ],
-  residential: [ // rumah pastel: biru bubuk, pink, mint, krem, lavendel, peach
-    [0.68, 0.78, 0.88], [0.9, 0.72, 0.74], [0.7, 0.86, 0.72],
-    [0.92, 0.88, 0.68], [0.8, 0.74, 0.88], [0.9, 0.78, 0.64],
+  residential: [ // rumah pastel SEGAR: biru bubuk, pink, mint, krem, lavendel, peach
+    [0.5, 0.75, 0.95], [0.98, 0.6, 0.66], [0.5, 0.9, 0.62],
+    [0.98, 0.88, 0.5], [0.75, 0.62, 0.95], [0.98, 0.7, 0.45],
   ],
-  beach: [ // putih/krem + aksen pastel laut
-    [0.95, 0.92, 0.86], [0.82, 0.9, 0.9], [0.94, 0.86, 0.78],
-    [0.88, 0.92, 0.84], [0.93, 0.84, 0.82], [0.86, 0.88, 0.94],
+  beach: [ // putih/krem SEGAR + aksen pastel laut yang jelas
+    [0.98, 0.94, 0.82], [0.7, 0.92, 0.92], [0.98, 0.82, 0.6],
+    [0.75, 0.94, 0.68], [0.98, 0.72, 0.68], [0.72, 0.82, 0.98],
   ],
-  port: [ // industrial pastel kalem: biru dusty, sage, terakota lembut, pasir
-    [0.62, 0.7, 0.78], [0.68, 0.76, 0.64], [0.82, 0.64, 0.54],
-    [0.8, 0.74, 0.6], [0.66, 0.72, 0.7], [0.76, 0.66, 0.6],
+  port: [ // industrial SEGAR: biru baja, sage, terakota, pasir — tetap kalem tapi hidup
+    [0.45, 0.68, 0.9], [0.5, 0.82, 0.55], [0.92, 0.55, 0.38],
+    [0.95, 0.75, 0.4], [0.4, 0.8, 0.72], [0.88, 0.6, 0.45],
   ],
-  forest: [ // kabin kayu hangat, kalem
-    [0.72, 0.62, 0.5], [0.66, 0.58, 0.46], [0.76, 0.68, 0.56],
-    [0.62, 0.6, 0.5], [0.7, 0.6, 0.52], [0.78, 0.7, 0.58],
+  forest: [ // kabin kayu hangat SEGAR, tidak abu-abu
+    [0.82, 0.6, 0.35], [0.75, 0.52, 0.3], [0.88, 0.68, 0.42],
+    [0.68, 0.55, 0.38], [0.8, 0.58, 0.35], [0.9, 0.72, 0.45],
   ],
 };
 
@@ -376,7 +379,7 @@ export function generateCity(seed = SEED) {
       b.d = Math.min(40, Math.round(b.d * 1.25));
       b.floors = Math.max(1, Math.round(b.h / 3.2));
       b.shape = shapes[Math.floor(trand() * shapes.length)];
-      if (b.shape === 'glass') b.color = [0.55, 0.72, 0.88]; // glass blue
+      if (b.shape === 'glass') b.color = [0.4, 0.7, 0.98]; // glass blue (fresher, Mu 23 Nov)
       // No facade flush against a road — the grown tower must sit back
       // from its block edge like every other building. Shrink the
       // footprint to fit the SETBACK_M margin, centre stays: shrinking
@@ -663,9 +666,9 @@ export function generateCity(seed = SEED) {
     const hospital = nearest('downtown', 0, -100);
     if (hospital) { hospital.landmark = 'hospital'; hospital.color = [0.95, 0.95, 0.95]; }
     const police = nearest('commercial', 100, 100);
-    if (police) { police.landmark = 'police'; police.color = [0.5, 0.62, 0.85]; }
+    if (police) { police.landmark = 'police'; police.color = [0.35, 0.55, 0.95]; }
     const school = nearest('residential', -200, 200);
-    if (school) { school.landmark = 'school'; school.color = [0.92, 0.85, 0.55]; }
+    if (school) { school.landmark = 'school'; school.color = [0.98, 0.82, 0.35]; }
   }
 
   const zoneCounts = {};
