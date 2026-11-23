@@ -1,24 +1,29 @@
 // Teluk Rimba — marked parking zones (Phase I, Mu).
-// For LARGE buildings whose yard has space: a paved parking lot with
-// 2 rows of 5 bays (2.5x5 m) facing a 6 m central lane, white bay lines,
-// P symbols in the empty bays, ONE disabled bay per lot (blue + white
-// wheelchair pictogram), white arrows on the lane, 2-4 parked cars
-// nose-in. All code-made, derived from the shared city dataset.
-// The textured ground symbols use OPAQUE cell backgrounds (the textured
-// program outputs alpha 1.0, so transparent canvas pixels would render
-// black): each cell is a painted square on the pad. The atlas canvas is
-// only drawn in the browser — buildParking runs in Node tests too, where
-// document does not exist, so the canvas is created lazily (null in Node)
-// while the panel geometry (pure positions + UVs) is always built.
+// ADAPTIVE lots: each lot is sized to the EMPTY YARD of its own big
+// building — wider yards get more bay columns, deeper yards get a second
+// row, small yards get a smaller lot. Standards kept everywhere: bay
+// 2.5x5 m, 6 m central lane, ONE disabled bay per lot (blue + white
+// wheelchair pictogram), P symbols in empty bays, white arrows on the
+// lane, parked cars nose-in (2-4+ per lot, more in bigger lots, some
+// bays always left empty). All code-made, derived from the shared city
+// dataset. The textured ground symbols use OPAQUE cell backgrounds (the
+// textured program outputs alpha 1.0, so transparent canvas pixels would
+// render black): each cell is a painted square on the pad. The atlas
+// canvas is only drawn in the browser — buildParking runs in Node tests
+// too, where document does not exist, so the canvas is created lazily
+// (null in Node) while the panel geometry (pure positions + UVs) is
+// always built.
 import { mulberry32, range, rangeInt } from './rng.js';
 import { riverDistance } from './city.js';
 import { emptyGeom, plainBox, prismY } from './gl.js';
 import { distinctColor } from './vehicles.js';
 
 // Lot layout (local frame: u along the row, v along the depth).
-const LOT_U = 12.5; // 5 bays x 2.5 m
-const LOT_V = 16;   // 5 m bay + 6 m lane + 5 m bay
+// Width = cols * BAY_W (adaptive, 2..12 cols); depth = rows * BAY_D +
+// LANE_W (2 rows = 16 m, 1 row = 11 m).
 const BAY_W = 2.5, BAY_D = 5, LANE_W = 6;
+const MAX_COLS = 16, MIN_COLS = 2; // 40 m max lot width — a bigger lot would eat the whole yard
+const MAX_P_PER_LOT = 10; // cap P symbols per lot (bounds the atlas)
 const PAD_COL = [0.32, 0.32, 0.34];   // dark asphalt pad
 const LINE_COL = [0.92, 0.92, 0.9];   // white paint
 const PAD_Y = 0.08, LINE_Y = 0.09, SYM_Y = 0.1;
@@ -229,50 +234,56 @@ export function buildParking(city) {
     const nx = Math.sin(b.rot), nz = Math.cos(b.rot); // front normal
     const ax = Math.cos(b.rot), az = -Math.sin(b.rot); // across
     const sibs = city.buildings.filter((s) => s.x >= blk.x0 && s.x <= blk.x1 && s.z >= blk.z0 && s.z <= blk.z1);
-    // Candidate lot centres: both sides (v axis along the across
+    // Candidate lot sides: both sides (v axis along the across
     // direction, R = rot - PI/2) and behind (v axis along the front
     // normal, R = rot). Never in front of the door.
-    const cands = [];
-    for (const side of [1, -1]) {
-      cands.push({
-        cx: b.x + ax * side * (fw / 2 + 2 + LOT_V / 2),
-        cz: b.z + az * side * (fw / 2 + 2 + LOT_V / 2),
-        R: b.rot - Math.PI / 2,
-      });
-    }
-    cands.push({
-      cx: b.x - nx * (fd / 2 + 2 + LOT_V / 2),
-      cz: b.z - nz * (fd / 2 + 2 + LOT_V / 2),
-      R: b.rot,
-    });
+    const sides = [
+      { dir: [ax, az], gap: fw / 2, R: b.rot - Math.PI / 2 },
+      { dir: [-ax, -az], gap: fw / 2, R: b.rot - Math.PI / 2 },
+      { dir: [-nx, -nz], gap: fd / 2, R: b.rot },
+    ];
+    // Adaptive sizing: try the LARGEST lot first (2 rows, most columns)
+    // and shrink until one fits the yard — wider yards get more bay
+    // columns, deeper yards get the second row, small yards get a
+    // small lot. The clearance checks below are the measuring tape.
     let placed = null;
-    for (const c of cands) {
-      // World axis-aligned rect of the lot (rot is 0 or PI/2, so the
-      // lot is axis-aligned) — computed from the lot's local corners.
-      const corners = [
-        toWorld(c.cx, c.cz, c.R, -LOT_U / 2, -LOT_V / 2),
-        toWorld(c.cx, c.cz, c.R, LOT_U / 2, -LOT_V / 2),
-        toWorld(c.cx, c.cz, c.R, -LOT_U / 2, LOT_V / 2),
-        toWorld(c.cx, c.cz, c.R, LOT_U / 2, LOT_V / 2),
-      ];
-      const xs = corners.map((p) => p[0]), zs = corners.map((p) => p[1]);
-      const rect = {
-        x0: Math.min(...xs), x1: Math.max(...xs),
-        z0: Math.min(...zs), z1: Math.max(...zs),
-      };
-      // (1) Inside the block, >= 3 m from its edges.
-      if (rect.x0 < blk.x0 + 3 || rect.x1 > blk.x1 - 3 || rect.z0 < blk.z0 + 3 || rect.z1 > blk.z1 - 3) continue;
-      // (2) Clear of every building in the block (+1.5 m).
-      if (sibs.some((s) => rectsOverlap(rect, footprint(s), 1.5))) continue;
-      // (3) Clear of every door strip in the block (+1 m).
-      if (sibs.some((s) => rectsOverlap(rect, doorStripRect(s), 1))) continue;
-      // (4) Clear of the river.
-      const pts = [[rect.x0, rect.z0], [rect.x1, rect.z0], [rect.x0, rect.z1], [rect.x1, rect.z1], [c.cx, c.cz]];
-      if (pts.some(([x, z]) => riverDistance(x, z) < 25)) continue;
-      // (5) Clear of other lots (+2 m).
-      if (lots.some((l) => rectsOverlap(rect, l.rect, 2))) continue;
-      placed = { ...c, rect, building: b };
-      break;
+    for (const s of sides) {
+      for (const rows of [2, 1]) {
+        const depth = rows * BAY_D + LANE_W; // 16 m or 11 m
+        for (let cols = MAX_COLS; cols >= MIN_COLS; cols--) {
+          const width = cols * BAY_W;
+          const cx = b.x + s.dir[0] * (s.gap + 2 + depth / 2);
+          const cz = b.z + s.dir[1] * (s.gap + 2 + depth / 2);
+          // World axis-aligned rect (rot is 0 or PI/2, so the lot is
+          // axis-aligned) — computed from the lot's local corners.
+          const corners = [
+            toWorld(cx, cz, s.R, -width / 2, -depth / 2),
+            toWorld(cx, cz, s.R, width / 2, -depth / 2),
+            toWorld(cx, cz, s.R, -width / 2, depth / 2),
+            toWorld(cx, cz, s.R, width / 2, depth / 2),
+          ];
+          const xs = corners.map((p) => p[0]), zs = corners.map((p) => p[1]);
+          const rect = {
+            x0: Math.min(...xs), x1: Math.max(...xs),
+            z0: Math.min(...zs), z1: Math.max(...zs),
+          };
+          // (1) Inside the block, >= 3 m from its edges.
+          if (rect.x0 < blk.x0 + 3 || rect.x1 > blk.x1 - 3 || rect.z0 < blk.z0 + 3 || rect.z1 > blk.z1 - 3) continue;
+          // (2) Clear of every building in the block (+1.5 m).
+          if (sibs.some((x) => rectsOverlap(rect, footprint(x), 1.5))) continue;
+          // (3) Clear of every door strip in the block (+1 m).
+          if (sibs.some((x) => rectsOverlap(rect, doorStripRect(x), 1))) continue;
+          // (4) Clear of the river.
+          const pts = [[rect.x0, rect.z0], [rect.x1, rect.z0], [rect.x0, rect.z1], [rect.x1, rect.z1], [cx, cz]];
+          if (pts.some(([x, z]) => riverDistance(x, z) < 25)) continue;
+          // (5) Clear of other lots (+2 m).
+          if (lots.some((l) => rectsOverlap(rect, l.rect, 2))) continue;
+          placed = { cx, cz, R: s.R, rect, building: b, width, depth, rows, cols };
+          break;
+        }
+        if (placed) break;
+      }
+      if (placed) break;
     }
     if (!placed) continue;
     lots.push(placed);
@@ -284,43 +295,67 @@ export function buildParking(city) {
     const u0 = (cell * CELL) / atlasW, u1 = ((cell + 1) * CELL) / atlasW;
     return [u0, 0, u1, 1]; // single row: vBottom 0, vTop 1
   };
+  let biggest = null;
   for (const lot of lots) {
-    const { cx, cz, R } = lot;
+    const { cx, cz, R, width: W, depth: D, rows, cols } = lot;
+    if (!biggest || cols * rows > biggest.cols * biggest.rows) biggest = lot;
     // Pad (dark asphalt over the yard paving).
-    quadUpRot(markings, cx, cz, R, -LOT_U / 2, -LOT_V / 2, LOT_U / 2, LOT_V / 2, PAD_Y, PAD_COL);
-    // Bay lines: long lines along u at v = -8, -3, +3, +8.
-    for (const v of [-LOT_V / 2, -LANE_W / 2, LANE_W / 2, LOT_V / 2]) {
-      quadUpRot(markings, cx, cz, R, -LOT_U / 2, v - 0.06, LOT_U / 2, v + 0.06, LINE_Y, LINE_COL);
+    quadUpRot(markings, cx, cz, R, -W / 2, -D / 2, W / 2, D / 2, PAD_Y, PAD_COL);
+    // Bay long lines along u: outer edges + lane edges (deduped — on a
+    // 1-row lot the far lane edge IS the outer edge).
+    const laneLo = -D / 2 + BAY_D, laneHi = laneLo + LANE_W; // lane v-range
+    for (const v of [...new Set([-D / 2, laneLo, laneHi, D / 2])]) {
+      quadUpRot(markings, cx, cz, R, -W / 2, v - 0.06, W / 2, v + 0.06, LINE_Y, LINE_COL);
     }
-    // Divider lines along v at u = -6.25 + 2.5k, both rows.
-    for (let k = 0; k <= 5; k++) {
-      const u = -LOT_U / 2 + k * BAY_W;
-      quadUpRot(markings, cx, cz, R, u - 0.06, -LOT_V / 2, u + 0.06, -LANE_W / 2, LINE_Y, LINE_COL);
-      quadUpRot(markings, cx, cz, R, u - 0.06, LANE_W / 2, u + 0.06, LOT_V / 2, LINE_Y, LINE_COL);
+    // Divider lines along v at u = -W/2 + 2.5k, for each row.
+    const rowRanges = rows === 2
+      ? [[-D / 2, -D / 2 + BAY_D], [D / 2 - BAY_D, D / 2]]
+      : [[-D / 2, -D / 2 + BAY_D]];
+    for (let k = 0; k <= cols; k++) {
+      const u = -W / 2 + k * BAY_W;
+      for (const [v0, v1] of rowRanges) {
+        quadUpRot(markings, cx, cz, R, u - 0.06, v0, u + 0.06, v1, LINE_Y, LINE_COL);
+      }
     }
     // Arrows on the lane (one-way, pointing +u): shaft + triangle head.
-    for (const au of [-3, 3]) {
-      quadUpRot(markings, cx, cz, R, au - 0.9, -0.18, au + 0.5, 0.18, LINE_Y, LINE_COL);
+    // 2 arrows on narrow lots, 3 on wide ones (>= 20 m).
+    const laneV = (laneLo + laneHi) / 2;
+    const arrowUs = W >= 20 ? [-W / 3, 0, W / 3] : [-W / 4, W / 4];
+    for (const au of arrowUs) {
+      quadUpRot(markings, cx, cz, R, au - 0.9, laneV - 0.18, au + 0.5, laneV + 0.18, LINE_Y, LINE_COL);
       triUpRot(markings, cx, cz, R,
-        [au + 0.5, 0.45], [au + 1.4, 0], [au + 0.5, -0.45], LINE_Y, LINE_COL);
+        [au + 0.5, laneV + 0.45], [au + 1.4, laneV], [au + 0.5, laneV - 0.45], LINE_Y, LINE_COL);
     }
-    // Bays: row A (v < 0, disabled bay is k=0) and row B (v > 0).
+    // Bays: row A (v < 0, disabled bay is k=0) and row B (v > 0, if any).
     // Cars nose-in: nose toward the outer edge (row A: -v, row B: +v).
+    // Car yaw: forward (+x local) must map to +/-v — rotY gives
+    // (cos a, -sin a) for local +x, and +v is (sin R, cos R), so
+    // forward -v needs a = R + PI/2, forward +v needs a = R - PI/2
+    // (verified numerically: the car's 4.1 m axis then lies along v).
     const carBays = [];
-    for (let k = 0; k < 5; k++) carBays.push({ row: 'A', k });
-    for (let k = 0; k < 5; k++) carBays.push({ row: 'B', k });
+    for (let k = 0; k < cols; k++) carBays.push({ row: 'A', k });
+    if (rows === 2) for (let k = 0; k < cols; k++) carBays.push({ row: 'B', k });
+    const rowV = (row) => row === 'A' ? -D / 2 + BAY_D / 2 : D / 2 - BAY_D / 2;
     // Disabled bay: row A, first bay — no car, blue cell + wheelchair.
     const disabled = { row: 'A', k: 0 };
-    const avail = carBays.filter((b) => !(b.row === disabled.row && b.k === disabled.k));
-    const nCars = rangeInt(rand, 2, 4);
+    const avail = carBays.filter((bb) => !(bb.row === disabled.row && bb.k === disabled.k));
+    // Cars scale with the lot: ~30% of bays, 2..8 per lot.
+    const nCars = Math.min(8, Math.max(2, Math.round(carBays.length * 0.3)));
     const chosen = [];
     for (let i = 0; i < nCars && avail.length; i++) {
       chosen.push(avail.splice(Math.floor(rand() * avail.length), 1)[0]);
     }
-    const chosenKey = new Set(chosen.map((b) => b.row + b.k));
+    const chosenKey = new Set(chosen.map((bb) => bb.row + bb.k));
+    // P symbols: a random subset of the empty bays, capped per lot.
+    const emptyBays = carBays.filter((bb) => !chosenKey.has(bb.row + bb.k) && !(bb.row === disabled.row && bb.k === disabled.k));
+    const pBays = [];
+    for (let i = 0; i < Math.min(MAX_P_PER_LOT, emptyBays.length); i++) {
+      pBays.push(emptyBays.splice(Math.floor(rand() * emptyBays.length), 1)[0]);
+    }
+    const pKey = new Set(pBays.map((bb) => bb.row + bb.k));
     for (const bay of carBays) {
-      const bu = -LOT_U / 2 + bay.k * BAY_W + BAY_W / 2; // bay centre u
-      const bv = bay.row === 'A' ? -(LANE_W / 2 + BAY_D / 2) : (LANE_W / 2 + BAY_D / 2);
+      const bu = -W / 2 + bay.k * BAY_W + BAY_W / 2; // bay centre u
+      const bv = rowV(bay.row);
       const key = bay.row + bay.k;
       if (bay.row === disabled.row && bay.k === disabled.k) {
         // Disabled bay: blue wheelchair cell (its background IS the blue
@@ -340,10 +375,12 @@ export function buildParking(city) {
         bays++;
         continue;
       }
-      // Empty bay: white P on the pad (top of the P toward the outer edge).
-      const [wx, wz] = toWorld(cx, cz, R, bu, bv);
-      addGroundSymbol(symbols, wx, wz, R + (bay.row === 'A' ? Math.PI : 0), 1.6, 1.6, cellUV(P_CELL));
-      pSymbols++;
+      if (pKey.has(key)) {
+        // Empty bay with a P: top of the P toward the outer edge.
+        const [wx, wz] = toWorld(cx, cz, R, bu, bv);
+        addGroundSymbol(symbols, wx, wz, R + (bay.row === 'A' ? Math.PI : 0), 1.6, 1.6, cellUV(P_CELL));
+        pSymbols++;
+      }
       bays++;
     }
   }
@@ -351,7 +388,10 @@ export function buildParking(city) {
   return {
     markings, cars,
     symbols: { panelGeom: symbols, atlasCanvas: drawParkingAtlas() },
-    lots: lots.map((l) => ({ rect: l.rect, building: { x: l.building.x, z: l.building.z, zone: l.building.zone } })),
-    counts: { lots: lots.length, bays, cars: parked, symbols: pSymbols },
+    lots: lots.map((l) => ({ rect: l.rect, width: l.width, depth: l.depth, rows: l.rows, cols: l.cols, building: { x: l.building.x, z: l.building.z, zone: l.building.zone } })),
+    counts: {
+      lots: lots.length, bays, cars: parked, symbols: pSymbols,
+      biggest: biggest ? { width: biggest.width, depth: biggest.depth, rows: biggest.rows, cols: biggest.cols, bays: biggest.rows * biggest.cols, centre: [(biggest.rect.x0 + biggest.rect.x1) / 2, (biggest.rect.z0 + biggest.rect.z1) / 2] } : null,
+    },
   };
 }

@@ -191,8 +191,12 @@ export function buildPlotDressing(city) {
   // lines + arrows merge into the paving mesh; the lot cars merge into
   // the props mesh; the P / wheelchair symbols ride one textured mesh.
   const parking = buildParking(city);
-  paving.pos.push(...parking.markings.pos); paving.nrm.push(...parking.markings.nrm); paving.col.push(...parking.markings.col);
-  props.pos.push(...parking.cars.pos); props.nrm.push(...parking.cars.nrm); props.col.push(...parking.cars.col);
+  // Chunked push: spreading a >~120k-element array as call arguments
+  // blows the stack (RangeError) — the adaptive lots' car mesh is now
+  // ~240k floats. Push in 50k-element chunks instead.
+  const pushAll = (dst, src) => { for (let i = 0; i < src.length; i += 50000) dst.push(...src.slice(i, i + 50000)); };
+  pushAll(paving.pos, parking.markings.pos); pushAll(paving.nrm, parking.markings.nrm); pushAll(paving.col, parking.markings.col);
+  pushAll(props.pos, parking.cars.pos); pushAll(props.nrm, parking.cars.nrm); pushAll(props.col, parking.cars.col);
   const lotRects = parking.lots.map((l) => l.rect);
   const lotHit = (x0, z0, x1, z1, m = 0) => lotRects.some((r) => x0 - m < r.x1 && x1 + m > r.x0 && z0 - m < r.z1 && z1 + m > r.z0);
   // Decorative parked cars get distinct colours too (same allocator as
