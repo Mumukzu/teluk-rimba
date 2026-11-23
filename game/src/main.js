@@ -26,7 +26,7 @@ import { createAircraft } from './air.js';
 import { createAudio, createSettingsUI } from './audio.js';
 import { createShop, createCoins, createStunts, createCouriers, createShopUI, SHOP_POS, COIN_SPOTS } from './extras.js';
 import { saveGame, loadGame, clearSave } from './save.js';
-import { mat4TRS } from './gl.js';
+import { mat4TRS, mat4RotX, mat4Multiply } from './gl.js';
 
 const params = parseShotParams();
 // Test/screenshot mode (no start screen, no audio gesture): any of these
@@ -517,6 +517,7 @@ if (params.sim) {
   // buildDynamics (player.partMatrices), not as a static mesh.
   const activityPropsMesh = renderer.makePlayerMesh(peds.activityPropsGeom());
   const landmarks = renderer.landmarks;
+  const lively = renderer.lively; // smoke spots / neon glow / laundry (buildDynamics)
   const plotDressing = renderer.plotDressing; // yard fountain spots (animated water)
   let last = performance.now();
   let acc = 0;
@@ -842,6 +843,44 @@ if (params.sim) {
           tints: [m.board ? [0.3, 0.9, 0.5] : [1, 0.85, 0.2]],
         };
       }
+    }
+    // Lively city (Mu): smoke puffs, neon flicker, laundry sway.
+    // No flags/pennants — forbidden. All three ride dynamic meshes
+    // (render.js), refilled here every frame from renderer.lively.
+    if (lively) {
+      // Smoke: 2 puffs per spot, rising + drifting + growing, fading
+      // from mid-grey to pale as they age; loop with a per-spot phase.
+      const sm = { matrices: [], tints: [] };
+      for (const s of lively.smokeSpots) {
+        for (let k = 0; k < 2; k++) {
+          const age = (game.elapsed * 0.16 + s.phase + k * 0.5) % 1;
+          const sc = 0.9 + age * 2.4;
+          sm.matrices.push(mat4TRS(s.x + age * 7, s.y + age * 13, s.z + age * 1.5, 0, sc, sc * 0.8, sc));
+          const g = 0.5 + age * 0.28;
+          sm.tints.push([g, g, g + 0.03]);
+        }
+      }
+      dyn.smoke = sm;
+      // Neon halo: gentle flicker — brightness breathes 0.82..1.0 with
+      // a per-sign phase. Night only (render.js skips it by day).
+      if (lively.neonGlow.matrices.length) {
+        const ng = { matrices: lively.neonGlow.matrices, tints: [] };
+        for (let i = 0; i < lively.neonGlow.tints.length; i++) {
+          const f = 0.82 + 0.18 * Math.sin(game.elapsed * 2.5 + lively.neonGlow.phases[i]);
+          const t = lively.neonGlow.tints[i];
+          ng.tints.push([t[0] * f, t[1] * f, t[2] * f]);
+        }
+        dyn.neonGlow = ng;
+      }
+      // Laundry: each cloth swings around its line (local X axis) with
+      // a per-piece phase — a slow breeze, never a snap.
+      const la = { matrices: [], tints: [] };
+      for (const p of lively.laundryPieces) {
+        const sway = Math.sin(game.elapsed * 1.3 + p.phase) * 0.18;
+        la.matrices.push(mat4Multiply(mat4TRS(p.x, p.y, p.z, p.rotY, 1, 1, 1), mat4RotX(sway)));
+        la.tints.push(p.tint);
+      }
+      dyn.laundry = la;
     }
     return dyn;
   }

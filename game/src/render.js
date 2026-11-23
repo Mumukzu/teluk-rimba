@@ -291,7 +291,12 @@ export function createRenderer(canvas, city) {
   // Phase E2: hidden coins (spinning gold discs) + stunt ramps (wedges).
   addDyn(progs.unlitInst, plainBox(0.9, 0.9, 0.15, [1, 0.84, 0.2]), 12, 'coins');
   addDyn(progs.litInst, wedgeGeom(), 4, 'ramps');
-  // Flat 1x1 ground quad (up-facing) for headlight beams + water flow.
+  // Lively city (Mu): smoke puffs (chimneys + warungs), neon halo glow
+  // (night only, flickers), laundry cloth pieces (sway in the wind).
+  // All refilled every frame from main.js buildDynamics. (+3 draws.)
+  addDyn(progs.transpInst, plainBox(1, 1, 1, [1, 1, 1]), 160, 'smoke');
+  addDyn(progs.unlitInst, plainBox(1.25, 5.25, 0.06, [1, 1, 1]), 160, 'neonGlow');
+  addDyn(progs.litInst, lively.clothGeom, 200, 'laundry');
   const flatQuadGeom = (() => {
     const g = { pos: [], nrm: [], col: [] };
     const n = [0, 1, 0], white = [1, 1, 1];
@@ -436,11 +441,12 @@ export function createRenderer(canvas, city) {
       if (name === 'taillights' && light.isDay) continue;
       if (name === 'beamcones' && light.isDay) continue;
       if (name === 'beacons' && light.isDay) continue;
+      if (name === 'neonGlow' && light.isDay) continue; // neon halo: night only
       if (name === 'rain' && rainAmt < 0.05) continue;
       updateDynamicInstancedMesh(gl, entry.mesh, spec.matrices, spec.tints);
       const uniforms = { ...common, uModel: mat4Identity() };
       const blendAlpha = name.startsWith('vehglass_') ? 0.42
-        : { beam: 0.12, headbeams: 0.09, flow: 0.3, sea: 0.45, heliBeam: 0.15, beamcones: 0.24 }[name];
+        : { beam: 0.12, headbeams: 0.09, flow: 0.3, sea: 0.45, heliBeam: 0.15, beamcones: 0.24, smoke: 0.28 }[name];
       if (blendAlpha !== undefined) {
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);

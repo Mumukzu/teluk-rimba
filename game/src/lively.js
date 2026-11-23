@@ -378,6 +378,7 @@ export function buildLivelyMeshes(city) {
   // sidewalk edge, clear of intersections, river and buildings.
   const streetSmokeSpots = [];
   const streetCounts = { carts: 0, tents: 0, cafe: 0 };
+  const streetSpots = []; // every placed street-life item (test: river clearance)
   {
     const rand = mulberry32(20261123);
     const aabbs = buildingAABBs(city);
@@ -402,6 +403,7 @@ export function buildLivelyMeshes(city) {
         if (nearCross || !clearOfBuildings(x, z)) continue;
         if (placed.some((p) => Math.hypot(p.x - x, p.z - z) < 8)) continue;
         placed.push({ x, z });
+        streetSpots.push({ x, z });
         return { x, z, rot: horiz ? 0 : Math.PI / 2 };
       }
       return null;
@@ -550,6 +552,23 @@ export function buildLivelyMeshes(city) {
     roofUseCount++;
   }
 
+  // ---- Feature 6 (data): smoke spots + laundry cloth geometry ----
+  // Chimneys on ~15% of mid/tall roofs (a small brick stack in the
+  // clutter mesh, so the smoke has something to rise from) + the 12
+  // warung/cart spots from feature 4. Each spot emits 2 puffs (main.js
+  // cycles them); 70 spots x 2 = 140 puffs, capacity 160.
+  const smokeSpots = [...streetSmokeSpots];
+  for (const b of city.buildings) {
+    if (b.h < 12 || b.shape) continue;
+    if (hash01(b.x + 29, b.z + 7) >= 0.15) continue;
+    const cx = b.x + b.w * 0.2, cz = b.z + b.d * 0.2;
+    addBoxAt(clutter, 0.5, 1.2, 0.5, [0.55, 0.35, 0.3], cx, b.h + 1.1, cz, b.rot);
+    smokeSpots.push({ x: cx, y: b.h + 1.7, z: cz, phase: hash01(b.x + 31, b.z) });
+  }
+  // Cloth piece: a thin box with its TOP edge at y=0, so main.js can
+  // swing it around the laundry line with a single rotX (feature 6).
+  const clothGeom = translateGeom(plainBox(0.55, 0.75, 0.04, [1, 1, 1]), 0, -0.375, 0);
+
   return {
     stepped: { geom: unitBox, matrices: steppedMatrices, tints: steppedTints },
     pitched: { geom: pitchedRoofGeom(), matrices: pitchedMatrices, tints: pitchedTints },
@@ -560,12 +579,16 @@ export function buildLivelyMeshes(city) {
     neonGlow: { matrices: neonGlowMatrices, tints: neonGlowTints, phases: neonGlowPhases },
     laundryPieces,
     streetSmokeSpots,
+    streetSpots,
+    smokeSpots,
+    clothGeom,
     counts: {
       stepped: steppedMatrices.length, pitched: pitchedMatrices.length,
       curtains: curtainMatrices.length, laundry: laundryPieces.length,
       murals: muralPicks.length, neon: neonCount,
       carts: streetCounts.carts, tents: streetCounts.tents, cafe: streetCounts.cafe,
       roofUse: roofUseCount, roofUseKinds,
+      smokeSpots: smokeSpots.length,
       clutterTris: clutter.pos.length / 9,
     },
   };
