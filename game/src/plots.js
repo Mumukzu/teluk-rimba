@@ -4,7 +4,7 @@
 // All code-made, all derived from the shared city dataset, deterministic.
 // Pure geometry (no WebGL, no DOM) — the renderer draws it as static meshes.
 import { mulberry32, range, rangeInt } from './rng.js';
-import { riverDistance } from './city.js';
+import { riverDistance, ROAD_LINES, ASPHALT_HALF } from './city.js';
 import { emptyGeom, plainBox } from './gl.js';
 import { distinctColor, parkedCarGeom } from './vehicles.js';
 
@@ -331,36 +331,43 @@ export function buildPlotDressing(city) {
       }
       return null;
     };
-    const nItems = yardRand() < 0.4 ? 2 : 1;
+    // Trees first (Mu: several trees per yard, not one or two): 2-4 per
+    // building, mixed sizes, in the ring around the footprint. Scale the
+    // tree (addPart has no scale): fresh geom per tree, uniform scale
+    // keeps the normals valid as directions.
+    const plantTree = () => {
+      const s = tryPlace(1.5, 1.5, 1.5);
+      if (!s) return false;
+      const sc = range(yardRand, 0.8, 1.5);
+      const tree = yardTreeGeom();
+      for (let i = 0; i < tree.pos.length; i++) tree.pos[i] *= sc;
+      addPart(props, tree, s.x, 0.06, s.z, range(yardRand, 0, Math.PI * 2));
+      yardTrees++;
+      return true;
+    };
+    const treeRoll = yardRand();
+    const nTrees = treeRoll < 0.25 ? 2 : treeRoll < 0.75 ? 3 : 4;
     let got = 0;
+    for (let k = 0; k < nTrees; k++) {
+      if (plantTree()) got++;
+    }
+    // Then 1-2 mixed items (flowers / bench / car / fountain).
+    const nItems = yardRand() < 0.5 ? 2 : 1;
     for (let k = 0; k < nItems; k++) {
       const roll = yardRand();
       let kind;
-      if (roll < 0.32) kind = 'tree';
-      else if (roll < 0.52) kind = 'flowers';
-      else if (roll < 0.68) kind = 'bench';
-      else if (roll < 0.84) kind = 'car';
-      else if (roll < 0.92) kind = 'fountain';
-      else kind = 'tree';
+      if (roll < 0.32) kind = 'flowers';
+      else if (roll < 0.6) kind = 'bench';
+      else if (roll < 0.88) kind = 'car';
+      else kind = 'fountain';
       if (kind === 'fountain') {
         // Fountains are rare and need a bigger yard: only in the larger
         // zones, capped city-wide so the animated-water instances stay
         // far under the flow mesh capacity.
         const bigZone = b.zone === 'downtown' || b.zone === 'commercial' || b.zone === 'beach' || b.zone === 'port';
-        if (!bigZone || yardFountains >= 24) kind = 'tree';
+        if (!bigZone || yardFountains >= 24) kind = 'flowers';
       }
-      if (kind === 'tree') {
-        const s = tryPlace(1.5, 1.5, 1.5);
-        if (!s) continue;
-        // Scale the tree (addPart has no scale): fresh geom per tree,
-        // uniform scale keeps the normals valid as directions.
-        const sc = range(yardRand, 0.8, 1.3);
-        const tree = yardTreeGeom();
-        for (let i = 0; i < tree.pos.length; i++) tree.pos[i] *= sc;
-        addPart(props, tree, s.x, 0.06, s.z, range(yardRand, 0, Math.PI * 2));
-        yardTrees++;
-        got++;
-      } else if (kind === 'flowers') {
+      if (kind === 'flowers') {
         const s = tryPlace(1.0, 1.0, 1.0);
         if (!s) continue;
         for (let f = 0; f < 4; f++) {
@@ -394,8 +401,69 @@ export function buildPlotDressing(city) {
     if (got > 0) yardDressed++;
   }
 
+  // --- Street-side trees (Mu: denser cover along streets where space
+  // allows): kerb strip, clear of intersections (14 m, so no zebra is
+  // ever covered), the river, and the existing street trees / palms /
+  // lamps (>= 4 m). Same yard-tree shape, merged into the same props
+  // mesh — zero new draw calls.
+  const streetRand = mulberry32(20261133);
+  let streetTrees2 = 0;
+  const occ = new Map();
+  const occKey = (x, z) => Math.floor(x / 5) + ',' + Math.floor(z / 5);
+  for (const p of [...city.streetTrees, ...city.palmTrees, ...city.lamps]) {
+    const k = occKey(p.x, p.z);
+    if (!occ.has(k)) occ.set(k, []);
+    occ.get(k).push(p);
+  }
+  const nearVeg = (x, z, d = 4) => {
+    const cx = Math.floor(x / 5), cz = Math.floor(z / 5);
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+      for (const p of occ.get((cx + i) + ',' + (cz + j)) || []) {
+        if (Math.hypot(p.x - x, p.z - z) < d) return true;
+      }
+    }
+    return false;
+  };
+  const nearCrossing = (x, z) => {
+    for (const Lx of ROAD_LINES) {
+      if (Math.abs(x - Lx) >= 14) continue;
+      for (const Lz of ROAD_LINES) {
+        if (Math.abs(z - Lz) < 14) return true;
+      }
+    }
+    return false;
+  };
+  const streetSpot = (x, z) => {
+    if (Math.abs(x) < 280 && Math.abs(z) < 280) return false; // downtown: no street trees
+    if (nearCrossing(x, z)) return false;
+    if (riverDistance(x, z) < 20) return false;
+    if (nearVeg(x, z)) return false;
+    return true;
+  };
+  const plantStreetTree = (x, z) => {
+    const sc = range(streetRand, 0.9, 1.4);
+    const tree = yardTreeGeom();
+    for (let i = 0; i < tree.pos.length; i++) tree.pos[i] *= sc;
+    addPart(props, tree, x, 0.06, z, range(streetRand, 0, Math.PI * 2));
+    streetTrees2++;
+    const k = occKey(x, z);
+    if (!occ.has(k)) occ.set(k, []);
+    occ.get(k).push({ x, z });
+  };
+  for (const L of ROAD_LINES) {
+    const off = ASPHALT_HALF(L) + 1.5;
+    for (let s = -580; s <= 580; s += 20) {
+      for (const side of [-1, 1]) {
+        const jx = s + range(streetRand, -4, 4), jy = L + side * off;
+        if (streetSpot(jx, jy)) plantStreetTree(jx, jy);
+        const jx2 = L + side * off, jy2 = s + range(streetRand, -4, 4);
+        if (streetSpot(jx2, jy2)) plantStreetTree(jx2, jy2);
+      }
+    }
+  }
+
   return {
     paving, props, fountainSpots,
-    counts: { blocks: dressed.length, cars, fences, flowerBeds: flowers, benches, bins, pots, yardTrees, yardBenches, yardCars, yardFlowers, yardFountains, yardDressed },
+    counts: { blocks: dressed.length, cars, fences, flowerBeds: flowers, benches, bins, pots, yardTrees, yardBenches, yardCars, yardFlowers, yardFountains, yardDressed, streetTrees: streetTrees2 },
   };
 }
