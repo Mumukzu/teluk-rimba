@@ -736,10 +736,10 @@ if (params.sim) {
       // Near-shore bands: always several in the bay view. x wraps in
       // [620, 900] (the strip the bay camera sees), z spread over the
       // beachfront, so the sea never reads empty from the shore.
-      for (let k = 0; k < 24; k++) {
+      for (let k = 0; k < 40; k++) {
         const nx = 900 - ((game.elapsed * 3 + k * 37) % 280);
         const nz = -600 + ((k * 211) % 1200);
-        const nlen = 30 + ((k * 29) % 30);
+        const nlen = 60 + ((k * 29) % 40);
         const nwdt = 4 + ((k * 7) % 10) / 10 * 2;
         fl.matrices.push(mat4TRS(nx, -1.05, nz, 0, nwdt, 1, nlen));
         fl.tints.push([0.92, 0.97, 1]);
