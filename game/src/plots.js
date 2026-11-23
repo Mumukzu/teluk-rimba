@@ -584,9 +584,63 @@ export function buildPlotDressing(city) {
     }
   }
 
+  // --- Beachfront parks (Mu): the promenade strip between the beach
+  // road and the sand was bare paving. Three small parks (z -240, 0,
+  // 240), each with a paved footpath, benches facing the sea, flower
+  // beds, trees and a low fence along the sand edge — all merged into
+  // the same paving/props meshes, zero new draw calls. The strip never
+  // blocks the beach road (x 600) or the sand (x > 615).
+  let beachParks = 0, beachBenches = 0, beachTrees = 0, beachFlowers = 0;
+  for (const pz of [-240, 0, 240]) {
+    // Paved footpath (running-bond tiles, same as the yards).
+    quadUp(paving, 602, pz - 10, 613, pz + 10, 0.06, PAVE_GROUT);
+    for (let z = pz - 10; z < pz + 10; z += 2) {
+      for (let x = 602; x < 613; x += 4) {
+        const v = range(rand, -0.02, 0.02);
+        quadUp(paving, x + 0.06, z + 0.06, Math.min(x + 3.94, 613), z + 1.94, 0.07,
+          [0.78 + v, 0.76 + v, 0.72 + v]);
+      }
+    }
+    // Green lawn patch in the middle of the park.
+    quadUp(paving, 604, pz - 4, 611, pz + 4, 0.08, LAWN);
+    // Benches facing the sea (east), two per park.
+    for (const bz of [pz - 7, pz + 7]) {
+      const brot = Math.PI / 2; // seat faces +x (the sea)
+      const seat = plainBox(2.4, 0.12, 0.7, BENCH_COL);
+      for (let i = 0; i < seat.pos.length; i += 3) seat.pos[i + 1] += 0.5;
+      const back = plainBox(2.4, 0.6, 0.1, BENCH_COL);
+      for (let i = 0; i < back.pos.length; i += 3) { back.pos[i + 1] += 0.85; back.pos[i + 2] -= 0.32; }
+      addPart(props, seat, 606, 0.06, bz, brot);
+      addPart(props, back, 606, 0.06, bz, brot);
+      beachBenches++;
+    }
+    // Flower beds: two clusters of tiny bright blooms.
+    for (const [fx, fz] of [[604, pz - 8], [610, pz + 8]]) {
+      for (let f = 0; f < 4; f++) {
+        const bloom = plainBox(0.35, 0.3, 0.35, FLOWERS[Math.floor(rand() * FLOWERS.length)]);
+        for (let i = 0; i < bloom.pos.length; i += 3) bloom.pos[i + 1] += 0.2;
+        addPart(props, bloom, fx + range(rand, -0.8, 0.8), 0.06, fz + range(rand, -0.8, 0.8), 0);
+      }
+      beachFlowers++;
+    }
+    // Trees: three palms/trees per park, never in a row.
+    for (const [tx, tz] of [[603, pz - 2], [612, pz + 2], [608, pz - 9]]) {
+      const sc = range(rand, 0.9, 1.3);
+      const tree = yardTreeGeom();
+      for (let i = 0; i < tree.pos.length; i++) tree.pos[i] *= sc;
+      addPart(props, tree, tx, 0.06, tz, range(rand, 0, Math.PI * 2));
+      beachTrees++;
+    }
+    // Low fence along the sand edge (x 613.5).
+    const fence = plainBox(0.12, 0.9, 20, FENCE_COL);
+    for (let i = 0; i < fence.pos.length; i += 3) fence.pos[i + 1] += 0.51;
+    addPart(props, fence, 613.5, 0.06, pz, 0);
+    beachParks++;
+  }
+
   return {
     paving, props, fountainSpots,
     parkingSymbols: parking.symbols,
-    counts: { blocks: dressed.length, cars, fences, flowerBeds: flowers, benches, bins, pots, yardTrees, yardBenches, yardCars, yardFlowers, yardFountains, yardDressed, yardLawns, streetTrees: streetTrees2, kerbCars, simpleCars, parkingLots: parking.counts.lots, parkingCars: parking.counts.cars, parkingBays: parking.counts.bays, parkingSymbols: parking.counts.symbols },
+    counts: { blocks: dressed.length, cars, fences, flowerBeds: flowers, benches, bins, pots, yardTrees, yardBenches, yardCars, yardFlowers, yardFountains, yardDressed, yardLawns, streetTrees: streetTrees2, kerbCars, simpleCars, parkingLots: parking.counts.lots, parkingCars: parking.counts.cars, parkingBays: parking.counts.bays, parkingSymbols: parking.counts.symbols, beachParks, beachBenches, beachTrees, beachFlowers },
   };
 }
