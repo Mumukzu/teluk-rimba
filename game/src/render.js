@@ -299,6 +299,7 @@ export function createRenderer(canvas, city) {
   addDyn(progs.unlitInst, headlightGeom(), 240, 'bikelights');
   addDyn(progs.transpInst, beamConeGeom(), 260, 'beamcones');
   addDyn(progs.unlitInst, beaconGeom(), 8, 'beacons');
+  addDyn(progs.unlitInst, plainBox(1, 1, 1, [1, 1, 1]), 16, 'tracers'); // police gunfire (Mu 24 Nov 2026): tracer line + muzzle flash per shot, refilled from main.js; +1 draw while any shot is live, +0 when empty
   addDyn(progs.transpInst, landmarks.beamGeom, 1, 'beam');
   // Aircraft: police helicopter (body + spinning rotor), daytime plane,
   // heli spotlight cone (night only), mission marker column.

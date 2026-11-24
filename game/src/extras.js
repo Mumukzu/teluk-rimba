@@ -15,7 +15,7 @@ export const SHOP_ITEMS = [
   { id: 'pistol', name: 'Pistol', price: 250, rank: 0, kind: 'weapon', desc: 'Fire with F — 12 rounds included' },
   { id: 'ammo', name: 'Ammo Pack (+24)', price: 60, rank: 0, kind: 'ammo', desc: 'Refills pistol ammo', needs: 'pistol' },
   { id: 'drink', name: 'Energy Drink', price: 30, rank: 0, kind: 'drink', desc: 'Press R: 30 s speed boost' },
-  { id: 'medkit', name: 'Medkit', price: 80, rank: 1, kind: 'medkit', desc: 'Press Q to use: lose 1 wanted star' },
+  { id: 'medkit', name: 'Medkit', price: 80, rank: 1, kind: 'medkit', desc: 'Press Q to use: restore 50 health' },
   { id: 'repair', name: 'Vehicle Repair', price: 100, rank: 1, kind: 'repair', desc: 'Fix your vehicle to full condition' },
   { id: 'armor', name: 'Body Armor', price: 150, rank: 2, kind: 'armor', desc: 'Halves the busted fine once' },
 ];
@@ -81,13 +81,17 @@ export function createShop(ctx) {
     return 'fired';
   }
 
-  // Medkit (Q): patch up, lose one wanted star.
+  // Medkit (Q): patch up, restore 50 health (capped at 100). With no
+  // medkits, or at full health, it does nothing. (Before 24 Nov 2026 it
+  // dropped a wanted star instead; Mu's police-shooting order gave
+  // medkits this real purpose — the police now deal damage.)
   function useMedkit() {
     if (state.medkits <= 0) { hint('No medkits — buy one at Rimba Market.'); return false; }
-    if (!wanted || wanted.state.wanted <= 0) { hint('No wanted level to lose.'); return false; }
+    const cur = typeof game.health === 'number' ? game.health : 100;
+    if (cur >= 100) { hint('Health is already full.'); return false; }
     state.medkits--;
-    wanted.reduceHeat(1);
-    hint('Medkit used — wanted level dropped.');
+    game.health = Math.min(100, cur + 50);
+    hint('Medkit used — health restored to ' + game.health + '.');
     onSave();
     return true;
   }

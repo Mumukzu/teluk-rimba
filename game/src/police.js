@@ -5,7 +5,30 @@
 // officers chase on foot. Get caught (police car close + slow for 2.5 s)
 // and you are busted: fine, wanted reset. Escape far + long enough and the
 // heat drops a star.
+//
+// Police SHOOT (Mu, 24 Nov 2026): officers on foot (2+ stars) fire within
+// 25 m, police cars within 35 m, only while wanted >= 1 — about one shot
+// per 1.2-2.0 s per shooter, hit chance 55% under 10 m falling to 15% at
+// max range, 8-12 damage per hit. Accuracy stays low on purpose so the
+// player can always break away by distance and missions stay winnable.
 import { mulberry32 } from './rng.js';
+
+// Police gunfire tuning (exported for tests + main.js).
+export const OFFICER_RANGE = 25; // m, officers on foot
+export const POLICE_CAR_RANGE = 35; // m, police cars in pursuit
+export const FIRE_INTERVAL_MIN = 1.2; // s between shots, per shooter
+export const FIRE_INTERVAL_MAX = 2.0;
+export const DMG_MIN = 8;
+export const DMG_MAX = 12;
+export const SHOT_LIFE = 0.12; // s a tracer stays visible
+
+// Hit chance vs distance: full 55% inside 10 m, then a straight fall to
+// 15% at the shooter's max range.
+export function hitChance(d, range) {
+  if (d <= 10) return 0.55;
+  if (d >= range) return 0.15;
+  return 0.55 - (0.55 - 0.15) * ((d - 10) / (range - 10));
+}
 
 export function createWanted(city, traffic, peds, opts = {}) {
   const rand = mulberry32(opts.seed || 20261125);
@@ -48,12 +71,15 @@ export function createWanted(city, traffic, peds, opts = {}) {
     lastCrimeAt: -100,
     routeTimer: 0,
     distToPlayer: null,
+    shots: [], // tracers on screen: {fx,fy,fz, tx,ty,tz, t} (t = life left, s)
+    shotEvents: [], // shots fired THIS step, drained by main.js: {fx,fy,fz, tx,ty,tz, hit, dmg}
   };
 
   function syncPolice() {
     // Spawn / remove police cars to match the wanted level.
     while (state.police.length < state.wanted) {
       const v = traffic.spawnPolice(state.playerX || 0, state.playerZ || 0);
+      v.shootCd = FIRE_INTERVAL_MIN + rand() * (FIRE_INTERVAL_MAX - FIRE_INTERVAL_MIN);
       state.police.push(v);
     }
     while (state.police.length > state.wanted) {
@@ -64,7 +90,10 @@ export function createWanted(city, traffic, peds, opts = {}) {
     const wantOfficers = state.wanted >= 2 ? 2 : 0;
     while (state.officers.length < wantOfficers) {
       const o = peds.spawnOfficer((state.playerX || 0) + (rand() - 0.5) * 30, (state.playerZ || 0) + (rand() - 0.5) * 30);
-      if (o) state.officers.push(o); else break;
+      if (o) {
+        o.shootCd = FIRE_INTERVAL_MIN + rand() * (FIRE_INTERVAL_MAX - FIRE_INTERVAL_MIN);
+        state.officers.push(o);
+      } else break;
     }
     while (state.officers.length > wantOfficers) {
       const o = state.officers.pop();
@@ -73,9 +102,36 @@ export function createWanted(city, traffic, peds, opts = {}) {
     }
   }
 
-  function step(dt, player) {
+  // Clear the whole pursuit (wasted / busted / reset): no heat, no stars,
+  // no police, no tracers in flight.
+  function reset() {
+    state.heat = 0; state.wanted = 0; state.busted = false;
+    state.bustTimer = 0; state.escapeTimer = 0; state.quietTimer = 0;
+    state.shots = []; state.shotEvents = [];
+    syncPolice();
+  }
+
+  // One shooter takes a shot at the player if in range and off cooldown.
+  // Misses still make a tracer + sound (the event carries hit=false).
+  function tryShoot(dt, sx, sy, sz, range, shooter, px, py, pz) {
+    const d = Math.hypot(px - sx, pz - sz);
+    if (d > range) return;
+    shooter.shootCd -= dt;
+    if (shooter.shootCd > 0) return;
+    shooter.shootCd = FIRE_INTERVAL_MIN + rand() * (FIRE_INTERVAL_MAX - FIRE_INTERVAL_MIN);
+    const hit = rand() < hitChance(d, range);
+    const dmg = hit ? DMG_MIN + Math.floor(rand() * (DMG_MAX - DMG_MIN + 1)) : 0;
+    state.shotEvents.push({ fx: sx, fy: sy, fz: sz, tx: px, ty: py, tz: pz, hit, dmg });
+    state.shots.push({ fx: sx, fy: sy, fz: sz, tx: px, ty: py, tz: pz, t: SHOT_LIFE });
+  }
+
+  function step(dt, player, opts = {}) {
     state.playerX = player.x; state.playerZ = player.z;
     state.busted = false;
+    state.shotEvents = [];
+    // Tracers fade fast (0.12 s); drop the expired ones every step.
+    for (const s of state.shots) s.t -= dt;
+    state.shots = state.shots.filter((s) => s.t > 0);
     const now = state.elapsed || 0;
     state.elapsed = now + dt;
     // Heat decays after 10 s without crime.
@@ -119,6 +175,7 @@ export function createWanted(city, traffic, peds, opts = {}) {
       if (state.bustTimer > 2.5) {
         state.busted = true;
         state.heat = 0; state.wanted = 0; state.bustTimer = 0;
+        state.shots = [];
         syncPolice();
         return state;
       }
@@ -134,6 +191,21 @@ export function createWanted(city, traffic, peds, opts = {}) {
       }
     } else {
       state.escapeTimer = 0;
+    }
+    // Police gunfire (Mu, 24 Nov 2026): only while wanted >= 1 and the
+    // caller allows it (main.js blocks it while the shop menu is open;
+    // the start screen never reaches step() at all). Officers fire on
+    // foot within 25 m, police cars within 35 m. Out of range they hold
+    // fire, so the player can always break away by distance.
+    if (opts.shooting !== false) {
+      const py = (player.y || 0) + 1.2; // chest height
+      for (const v of state.police) {
+        if (v.parked || v.driven) continue;
+        tryShoot(dt, v.x, (v.y || 0) + 1.2, v.z, POLICE_CAR_RANGE, v, player.x, py, player.z);
+      }
+      for (const o of state.officers) {
+        tryShoot(dt, o.x, (o.y || 0) + 1.4, o.z, OFFICER_RANGE, o, player.x, py, player.z);
+      }
     }
     return state;
   }
@@ -159,5 +231,5 @@ export function createWanted(city, traffic, peds, opts = {}) {
     }
   }
 
-  return { state, step, addHeat, reduceHeat, syncPolice };
+  return { state, step, addHeat, reduceHeat, syncPolice, reset };
 }

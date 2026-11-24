@@ -10,7 +10,7 @@
 //   &wanted=N         start with wanted level N (0-3)
 //   &weather=rain|wet|clear  force the weather
 import { STEP, DAY_LENGTH, START_TIME, START_POS, VEHICLES, CULL_DIST } from './config.js';
-import { generateCity, isConnected, placeNameAt, buildingAABBs, terrainHeight, riverDistance, RIVER_POINTS } from './city.js';
+import { generateCity, isConnected, placeNameAt, buildingAABBs, terrainHeight, riverDistance, RIVER_POINTS, ROAD_LINES } from './city.js';
 import { createInput, ACTION_CONFIRM, ACTION_ENTER, ACTION_HORN, ACTION_FIRE, ACTION_MEDKIT, ACTION_DRINK, ACTION_MAP } from './input.js';
 import { createPlayer } from './player.js';
 import { createHud } from './hud.js';
@@ -65,6 +65,7 @@ window.__CITY_STATS__ = {
 const game = {
   money: 0,
   playerName: 'Wowok', // the protagonist; saved + restored with the save
+  health: 100, // police gunfire (Mu, 24 Nov 2026) deals damage; 0 = Wasted
   timeHours: timeForShot(params.shot, START_TIME),
   wanted: 0,
   objective: 'Wowok — explore Teluk Rimba · WASD to walk, drag mouse for camera',
@@ -88,7 +89,8 @@ let missions, shop, coins, stunts, couriers;
 const doSave = () => saveGame({
   name: game.playerName || 'Wowok',
   money: game.money, done: missions.doneIds(), active: missions.saveState(),
-  shop: shop.saveState(), coins: coins.saveState(), stunts: stunts.saveState(),
+  shop: shop.saveState(), health: game.health,
+  coins: coins.saveState(), stunts: stunts.saveState(),
   courier: couriers.saveState(),
 });
 couriers = createCouriers({ game, player, hud, audio, onSave: doSave });
@@ -105,6 +107,7 @@ const autopilot = params.autopilot ? createAutopilot(city) : null;
 const saved = loadGame();
 if (saved && !params.mission) {
   if (saved.name) game.playerName = saved.name;
+  if (typeof saved.health === 'number') game.health = Math.max(0, Math.min(100, saved.health));
   missions.restore(saved);
   shop.restore(saved.shop);
   coins.restore(saved.coins);
@@ -308,6 +311,21 @@ window.__EXTRAS__ = { shop, coins, stunts, couriers };
 function nearShop() {
   return Math.hypot(player.state.x - SHOP_POS.x, player.state.z - SHOP_POS.z) < 8;
 }
+// Respawn point for "Wasted": on the road right by Rimba Hospital — the
+// nearest road line to the hospital building, at the hospital's other
+// coordinate. Always on asphalt, never inside a building (the player
+// collision has no push-out, so spawning inside an AABB would soft-lock).
+function hospitalRespawn() {
+  const h = city.buildings.find((b) => b.landmark === 'hospital');
+  if (!h) return { x: START_POS.x, z: START_POS.z };
+  let bestX = ROAD_LINES[0], bestZ = ROAD_LINES[0];
+  for (const L of ROAD_LINES) {
+    if (Math.abs(L - h.x) < Math.abs(bestX - h.x)) bestX = L;
+    if (Math.abs(L - h.z) < Math.abs(bestZ - h.z)) bestZ = L;
+  }
+  return Math.abs(bestX - h.x) <= Math.abs(bestZ - h.z)
+    ? { x: bestX, z: h.z } : { x: h.x, z: bestZ };
+}
 function fireWeapon() {
   const r = shop.fire();
   if (r === 'fired') {
@@ -362,9 +380,43 @@ function stepWorld(dt) {
     // World systems tick with the player.
     traffic.step(dt);
     peds.step(dt, { x: player.state.x, z: player.state.z });
-    wanted.step(dt, { x: player.state.x, z: player.state.z, speedKmh: game.speedKmh });
+    // Police gunfire: no shooting while the shop menu is open (the start
+    // screen never reaches stepWorld at all).
+    wanted.step(dt,
+      { x: player.state.x, z: player.state.z, speedKmh: game.speedKmh, y: player.state.y },
+      { shooting: !shopUI.isOpen });
     game.wanted = wanted.state.wanted;
-    if (wanted.state.busted) {
+    // Drain this step's police shots: sound for every shot, damage for
+    // every hit. (Tracers ride wanted.state.shots into buildDynamics.)
+    for (const e of wanted.state.shotEvents) {
+      audio.gunshot();
+      if (e.hit) {
+        game.health = Math.max(0, game.health - e.dmg);
+        if (game.health <= 50) hud.showHint('Hit by police fire! Health ' + game.health + '/100 — press Q for a medkit.', 3);
+      }
+    }
+    if (game.health <= 0) {
+      // Wasted: same penalty shape as Busted (fine, wanted cleared,
+      // active job fails), but the player wakes up on foot at Rimba
+      // Hospital with full health. Armor keeps its existing meaning
+      // (absorbs half the fine once) — it does not block bullets.
+      const fine = shop.bustedFine(Math.min(game.money, 100));
+      game.money -= fine;
+      audio.busted();
+      hud.showHint('Wasted! The police fined you $' + fine + '. You woke up at Rimba Hospital.');
+      game.objective = 'Wowok — explore Teluk Rimba · WASD to walk, drag mouse for camera';
+      if (missions.active) missions.fail('Wasted by the police');
+      if (couriers.active) couriers.fail('Wasted by the police');
+      // Leave the vehicle where it is; wake up on foot at the hospital.
+      if (game.driving) { traffic.exit(game.driving); game.driving = null; }
+      const h = hospitalRespawn();
+      player.state.x = h.x; player.state.z = h.z;
+      player.state.y = Math.max(0, terrainHeight(h.x, h.z));
+      game.health = 100;
+      game.wanted = 0;
+      wanted.reset();
+      doSave();
+    } else if (wanted.state.busted) {
       // Body armor (shop) absorbs half the fine, once per armor.
       const fine = shop.bustedFine(Math.min(game.money, 100));
       game.money -= fine;
@@ -439,13 +491,15 @@ function stepWorld(dt) {
     speedKmh: game.speedKmh,
     objective: game.objective,
     place: game.place,
-    // Neon City HUD (Mu, option 1): real shop/mission state, no invented
-    // bars — the game has no health/stamina/level systems, so the HUD
-    // shows owned items + missions progress instead.
+    // Neon City HUD (Mu, option 1): real shop/mission state — the game
+    // now has a real health system (police gunfire, Mu 24 Nov 2026), so
+    // the HUD shows the health bar from the live value; stamina/level
+    // still do not exist, so no bars are invented for those.
     weapon: { owned: shop.state.pistol, ammo: shop.state.ammo },
     armor: shop.state.armor,
     medkits: shop.state.medkits,
     drinks: shop.state.drinks,
+    health: game.health,
     boosted: shop.isBoosted(game.elapsed),
     missionsDone: missions.doneIds().length,
     missionsTotal: 6,
@@ -832,6 +886,23 @@ if (params.sim) {
       }
       dyn.sea = sr;
       dyn.flow = fl;
+    }
+    // Police gunfire tracers + muzzle flashes (see police.js): one
+    // dynamic instanced mesh ('tracers', render.js) — +1 draw while any
+    // shot is visible, +0 when the list is empty. mat4TRS only yaws, so
+    // the tracer is a horizontal box at mid-height between muzzle and
+    // chest (the vertical gap is < 0.3 m over 10-35 m — negligible).
+    if (wanted.state.shots.length) {
+      const tr = { matrices: [], tints: [] };
+      for (const s of wanted.state.shots) {
+        const dx = s.tx - s.fx, dz = s.tz - s.fz;
+        const len = Math.hypot(dx, s.ty - s.fy, dz) || 1;
+        tr.matrices.push(mat4TRS((s.fx + s.tx) / 2, (s.fy + s.ty) / 2, (s.fz + s.tz) / 2, Math.atan2(dx, dz), 0.07, 0.07, len));
+        tr.tints.push([1.6, 1.3, 0.5]); // hot tracer line
+        tr.matrices.push(mat4TRS(s.fx, s.fy, s.fz, 0, 0.35, 0.35, 0.35));
+        tr.tints.push([1.8, 1.5, 0.6]); // muzzle flash
+      }
+      dyn.tracers = tr;
     }
     // Rain streaks around the camera.
     if (weather.state.rain > 0.05) {

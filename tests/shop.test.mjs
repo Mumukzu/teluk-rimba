@@ -117,11 +117,21 @@ check('createShopUI is a no-op in Node (no document)', createShopUI(freshShop().
 }
 {
   const game = mockGame(500);
+  game.health = 40;
   const wanted = mockWanted(2);
   const shop = createShop({ game, hud: mockHud(), audio: null, wanted, onSave: () => {}, rank: () => 1 });
   shop.buy('medkit');
-  check('medkit use drops wanted by 1 star', shop.useMedkit() && wanted.state.wanted === 1 && shop.state.medkits === 0);
-  check('medkit with no wanted level is refused', !shop.useMedkit());
+  check('medkit use restores 50 health and consumes one', shop.useMedkit() && game.health === 90 && shop.state.medkits === 0, `health ${game.health}`);
+  check('medkit does not touch the wanted level', wanted.state.wanted === 2);
+  shop.buy('medkit');
+  game.health = 100;
+  check('medkit at full health is refused', !shop.useMedkit() && shop.state.medkits === 1);
+  game.health = 80;
+  check('medkit caps health at 100', shop.useMedkit() && game.health === 100 && shop.state.medkits === 0, `health ${game.health}`);
+  const g2 = mockGame(500);
+  g2.health = 30;
+  const s2 = createShop({ game: g2, hud: mockHud(), audio: null, wanted: mockWanted(0), onSave: () => {}, rank: () => 1 });
+  check('medkit with none left is refused', !s2.useMedkit());
 }
 {
   const game = mockGame(500);
@@ -320,6 +330,21 @@ check('courier rewards are 40/50/60', COURIER_JOBS.map((j) => j.reward).join(','
   saveGame({ money: 100, done: [1], active: null }); // old save, no E2 fields
   const loaded = loadGame();
   check('old saves load with E2 defaults', loaded.shop === null && loaded.coins.length === 0 && loaded.stunts.length === 0 && loaded.courier === null);
+  clearSave();
+}
+{
+  clearSave();
+  saveGame({ money: 100, done: [1], active: null, health: 37 });
+  check('save/load round-trips health', loadGame().health === 37, String(loadGame().health));
+  clearSave();
+  saveGame({ money: 100, done: [1], active: null }); // old save, no health field
+  check('old saves load with health defaulting to 100', loadGame().health === 100, String(loadGame().health));
+  clearSave();
+  saveGame({ money: 100, done: [1], active: null, health: 250 });
+  check('health above 100 is clamped on load', loadGame().health === 100);
+  clearSave();
+  saveGame({ money: 100, done: [1], active: null, health: -20 });
+  check('health below 0 is clamped on load', loadGame().health === 0);
   clearSave();
 }
 

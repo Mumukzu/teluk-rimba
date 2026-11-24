@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { generateCity, AREA_NAMES } from '../game/src/city.js';
-import { neonColor, cssColor, zoneNeonFill, formatDistance, drawCityMap, createHud } from '../game/src/hud.js';
+import { neonColor, cssColor, zoneNeonFill, formatDistance, drawCityMap, createHud, healthBarState } from '../game/src/hud.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 let fails = 0;
@@ -95,6 +95,14 @@ check('formatDistance metres', formatDistance(128) === '128 m');
 check('formatDistance kilometres', formatDistance(1500) === '1.5 km');
 check('formatDistance null is empty', formatDistance(null) === '');
 
+// --- 3b. healthBarState: pure health-bar math ---
+check('healthBarState clamps above 100', healthBarState(150).pct === 100);
+check('healthBarState clamps below 0', healthBarState(-5).pct === 0);
+check('healthBarState rounds', healthBarState(78.4).pct === 78);
+check('healthBarState is low at 30', healthBarState(30).low === true);
+check('healthBarState is not low at 31', healthBarState(31).low === false);
+check('healthBarState defaults to 100', healthBarState(undefined).pct === 100);
+
 // --- 4. drawCityMap: real building boxes, zone blocks, N marker, labels ---
 {
   const ctx = makeCtx();
@@ -128,7 +136,7 @@ check('formatDistance null is empty', formatDistance(null) === '');
     speedKmh: 87, objective: 'Deliver the parcel to Rimba Market', place: 'Rimba Central',
     weapon: { owned: true, ammo: 12 }, armor: 1, medkits: 2, drinks: 0,
     boosted: true, missionsDone: 3, missionsTotal: 6, armed: true,
-    driving: true, targetDist: 128,
+    driving: true, targetDist: 128, health: 78,
   });
   check('money formatted with $ and comma', els['hud-money'].textContent === '$1,250', els['hud-money'].textContent);
   check('coins counter', els['hud-coins'].textContent === '◉ 3/12 coins', els['hud-coins'].textContent);
@@ -142,6 +150,8 @@ check('formatDistance null is empty', formatDistance(null) === '');
   check('ammo shows 12 RDS', els['hud-ammo'].textContent === '12 RDS', els['hud-ammo'].textContent);
   check('armor chip shows count', els['hud-armor'].textContent === 'ARMOR ×1');
   check('medkit chip shows count', els['hud-medkit'].textContent === 'MEDKIT ×2');
+  check('health bar fill is 78% at health 78', els['hud-health-fill'].style.width === '78%', els['hud-health-fill'].style.width);
+  check('health bar label shows HEALTH 78', els['hud-health-text'].textContent === 'HEALTH 78', els['hud-health-text'].textContent);
   check('boost chip visible while boosted', els['hud-boost'].style.display === 'inline-block');
   check('crosshair visible while armed', els['hud-crosshair'].style.display === 'block');
   check('speedometer visible while driving', els['hud-speedo'].style.display === 'block');
@@ -152,9 +162,11 @@ check('formatDistance null is empty', formatDistance(null) === '');
     speedKmh: 0, objective: 'Explore Teluk Rimba', place: 'Palm Gardens',
     weapon: { owned: false, ammo: 0 }, armor: 0, medkits: 0,
     boosted: false, missionsDone: 0, missionsTotal: 6, armed: false,
-    driving: false, targetDist: null,
+    driving: false, targetDist: null, health: 20,
   });
   check('speedometer hidden on foot', els['hud-speedo'].style.display === 'none');
+  check('health bar fill is 20% at health 20', els['hud-health-fill'].style.width === '20%', els['hud-health-fill'].style.width);
+  check('health bar turns critical red at 20', els['hud-health-fill'].style.background === 'linear-gradient(90deg,#ff0033,#ff2e63)', els['hud-health-fill'].style.background);
   check('crosshair hidden while unarmed', els['hud-crosshair'].style.display === 'none');
   check('weapon slot shows NO WEAPON', els['hud-weapon-name'].textContent === 'NO WEAPON');
   check('distance chip hidden with no target', els['hud-distance'].style.display === 'none');
@@ -182,7 +194,7 @@ check('formatDistance null is empty', formatDistance(null) === '');
   const html = readFileSync(join(__dirname, '..', 'game', 'index.html'), 'utf8');
   check('html lang is en', html.includes('<html lang="en">'));
   check('minimap is circular (border-radius 50%)', html.includes('border-radius: 50%'));
-  for (const id of ['hud-speedo', 'hud-speedo-arc', 'hud-speedo-text', 'hud-crosshair', 'hud-weapon', 'hud-weapon-name', 'hud-ammo', 'hud-distance', 'hud-zone', 'hud-missions', 'hud-armor', 'hud-medkit', 'hud-boost']) {
+  for (const id of ['hud-speedo', 'hud-speedo-arc', 'hud-speedo-text', 'hud-crosshair', 'hud-weapon', 'hud-weapon-name', 'hud-ammo', 'hud-distance', 'hud-zone', 'hud-missions', 'hud-armor', 'hud-medkit', 'hud-boost', 'hud-health', 'hud-health-text', 'hud-health-track', 'hud-health-fill']) {
     check('index.html has #' + id, html.includes('id="' + id + '"'));
   }
   check('old speed text element removed', !html.includes('id="hud-speed"'));

@@ -13,6 +13,7 @@ export function saveGame(data) {
       done: Array.isArray(data.done) ? data.done.slice() : [],
       active: data.active || null, // {id, step} or null
       shop: data.shop || null, // {pistol, ammo, medkits, armor, drinks}
+      health: typeof data.health === 'number' ? Math.max(0, Math.min(100, Math.round(data.health))) : 100,
       coins: Array.isArray(data.coins) ? data.coins.slice() : [],
       stunts: Array.isArray(data.stunts) ? data.stunts.slice() : [],
       courier: data.courier || null, // {id, step} or null
@@ -39,6 +40,7 @@ export function loadGame() {
         ? { id: data.active.id, step: data.active.step }
         : null,
       shop: data.shop && typeof data.shop === 'object' ? data.shop : null,
+      health: typeof data.health === 'number' ? Math.max(0, Math.min(100, data.health)) : 100,
       coins: Array.isArray(data.coins) ? data.coins.filter((n) => Number.isInteger(n)) : [],
       stunts: Array.isArray(data.stunts) ? data.stunts.filter((n) => Number.isInteger(n)) : [],
       courier: data.courier && Number.isInteger(data.courier.id) && Number.isInteger(data.courier.step)

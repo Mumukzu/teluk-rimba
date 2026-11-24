@@ -59,6 +59,14 @@ export function formatDistance(m) {
   return (m / 1000).toFixed(1) + ' km';
 }
 
+// Health bar state (pure, Node-testable): fill width % + low-health flag
+// (at or under 30 the bar reads as critical). Health is a real game
+// value (Mu, 24 Nov 2026 — police gunfire), never an invented bar.
+export function healthBarState(health) {
+  const pct = Math.max(0, Math.min(100, Math.round(health ?? 100)));
+  return { pct, low: pct <= 30 };
+}
+
 // Shared map drawing: zone blocks, sea, lake, river, roads, buildings,
 // stadium, markers, player arrow, north marker, zone labels (big map only).
 // markers: [{x, z, color, shape}] — shape 'diamond' (mission/board),
@@ -221,6 +229,8 @@ export function createHud(city) {
   const armorEl = document.getElementById('hud-armor');
   const medkitEl = document.getElementById('hud-medkit');
   const boostEl = document.getElementById('hud-boost');
+  const healthFillEl = document.getElementById('hud-health-fill');
+  const healthTextEl = document.getElementById('hud-health-text');
   const weaponNameEl = document.getElementById('hud-weapon-name');
   const ammoEl = document.getElementById('hud-ammo');
   const speedoEl = document.getElementById('hud-speedo');
@@ -290,7 +300,8 @@ export function createHud(city) {
   function update(dt, s) {
     // s: {money, coins {found,total}, timeHours, wanted, speedKmh, objective,
     // place, weapon {owned, ammo}, armor, medkits, drinks, boosted,
-    // missionsDone, missionsTotal, targetDist (m|null), driving, armed}
+    // missionsDone, missionsTotal, targetDist (m|null), driving, armed,
+    // health (0-100, real player health — police gunfire, Mu 24 Nov 2026)}
     moneyEl.textContent = '$' + s.money.toLocaleString('en-US');
     if (coinsEl && s.coins) coinsEl.textContent = '◉ ' + s.coins.found + '/' + s.coins.total + ' coins';
     const hh = Math.floor(s.timeHours) % 24;
@@ -322,11 +333,21 @@ export function createHud(city) {
       ammoEl.textContent = (s.weapon && s.weapon.owned) ? ammo + ' RDS' : '';
       ammoEl.style.color = ammo <= 0 ? '#ff2e63' : '#ffd23f';
     }
-    // Owned-item chips (real shop state — no invented health/stamina/level
+    // Owned-item chips (real shop state — no invented stamina/level
     // systems exist in the game, so the HUD shows what the player owns).
     if (armorEl) {
       armorEl.textContent = 'ARMOR ×' + (s.armor || 0);
       armorEl.style.opacity = (s.armor || 0) > 0 ? '1' : '.4';
+    }
+    // Health bar (real player health — police gunfire, Mu 24 Nov 2026).
+    // Skipped when the caller passes no health (old minimal state).
+    if (healthFillEl && s.health != null) {
+      const hb = healthBarState(s.health);
+      healthFillEl.style.width = hb.pct + '%';
+      healthFillEl.style.background = hb.low
+        ? 'linear-gradient(90deg,#ff0033,#ff2e63)'
+        : 'linear-gradient(90deg,#ff2e63,#ff7a5c)';
+      if (healthTextEl) healthTextEl.textContent = 'HEALTH ' + hb.pct;
     }
     if (medkitEl) {
       medkitEl.textContent = 'MEDKIT ×' + (s.medkits || 0);

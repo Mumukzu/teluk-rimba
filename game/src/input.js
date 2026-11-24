@@ -5,7 +5,7 @@ export const ACTION_PAUSE = 2;
 export const ACTION_ENTER = 4;
 export const ACTION_HORN = 8;
 export const ACTION_FIRE = 16; // F: fire the pistol (shop weapon)
-export const ACTION_MEDKIT = 32; // Q: use a medkit (lose 1 wanted star)
+export const ACTION_MEDKIT = 32; // Q: use a medkit (restore 50 health)
 export const ACTION_DRINK = 64; // R: drink an energy drink (30 s speed boost)
 export const ACTION_MAP = 128; // M: toggle the full-screen map
 
