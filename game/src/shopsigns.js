@@ -191,8 +191,14 @@ export function buildShopSigns(city) {
     const fx = b.x + nx * (b.d / 2), fz = b.z + nz * (b.d / 2);
     const kitScale = Math.min(1.6, Math.max(0.8, b.w / 14));
     // Awning over the door / shopfront: shops full width, houses half.
-    canopyMatrices.push(mat4TRS(fx, CANOPY_Y, fz, b.rot, kitScale * (isShop ? 1 : 0.5), 1, 1));
-    canopyTints.push(CANOPY_PASTELS[Math.floor(hash01(b.x, b.z) * CANOPY_PASTELS.length)]);
+    // Mu: commercial buildings get the soft red-white STRIPED awning
+    // instead (rooftopsigns.js, static mesh) — no pastel canopy here,
+    // so a commercial shopfront never wears two awnings at once.
+    // Downtown + other zones keep their pastel canopy.
+    if (b.zone !== 'commercial') {
+      canopyMatrices.push(mat4TRS(fx, CANOPY_Y, fz, b.rot, kitScale * (isShop ? 1 : 0.5), 1, 1));
+      canopyTints.push(CANOPY_PASTELS[Math.floor(hash01(b.x, b.z) * CANOPY_PASTELS.length)]);
+    }
     // Name sign: flat board on the sign band, 0.16 m proud of the facade.
     const nameIdx = SHOP_NAMES.indexOf(nameOf.get(b));
     const col = nameIdx % ATLAS_COLS, row = Math.floor(nameIdx / ATLAS_COLS);

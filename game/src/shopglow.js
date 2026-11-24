@@ -60,17 +60,21 @@ export function buildShopGlow(city) {
       // across and sit w/2 out.
       const across = (turn === 0 || turn === Math.PI) ? b.w : b.d;
       const out = (turn === 0 || turn === Math.PI) ? b.d / 2 : b.w / 2;
-      const w = b.zone === 'downtown' ? Math.min(across * 0.92, 18) : Math.min(across * 0.75, 10);
-      // Ground floor, y 0.3–2.4 (below the sign band at 2.45+, so the shop
-      // name and awning stay visible). Proud of the facade at +0.13 so it
-      // sits IN FRONT of the shopfront glass (+0.12) — at +0.05 the glass
-      // hid the panel's centre and only its pale edges showed. The dark
-      // door (+0.17) still pokes through the glow, like a real shopfront.
-      const h = 2.1;
+      const w = b.zone === 'downtown' ? Math.min(across * 0.92, 18) : Math.min(across * 0.90, 14);
+      // Ground floor: commercial panels are wider + taller now (Mu: like
+      // the reference shopfront) — y 0.3–2.6, still below the sign band
+      // at 2.7, so the shop name and awning stay visible. Proud of the
+      // facade at +0.13 so it sits IN FRONT of the shopfront glass
+      // (+0.12) — at +0.05 the glass hid the panel's centre and only its
+      // pale edges showed. The dark door (+0.17) still pokes through the
+      // glow, like a real shopfront.
+      const h = b.zone === 'downtown' ? 2.1 : 2.3;
       const fx = b.x + nx * (out + 0.13);
       const fz = b.z + nz * (out + 0.13);
       const base = GLOW_TINTS[Math.floor(rand() * GLOW_TINTS.length)];
-      const j = b.zone === 'downtown' ? 1.0 + rand() * 0.15 : 0.85 + rand() * 0.15;
+      // Mu: commercial shopfronts glow WARMER + BRIGHTER (tint pushes
+      // past 1.0, like the reference) — jitter 1.05–1.30 (was 0.85–1.00).
+      const j = b.zone === 'downtown' ? 1.0 + rand() * 0.15 : 1.05 + rand() * 0.25;
       const tint = [base[0] * j, base[1] * j, base[2] * j];
       // Mu 23 Nov 22:55 — downtown towers have a glass lobby now: the flat
       // warm panel would hide the clear glass + pillars, so NO ground
@@ -78,20 +82,22 @@ export function buildShopGlow(city) {
       // the glass from inside instead, and the spill below still washes
       // the sidewalk. Commercial shops keep their panel.
       if (b.zone !== 'downtown') {
-        matrices.push(mat4TRS(fx, 1.35, fz, rot, w, h, 1));
+        matrices.push(mat4TRS(fx, 1.45, fz, rot, w, h, 1));
         tints.push(tint);
       }
       // Warm spill on the ground in front of the shop (Mu's refs: warm
       // light on the sidewalk) — downtown: a wider, deeper, stronger wash
-      // (7 m deep, 3.5 m out, 0.95x the tint); commercial keeps the
-      // old 3 m / 2.2 m / 0.45x spill. Mu 23 Nov 23:31 — the old downtown
-      // spill (0.62x the pale [1.0,0.85,0.60] tint) read washed-out on the
-      // sidewalk, so downtown spills now use a deeper amber base with a
-      // brighter factor, matching the lobby glow core.
+      // (7 m deep, 3.5 m out, 0.95x the tint); commercial: 4 m deep
+      // (was 3), 0.9x the panel width (was 0.8), 0.65x the tint (was
+      // 0.45) — a stronger wash to match the brighter panel. Mu 23 Nov
+      // 23:31 — the old downtown spill (0.62x the pale [1.0,0.85,0.60]
+      // tint) read washed-out on the sidewalk, so downtown spills now
+      // use a deeper amber base with a brighter factor, matching the
+      // lobby glow core.
       const spillOut = b.zone === 'downtown' ? out + 3.5 : out + 2.2;
-      const spillW = b.zone === 'downtown' ? w : w * 0.8;
-      const spillD = b.zone === 'downtown' ? 7 : 3;
-      const spillF = b.zone === 'downtown' ? 0.95 : 0.45;
+      const spillW = b.zone === 'downtown' ? w : w * 0.9;
+      const spillD = b.zone === 'downtown' ? 7 : 4;
+      const spillF = b.zone === 'downtown' ? 0.95 : 0.65;
       spillMatrices.push(mat4TRS(b.x + nx * spillOut, 0.18, b.z + nz * spillOut, rot, spillW, 1, spillD));
       if (b.zone === 'downtown') {
         const sj = 1.0 + rand() * 0.2;
