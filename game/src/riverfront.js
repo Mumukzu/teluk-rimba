@@ -315,16 +315,36 @@ export function buildRiverfront(city) {
       }
       // Fence at rd 17.5: posts every ~4 m + TWO rails, so it reads as a
       // fence from the air — not one thin stray black line on the grass.
+      // Mu (guardrail fix, 24 Nov): the rails were rotated with a mirrored
+      // atan2(-dx, dz), so on every diagonal stretch they sat up to 90 deg
+      // off the fence line (crossing it instead of following it) — the
+      // "kacau" guardrail in shot2-cand-2/cand-4. For a Z-long box the
+      // heading is atan2(dx, dz). Posts and rails are grounded on
+      // terrainHeight: the bank dips at the lake bowl, the beach slope and
+      // river bends, so fixed-y posts floated up to 4 m. Segments too
+      // steep for a rigid 8 m rail are skipped (no floating fence).
       const fA = [ax + nx * 17.5 * side, az + nz * 17.5 * side];
       const fB = [bx + nx * 17.5 * side, bz + nz * 17.5 * side];
-      const rot = Math.atan2(-(fB[0] - fA[0]), fB[1] - fA[1]);
+      const rot = Math.atan2(fB[0] - fA[0], fB[1] - fA[1]);
       if (!touchesRoad([fA, fB, midAt(17.5)])) {
-        addPart(hard, plainBox(0.1, 0.1, len + 0.1, FENCE_COL), (fA[0] + fB[0]) / 2, 0.62, (fA[1] + fB[1]) / 2, rot);
-        addPart(hard, plainBox(0.1, 0.1, len + 0.1, FENCE_COL), (fA[0] + fB[0]) / 2, 0.35, (fA[1] + fB[1]) / 2, rot);
-        counts.fenceM += segM;
-        // One post per step (8 m) + a midpoint post (4 m spacing).
-        addPart(hard, plainBox(0.09, 0.75, 0.09, FENCE_COL), fA[0], 0.38, fA[1], 0);
-        addPart(hard, plainBox(0.09, 0.75, 0.09, FENCE_COL), (fA[0] + fB[0]) / 2, 0.38, (fA[1] + fB[1]) / 2, 0);
+        const gA = terrainHeight(fA[0], fA[1]);
+        const gB = terrainHeight(fB[0], fB[1]);
+        const gM = terrainHeight((fA[0] + fB[0]) / 2, (fA[1] + fB[1]) / 2);
+        if (Math.max(gA, gB, gM) - Math.min(gA, gB, gM) <= 0.5) {
+          const gAvg = (gA + gB + gM) / 3;
+          addPart(hard, plainBox(0.1, 0.1, len + 0.1, FENCE_COL), (fA[0] + fB[0]) / 2, gAvg + 0.62, (fA[1] + fB[1]) / 2, rot);
+          addPart(hard, plainBox(0.1, 0.1, len + 0.1, FENCE_COL), (fA[0] + fB[0]) / 2, gAvg + 0.35, (fA[1] + fB[1]) / 2, rot);
+          counts.fenceM += segM;
+          // One post per step (8 m) + a midpoint post (4 m spacing).
+          // Each post is grounded on its own terrain height and sized
+          // to reach 0.135 m above the top rail, so it meets both rails
+          // even where the bank slopes across the segment.
+          for (const [px, pz] of [fA, [(fA[0] + fB[0]) / 2, (fA[1] + fB[1]) / 2]]) {
+            const gp = terrainHeight(px, pz);
+            const hPost = (gAvg + 0.755) - gp;
+            addPart(hard, plainBox(0.09, hPost, 0.09, FENCE_COL), px, gp + hPost / 2, pz, 0);
+          }
+        }
       }
     }
   }
@@ -342,10 +362,17 @@ export function buildRiverfront(city) {
     const nx0 = -rp.dz / rp.len, nz0 = rp.dx / rp.len;
     const side = (nx0 * (0 - rp.x) + nz0 * (0 - rp.z)) >= 0 ? 1 : -1;
     const nx = nx0 * side, nz = nz0 * side;
-    const rot = Math.atan2(-nx, nz);
+    // Same mirrored-atan2 bug as the fence (Mu guardrail fix): for a
+    // Z-long box the heading is atan2(x, z), not atan2(-x, z). The dock
+    // platform (8 m) must run ALONG the river normal, out over the water;
+    // the steps' 2.5 m side must run ALONG the bank (tangent), so their
+    // headings differ — one shared rot cannot serve both.
+    const rotDock = Math.atan2(nx, nz);
+    const rotSteps = Math.atan2(-nx, -nz);
     if (kind === 'dock') {
       // Wooden platform, 8 m long (rd 15 -> rd 7), 3 m wide, over the water.
       const cx = rp.x + nx * 11, cz = rp.z + nz * 11;
+      const rot = rotDock;
       addPart(hard, plainBox(3, 0.16, 8, WOOD_COL), cx, 0.12, cz, rot);
       for (const [ox, oz] of [[-1.3, -3.6], [1.3, -3.6], [-1.3, 3.6], [1.3, 3.6]]) {
         const c = Math.cos(rot), s = Math.sin(rot);
@@ -359,7 +386,7 @@ export function buildRiverfront(city) {
       for (let i = 0; i < 3; i++) {
         const rd = 14.5 - i * 1.5;
         const sx = rp.x + nx * rd, sz = rp.z + nz * rd;
-        addPart(hard, plainBox(2.5, 0.3, 1.3, WOOD_COL), sx, terrainHeight(sx, sz) + 0.12, sz, rot);
+        addPart(hard, plainBox(2.5, 0.3, 1.3, WOOD_COL), sx, terrainHeight(sx, sz) + 0.12, sz, rotSteps);
       }
       counts.steps++;
     }
