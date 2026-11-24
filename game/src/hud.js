@@ -146,7 +146,7 @@ export function missionPanelHTML(doneIds, active, money, coins) {
     + '<div style="margin-top:6px;font-size:13px;font-weight:700;">$' + (money || 0).toLocaleString('en-US')
     + ' &nbsp;·&nbsp; ◉ ' + coinsFound + '/' + coinsTotal + ' coins &nbsp;·&nbsp; MISSIONS ' + doneCount + '/6</div>'
     + rowHTML
-    + '<div style="margin-top:10px;font-size:12px;opacity:.7;">Take the next job from Bang Darman at the mission board, Rimba Plaza. Press M to close the map.</div>';
+    + '<div style="margin-top:10px;font-size:12px;opacity:.7;">Press M to close the map.</div>';
 }
 
 export function drawCityMap(c, city, w, h, player, timeHours, markers, opts = {}) {
@@ -338,7 +338,7 @@ export function createHud(city) {
     panelWidth = layout.panelWidth;
     mapOverlay = document.createElement('div');
     mapOverlay.id = 'full-map';
-    mapOverlay.style.cssText = 'position:fixed;inset:0;z-index:40;background:rgba(4,8,16,.95);display:none;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:system-ui,sans-serif;overflow-y:auto;';
+    mapOverlay.style.cssText = 'position:fixed;inset:0;z-index:40;background:rgba(4,8,16,.98);display:none;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:system-ui,sans-serif;overflow-y:auto;';
     const legend = LEGEND_ZONES.map((z) => {
       const c = zoneNeonFill(city, z);
       const sw = cssColor(c, 1);
