@@ -16,7 +16,6 @@
 import { mulberry32, range, rangeInt } from './rng.js';
 import { riverDistance } from './city.js';
 import { emptyGeom, plainBox, prismY } from './gl.js';
-import { distinctColor } from './vehicles.js';
 
 // Lot layout (local frame: u along the row, v along the depth).
 // Width = cols * BAY_W (adaptive, 2..12 cols); depth = rows * BAY_D +
@@ -111,24 +110,6 @@ function triUpRot(g, cx, cz, rot, p1, p2, p3, y, col) {
   for (let k = 0; k < 3; k++) { g.nrm.push(...n); g.col.push(...col); }
 }
 
-// Rotate a part by yaw and move it to (x, y, z), merging into geom g
-// (same convention as plots.js addPart).
-function addPart(g, part, x, y, z, rot) {
-  const c = Math.cos(rot), s = Math.sin(rot);
-  for (let i = 0; i < part.pos.length; i += 3) {
-    const px = part.pos[i], py = part.pos[i + 1], pz = part.pos[i + 2];
-    part.pos[i] = x + px * c + pz * s;
-    part.pos[i + 1] = py + y;
-    part.pos[i + 2] = z - px * s + pz * c;
-  }
-  for (let i = 0; i < part.nrm.length; i += 3) {
-    const nx = part.nrm[i], nz = part.nrm[i + 2];
-    part.nrm[i] = nx * c + nz * s;
-    part.nrm[i + 2] = -nx * s + nz * c;
-  }
-  g.pos.push(...part.pos); g.nrm.push(...part.nrm); g.col.push(...part.col);
-}
-
 // One ground symbol quad (textured, positions + UVs only): w wide (local
 // u) x h tall (local v), centred at (cx, cz), yaw rot — local +v (canvas
 // up) maps to world (sin rot, cos rot). Wound up-facing like quadUp.
@@ -215,11 +196,14 @@ function doorStripRect(b) {
 
 export function buildParking(city) {
   const rand = mulberry32(20261135);
+  // Separate stream for the lot-car TYPE pick only: the bay-choice stream
+  // above must stay untouched so every lot count stays byte-identical.
+  const typeRand = mulberry32(20261136);
   const markings = emptyGeom();
   const cars = emptyGeom();
   const symbols = { pos: [], uv: [] };
   const lots = [];
-  let colorIdx = 5000; // own range of the distinct-colour allocator
+  const carSpots = []; // {x, z, heading, yBase, type, row, k} per lot car
   let parked = 0, bays = 0, pSymbols = 0;
 
   // Big buildings, largest first (deterministic tie-break by position).
@@ -365,7 +349,7 @@ export function buildParking(city) {
     // Stadium lots on the forecourt apron (top y 0.2) raise every
     // piece of lot geometry by yBase so nothing is buried in the slab.
     const yBase = lot.yBase || 0;
-    const padY = PAD_Y + yBase, lineY = LINE_Y + yBase, symY = SYM_Y + yBase, carY = 0.09 + yBase;
+    const padY = PAD_Y + yBase, lineY = LINE_Y + yBase, symY = SYM_Y + yBase;
     if (!biggest || cols * rows > biggest.cols * biggest.rows) biggest = lot;
     // Pad (dark asphalt over the yard paving).
     quadUpRot(markings, cx, cz, R, -W / 2, -D / 2, W / 2, D / 2, padY, PAD_COL);
@@ -440,10 +424,17 @@ export function buildParking(city) {
         continue;
       }
       if (chosenKey.has(key)) {
-        // Parked car, nose-in toward the outer edge.
+        // Parked car, nose-in toward the outer edge — recorded as a spot,
+        // NOT baked as static geometry: spawnLotCars turns it into a
+        // stealable parked traffic entity (Mu). Entity heading = wRot +
+        // PI/2: the sculpted car's front (+X) maps to (sin h, cos h)
+        // via vehicleMatrix, matching the old static yaw (verified
+        // numerically — the car's long axis lies along the bay depth).
         const [wx, wz] = toWorld(cx, cz, R, bu, bv);
         const wRot = R + (bay.row === 'A' ? Math.PI / 2 : -Math.PI / 2);
-        addPart(cars, simpleParkedCarGeom(distinctColor(colorIdx++)), wx, carY, wz, wRot);
+        const tr = typeRand();
+        const type = tr < 0.40 ? 'car' : tr < 0.70 ? 'sedan' : tr < 0.85 ? 'mpv' : 'jeep';
+        carSpots.push({ x: wx, z: wz, heading: wRot + Math.PI / 2, yBase, type, row: bay.row, k: bay.k });
         parked++;
         lotCars++;
         bays++;
@@ -461,12 +452,30 @@ export function buildParking(city) {
   }
 
   return {
-    markings, cars,
+    markings, cars, // cars stays EMPTY: lot cars spawn as traffic entities
     symbols: { panelGeom: symbols, atlasCanvas: drawParkingAtlas() },
-    lots: lots.map((l) => ({ rect: l.rect, width: l.width, depth: l.depth, rows: l.rows, cols: l.cols, cars: l.cars || 0, stadium: !!l.stadium, yBase: l.yBase || 0, building: { x: l.building.x, z: l.building.z, zone: l.building.zone } })),
+    carSpots,
+    lots: lots.map((l) => ({ rect: l.rect, cx: l.cx, cz: l.cz, R: l.R, width: l.width, depth: l.depth, rows: l.rows, cols: l.cols, cars: l.cars || 0, stadium: !!l.stadium, yBase: l.yBase || 0, building: { x: l.building.x, z: l.building.z, zone: l.building.zone } })),
     counts: {
       lots: lots.length, bays, cars: parked, symbols: pSymbols,
       biggest: biggest ? { width: biggest.width, depth: biggest.depth, rows: biggest.rows, cols: biggest.cols, bays: biggest.rows * biggest.cols, centre: [(biggest.rect.x0 + biggest.rect.x1) / 2, (biggest.rect.z0 + biggest.rect.z1) / 2] } : null,
     },
   };
+}
+
+// Turn parking-lot spots into stealable parked traffic entities (Mu):
+// each spot spawns via the same spawnParked missions use, then gets the
+// lot's ground height (stadium forecourt lots sit +0.15 on the apron,
+// so those cars ride at y 0.24) and joins traffic.parked so the
+// off-lanes checks cover it too. spawnParked itself only pushes to
+// traffic.vehicles — the parked array is maintained by the caller.
+export function spawnLotCars(traffic, spots) {
+  const spawned = [];
+  for (const s of spots) {
+    const v = traffic.spawnParked(s.type, s.x, s.z, s.heading);
+    v.y = 0.09 + (s.yBase || 0);
+    traffic.parked.push(v);
+    spawned.push(v);
+  }
+  return spawned;
 }

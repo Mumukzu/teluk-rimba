@@ -640,6 +640,7 @@ export function buildPlotDressing(city) {
 
   return {
     paving, props, fountainSpots,
+    parking, // lot spots for spawnLotCars (main.js, non-sim branch)
     parkingSymbols: parking.symbols,
     counts: { blocks: dressed.length, cars, fences, flowerBeds: flowers, benches, bins, pots, yardTrees, yardBenches, yardCars, yardFlowers, yardFountains, yardDressed, yardLawns, streetTrees: streetTrees2, kerbCars, simpleCars, parkingLots: parking.counts.lots, parkingCars: parking.counts.cars, parkingBays: parking.counts.bays, parkingSymbols: parking.counts.symbols, beachParks, beachBenches, beachTrees, beachFlowers },
   };

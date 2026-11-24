@@ -17,6 +17,7 @@ import { createHud } from './hud.js';
 import { createRenderer } from './render.js';
 import { parseShotParams, timeForShot } from './shots.js';
 import { createTraffic, stepWheelState } from './vehicles.js';
+import { spawnLotCars } from './parking.js';
 import { createPeds } from './peds.js';
 import { createWanted } from './police.js';
 import { createWeather } from './weather.js';
@@ -580,6 +581,12 @@ if (params.sim) {
   console.log('[sim]', JSON.stringify(result));
 } else {
   const renderer = createRenderer(canvas, city);
+  // Lot cars are stealable (Mu): the 584 parking-lot cars spawn as
+  // parked traffic entities (same spawnParked missions use) instead of
+  // static decoration — walk up, press E, drive away, the bay stays
+  // empty. This runs in the non-sim branch only because the spots ride
+  // on plotDressing, which only the renderer builds.
+  spawnLotCars(traffic, renderer.plotDressing.parking.carSpots);
   // Activity props (coffee tables, benches): one static mesh from the same
   // spot lists the activity NPCs sit at. The player is drawn per-part from
   // buildDynamics (player.partMatrices), not as a static mesh.

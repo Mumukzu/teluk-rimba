@@ -97,9 +97,13 @@ check('one disabled bay per lot (symbols >= lots)', p.counts.symbols >= p.counts
 check('parked cars in the lots', p.counts.cars >= 200, `${p.counts.cars} cars`);
 check('every lot has 2..62 bays', p.lots.every((l) => l.rows * l.cols >= 2 && l.rows * l.cols <= 62)); // 62 = stadium west car park
 
-// --- Draw calls: markings + cars + symbols are single merged geoms. ---
+// --- Draw calls: markings + symbols are single merged geoms. The lot
+// cars are NOT baked here anymore (Mu: stealable) — they spawn as parked
+// traffic entities via spawnLotCars, so the static car geom is empty
+// and the props mesh loses ~135k tris.
 check('markings are one merged geom', p.markings.pos.length > 0 && p.markings.nrm.length === p.markings.pos.length);
-check('parked cars are one merged geom', p.cars.pos.length > 0 && p.cars.col.length === p.cars.pos.length);
+check('no static lot cars baked (they spawn as traffic)', p.cars.pos.length === 0, `${p.cars.pos.length} verts`);
+check('carSpots replace the baked cars, 1 per lot car', p.carSpots.length === p.counts.cars, `${p.carSpots.length} spots, ${p.counts.cars} cars`);
 check('ground symbols are one merged geom', p.symbols.panelGeom.pos.length > 0);
 
 if (fails) { console.error(fails + ' PARKING CHECK(S) FAILED'); process.exit(1); }

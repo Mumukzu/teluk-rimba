@@ -4,6 +4,7 @@
 // Run: node tests/phase-b.test.mjs
 import { generateCity, riverDistance, ROAD_LINES, ASPHALT_HALF } from '../game/src/city.js';
 import { createTraffic } from '../game/src/vehicles.js';
+import { buildParking, spawnLotCars } from '../game/src/parking.js';
 import { createPeds } from '../game/src/peds.js';
 import { createWanted } from '../game/src/police.js';
 import { createWeather } from '../game/src/weather.js';
@@ -19,13 +20,16 @@ function check(name, ok, detail = '') {
 
 const city = generateCity();
 const traffic = createTraffic(city);
+// Lot cars are stealable (Mu): the 584 parking-lot cars join the fleet
+// as parked traffic entities, exactly as the game boot does in main.js.
+const lotCars = spawnLotCars(traffic, buildParking(city).carSpots);
 const peds = createPeds(city);
 const wanted = createWanted(city, traffic, peds);
 const weather = createWeather({});
 
 // --- traffic ---
 const c = traffic.counts();
-check('traffic has 224 moving + 24 parked + 9 boats', c.moving === 224 && c.parked === 24 && c.boats === 9, JSON.stringify(c));
+check('traffic has 224 moving + 608 parked + 9 boats (24 hand-placed + 584 lot cars)', c.moving === 224 && c.parked === 24 + lotCars.length && c.boats === 9, JSON.stringify(c));
 check('every vehicle colour is visibly coloured (not grey/white)', PASTEL.every((c) => Math.max(...c) - Math.min(...c) > 0.2), `${PASTEL.length} colours`);
 check('traffic is dense on main roads (most moving vehicles on a main edge)', (() => {
   const main = new Set(city.edges.filter((e) => e.main).map((e) => e.a + '-' + e.b));
