@@ -61,6 +61,18 @@ export function mat4RotX(a) {
   return m;
 }
 
+// Rotation around the Z axis (fleeing NPCs splay their raised arms
+// outward: RotZ after the RotX flip-up spreads the arms into a V).
+export function mat4RotZ(a) {
+  const c = Math.cos(a), s = Math.sin(a);
+  const m = new Float32Array(16);
+  m[0] = c; m[1] = s; m[2] = 0; m[3] = 0;
+  m[4] = -s; m[5] = c; m[6] = 0; m[7] = 0;
+  m[8] = 0; m[9] = 0; m[10] = 1; m[11] = 0;
+  m[12] = 0; m[13] = 0; m[14] = 0; m[15] = 1;
+  return m;
+}
+
 export function mat4TRS(x, y, z, rotY, sx, sy, sz) {
   const c = Math.cos(rotY), s = Math.sin(rotY);
   const m = new Float32Array(16);

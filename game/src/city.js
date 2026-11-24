@@ -887,11 +887,20 @@ export function isConnected(city) {
 // Axis-aligned building footprints, for player collision. The stadium
 // stands are solid walls too (with entrance gaps on the north/south
 // sides, so the player can walk onto the pitch).
+// The stored w/d are the box's LOCAL dims: the render rotates the box by
+// b.rot, so for a 90° building the VISUAL footprint swaps w and d (the
+// same formula as parking.js footprint()). The old code ignored rot, so
+// ~half the buildings had a TRANSPOSED collision box — characters could
+// walk through the visual walls on two sides and hit invisible walls on
+// the other two. (Mu 24 Nov: nothing may pass through a building.)
 export function buildingAABBs(city) {
-  const boxes = city.buildings.map((b) => ({
-    x0: b.x - b.w / 2, x1: b.x + b.w / 2,
-    z0: b.z - b.d / 2, z1: b.z + b.d / 2,
-  }));
+  const boxes = city.buildings.map((b) => {
+    const w = b.rot ? b.d : b.w, d = b.rot ? b.w : b.d;
+    return {
+      x0: b.x - w / 2, x1: b.x + w / 2,
+      z0: b.z - d / 2, z1: b.z + d / 2,
+    };
+  });
   if (city.stadium) {
     const st = city.stadium, sd = st.standDepth, gap = 3; // 6 m entrance gap
     // West + east stands (full length, no gap).
@@ -904,4 +913,33 @@ export function buildingAABBs(city) {
     boxes.push({ x0: st.cx + gap, x1: st.x1 - sd, z0: st.z1 - sd, z1: st.z1 });
   }
   return boxes;
+}
+
+// Circle-vs-buildings test (pure, Node-testable): does a disc of radius r
+// centred at (x, z) overlap any building footprint? The player, the
+// driven vehicle and the NPC collision all share this one predicate, so
+// the game and the tests can never disagree about what counts as a wall.
+export function circleHitsBuildings(aabbs, x, z, r) {
+  for (const b of aabbs) {
+    if (x + r > b.x0 && x - r < b.x1 && z + r > b.z0 && z - r < b.z1) return true;
+  }
+  return false;
+}
+
+// Box-vs-buildings test (pure, Node-testable): a vehicle is a rectangle,
+// not a disc — a disc of radius len/2 lets the corners sink ~0.6 m into
+// a wall on a diagonal hit. Test the centre + all four corners so the
+// body stays visibly flush with the wall, never inside it.
+export function vehicleBoxHits(aabbs, x, z, heading, len, w) {
+  const r = 0.3;
+  if (circleHitsBuildings(aabbs, x, z, r)) return true;
+  const fx = Math.sin(heading), fz = Math.cos(heading);
+  const hx = fz, hz = -fx; // perpendicular (right side)
+  const fl = len / 2, hw = w / 2;
+  for (const s of [1, -1]) {
+    for (const t of [1, -1]) {
+      if (circleHitsBuildings(aabbs, x + fx * fl * s + hx * hw * t, z + fz * fl * s + hz * hw * t, r)) return true;
+    }
+  }
+  return false;
 }

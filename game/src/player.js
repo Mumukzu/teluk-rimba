@@ -40,6 +40,27 @@ export function createPlayer(city, startX, startZ) {
     return false;
   }
 
+  // Safety net (Mu 24 Nov: nothing may pass through a building): the
+  // axis-separated move above can never walk INTO a wall, but the player
+  // can still START inside one — stepping out of a car parked flush
+  // against a wall, or a mission respawn. Push out along the smallest
+  // penetration axis so a bad spawn never soft-locks the player.
+  function unstick() {
+    const r = PLAYER.radius;
+    for (const b of aabbs) {
+      if (state.x + r > b.x0 && state.x - r < b.x1 && state.z + r > b.z0 && state.z - r < b.z1) {
+        const dxl = state.x + r - b.x0, dxr = b.x1 - (state.x - r);
+        const dzl = state.z + r - b.z0, dzr = b.z1 - (state.z - r);
+        const m = Math.min(dxl, dxr, dzl, dzr);
+        if (m === dxl) state.x = b.x0 - r;
+        else if (m === dxr) state.x = b.x1 + r;
+        else if (m === dzl) state.z = b.z0 - r;
+        else state.z = b.z1 + r;
+        break; // one box per step is enough; the next frame clears the rest
+      }
+    }
+  }
+
   function step(input, dt) {
     const fwd = (input.forward ? 1 : 0) - (input.back ? 1 : 0);
     const strafe = (input.right ? 1 : 0) - (input.left ? 1 : 0);
@@ -71,6 +92,7 @@ export function createPlayer(city, startX, startZ) {
       if (state.x > state.seaX) state.x = state.seaX;
       state.y = Math.max(0, terrainHeight(state.x, state.z)) + rampHeightAt(state.x, state.z);
     }
+    unstick();
   }
 
   function camera() {

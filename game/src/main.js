@@ -10,7 +10,7 @@
 //   &wanted=N         start with wanted level N (0-3)
 //   &weather=rain|wet|clear  force the weather
 import { STEP, DAY_LENGTH, START_TIME, START_POS, VEHICLES, CULL_DIST } from './config.js';
-import { generateCity, isConnected, placeNameAt, buildingAABBs, terrainHeight, riverDistance, RIVER_POINTS, ROAD_LINES } from './city.js';
+import { generateCity, isConnected, placeNameAt, buildingAABBs, vehicleBoxHits, terrainHeight, riverDistance, RIVER_POINTS, ROAD_LINES } from './city.js';
 import { createInput, ACTION_CONFIRM, ACTION_ENTER, ACTION_HORN, ACTION_FIRE, ACTION_MEDKIT, ACTION_DRINK, ACTION_MAP } from './input.js';
 import { createPlayer } from './player.js';
 import { createHud } from './hud.js';
@@ -182,11 +182,12 @@ if (params.drive && VEHICLES[params.drive]) {
 }
 if (params.wanted > 0) wanted.addHeat(params.wanted);
 
-function collideVehicle(nx, nz, radius) {
-  for (const b of aabbs) {
-    if (nx + radius > b.x0 && nx - radius < b.x1 && nz + radius > b.z0 && nz - radius < b.z1) return true;
-  }
-  return false;
+// The driven vehicle is a box, not a disc: test centre + all four
+// corners so no corner can sink into a wall on a diagonal hit (Mu 24 Nov:
+// nothing may pass through a building). Shares the city.js predicate
+// with the Node tests, so the game and the tests agree on what a wall is.
+function vehicleHits(x, z, heading, len, w) {
+  return vehicleBoxHits(aabbs, x, z, heading, len, w);
 }
 
 function driveStep(v, dt, inp) {
@@ -213,7 +214,6 @@ function driveStep(v, dt, inp) {
   stepWheelState(v, dt, steer);
   const nx = v.x + Math.sin(v.heading) * v.speed * dt;
   const nz = v.z + Math.cos(v.heading) * v.speed * dt;
-  const radius = Math.max(1.0, tune.len / 2 - 0.4);
   // Audio: brake squeal, tyre screech, collision thuds (all throttled
   // inside the audio module, so calling every frame is safe).
   if (isBoat) {
@@ -221,7 +221,7 @@ function driveStep(v, dt, inp) {
   } else {
     if (fwd < 0 && v.speed > 6) audio.brake();
     if (steer !== 0 && Math.abs(v.speed) > 12) audio.screech();
-    const blocked = collideVehicle(nx, v.z, radius) || collideVehicle(v.x, nz, radius);
+    const blocked = vehicleHits(nx, v.z, v.heading, tune.len, tune.w) || vehicleHits(v.x, nz, v.heading, tune.len, tune.w);
     if (blocked && Math.abs(v.speed) > 4) {
       audio.collision(Math.abs(v.speed) * 3.6);
       // Hard hits wear the vehicle down (Phase E2 shop: repair). Wear is
@@ -250,8 +250,8 @@ function driveStep(v, dt, inp) {
     else v.speed *= 0.5;
     v.y = -1.2 + 0.12 * Math.sin(game.elapsed * 2 + v.id);
   } else {
-    if (!collideVehicle(nx, v.z, radius)) v.x = nx;
-    if (!collideVehicle(v.x, nz, radius)) v.z = nz;
+    if (!vehicleHits(nx, v.z, v.heading, tune.len, tune.w)) v.x = nx;
+    if (!vehicleHits(v.x, nz, v.heading, tune.len, tune.w)) v.z = nz;
     // World bounds: mission 6 opens the mountain (clamp -800).
     const wb = missions.worldBound();
     v.x = Math.max(wb.min, Math.min(wb.max, v.x));
@@ -399,6 +399,10 @@ function stepWorld(dt) {
     }
     // World systems tick with the player.
     traffic.step(dt);
+    // NPCs flee any approaching motor vehicle — cars AND motorbikes,
+    // scooters, angkot, bajaj, trucks (Mu 24 Nov 18:07: the trigger is
+    // ANY land motor vehicle closing on an NPC, not just cars).
+    peds.checkVehicleThreats(traffic.vehicles, dt);
     peds.step(dt, { x: player.state.x, z: player.state.z });
     // Police gunfire: no shooting while the shop menu is open (the start
     // screen never reaches stepWorld at all).

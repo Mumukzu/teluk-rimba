@@ -15,8 +15,8 @@
 // groups in parks/plazas, standing at market stalls, sitting on the beach.
 import { mulberry32, range, rangeInt, clamp } from './rng.js';
 import { PED_COUNT } from './config.js';
-import { ROAD_LINES, RIVER_POINTS, ASPHALT_HALF, terrainHeight, riverDistance } from './city.js';
-import { emptyGeom, plainBox, prismY, coneY, capsuleY, domeY, scaleGeom, mat4TRS, mat4RotX, mat4Multiply } from './gl.js';
+import { ROAD_LINES, RIVER_POINTS, ASPHALT_HALF, terrainHeight, riverDistance, buildingAABBs } from './city.js';
+import { emptyGeom, plainBox, prismY, coneY, capsuleY, domeY, scaleGeom, mat4TRS, mat4RotX, mat4RotZ, mat4Multiply } from './gl.js';
 
 // Any colour goes for shirts — bright and varied, not just pastels.
 const SHIRTS = [
@@ -60,6 +60,67 @@ export function createPeds(city, opts = {}) {
   const peds = [];
   let nextId = 1;
 
+  // --- building collision (Mu 24 Nov: no NPC may pass through a
+  // building). Walkers stay on sidewalks by construction, but the flee /
+  // board / chase / cross states run in a straight line and could cut
+  // straight through a block. A 50 m grid keeps the per-step query to
+  // the handful of buildings near the point (a full AABB scan per ped
+  // per frame would be ~4M tests/frame for 2000 NPCs).
+  const aabbs = buildingAABBs(city);
+  const PED_R = 0.35;
+  const CELL = 50;
+  const grid = new Map();
+  for (let i = 0; i < aabbs.length; i++) {
+    const b = aabbs[i];
+    for (let cx = Math.floor(b.x0 / CELL); cx <= Math.floor(b.x1 / CELL); cx++) {
+      for (let cz = Math.floor(b.z0 / CELL); cz <= Math.floor(b.z1 / CELL); cz++) {
+        const k = (cx + 32) * 64 + (cz + 32);
+        let list = grid.get(k);
+        if (!list) { list = []; grid.set(k, list); }
+        list.push(i);
+      }
+    }
+  }
+  function pedCollide(nx, nz) {
+    for (let cx = Math.floor((nx - PED_R) / CELL); cx <= Math.floor((nx + PED_R) / CELL); cx++) {
+      for (let cz = Math.floor((nz - PED_R) / CELL); cz <= Math.floor((nz + PED_R) / CELL); cz++) {
+        const list = grid.get((cx + 32) * 64 + (cz + 32));
+        if (!list) continue;
+        for (const i of list) {
+          const b = aabbs[i];
+          if (nx + PED_R > b.x0 && nx - PED_R < b.x1 && nz + PED_R > b.z0 && nz - PED_R < b.z1) return true;
+        }
+      }
+    }
+    return false;
+  }
+  // Axis-separated move, so an NPC slides along a wall instead of
+  // stopping dead or clipping through it.
+  function pedMove(p, nx, nz) {
+    if (!pedCollide(nx, p.z)) p.x = nx;
+    if (!pedCollide(p.x, nz)) p.z = nz;
+  }
+  // Safety net: an NPC that somehow starts inside a footprint (a forced
+  // spawn, a bus alighting) is pushed out along the smallest penetration
+  // axis instead of walking around inside the building forever.
+  function pedUnstick(p) {
+    if (!pedCollide(p.x, p.z)) return;
+    const r = PED_R;
+    for (let i = 0; i < aabbs.length; i++) {
+      const b = aabbs[i];
+      if (p.x + r > b.x0 && p.x - r < b.x1 && p.z + r > b.z0 && p.z - r < b.z1) {
+        const dxl = p.x + r - b.x0, dxr = b.x1 - (p.x - r);
+        const dzl = p.z + r - b.z0, dzr = b.z1 - (p.z - r);
+        const m = Math.min(dxl, dxr, dzl, dzr);
+        if (m === dxl) p.x = b.x0 - r;
+        else if (m === dxr) p.x = b.x1 + r;
+        else if (m === dzl) p.z = b.z0 - r;
+        else p.z = b.z1 + r;
+        return;
+      }
+    }
+  }
+
   // Zone of a world point: the block that contains it (blocks carry the
   // zone: downtown / commercial / residential / beach / port / forest /
   // river / plaza / market). Sidewalks sit in the road corridor between
@@ -96,7 +157,9 @@ export function createPeds(city, opts = {}) {
   };
   const clearOfBuildings = (x, z, m) => {
     for (const b of city.buildings) {
-      if (Math.abs(x - b.x) < b.w / 2 + m && Math.abs(z - b.z) < b.d / 2 + m) return false;
+      // Visual footprint: rotated buildings swap w/d (same as buildingAABBs).
+      const vw = b.rot ? b.d : b.w, vd = b.rot ? b.w : b.d;
+      if (Math.abs(x - b.x) < vw / 2 + m && Math.abs(z - b.z) < vd / 2 + m) return false;
     }
     return true;
   };
@@ -343,15 +406,25 @@ export function createPeds(city, opts = {}) {
     // when a count exceeds the spot count) never stand in exactly the
     // same place.
     const jx = range(rand, -0.8, 0.8), jz = range(rand, -0.8, 0.8);
+    // The spot itself was verified clear of buildings (openSpot, 0.35 m
+    // margin) but the per-NPC offset reaches 1.9 m (chat circle 1.1 m +
+    // jitter 0.8 m) — past a nearby wall. Reject any offset that lands
+    // inside a building and fall back to the spot centre, which is
+    // verified clear. (Mu 24 Nov: no NPC inside a building.)
+    const place = (x, z, heading) => {
+      if (clearOfBuildings(x, z, 0.35)) return { x, z, heading, spot: s };
+      if (clearOfBuildings(s.x, s.z, 0.35)) return { x: s.x, z: s.z, heading, spot: s };
+      return null;
+    };
     if (activity === 'chat') {
       const a = (member / 4) * Math.PI * 2;
-      return { x: s.x + Math.cos(a) * 1.1 + jx, z: s.z + Math.sin(a) * 1.1 + jz, heading: a + Math.PI, spot: s };
+      return place(s.x + Math.cos(a) * 1.1 + jx, s.z + Math.sin(a) * 1.1 + jz, a + Math.PI);
     }
     if (activity === 'coffee') {
       const a = s.heading + (member === 0 ? 0 : Math.PI);
-      return { x: s.x + Math.sin(a) * 0.9 + jx, z: s.z + Math.cos(a) * 0.9 + jz, heading: a + Math.PI, spot: s };
+      return place(s.x + Math.sin(a) * 0.9 + jx, s.z + Math.cos(a) * 0.9 + jz, a + Math.PI);
     }
-    return { x: s.x + jx, z: s.z + jz, heading: s.heading, spot: s };
+    return place(s.x + jx, s.z + jz, s.heading);
   }
 
   function spawnPed(kind = 'walk', forced = null) {
@@ -438,13 +511,23 @@ export function createPeds(city, opts = {}) {
       if (p.stateT <= 0) { p.state = 'walk'; p.idleIn = range(rand, 15, 60); }
       return;
     }
+    // Only moving NPCs can reach a wall (standing/sitting NPCs are placed
+    // on verified-clear spots and never move): unstick here, not for them.
+    pedUnstick(p);
     if (p.state === 'flee') {
       p.stateT -= dt;
       const dx = p.x - p.fleeX, dz = p.z - p.fleeZ;
       const d = Math.hypot(dx, dz) || 1;
-      p.heading = Math.atan2(dx / d, dz / d);
-      p.x += (dx / d) * p.speed * 2.4 * dt;
-      p.z += (dz / d) * p.speed * 2.4 * dt;
+      // Dodge sideways off the threat's path (Mu: run away — don't stay
+      // in the vehicle's lane): the flee direction is rotated ~35° to
+      // one side (p.fleeSide, picked when the flee started), so the NPC
+      // veers off the road instead of outrunning the car down it.
+      const a = 0.6 * (p.fleeSide || 1);
+      const c = Math.cos(a), s = Math.sin(a);
+      const rx = (dx / d) * c - (dz / d) * s;
+      const rz = (dx / d) * s + (dz / d) * c;
+      p.heading = Math.atan2(rx, rz);
+      pedMove(p, p.x + rx * p.speed * 2.4 * dt, p.z + rz * p.speed * 2.4 * dt);
       if (p.stateT <= 0) p.state = 'walk';
       p.x = clamp(p.x, -640, 640); p.z = clamp(p.z, -640, 640);
       return;
@@ -454,16 +537,14 @@ export function createPeds(city, opts = {}) {
       const d = Math.hypot(dx, dz);
       if (d < 1.5) { p.boarded = true; return; }
       p.heading = Math.atan2(dx / d, dz / d);
-      p.x += (dx / d) * p.speed * 1.6 * dt;
-      p.z += (dz / d) * p.speed * 1.6 * dt;
+      pedMove(p, p.x + (dx / d) * p.speed * 1.6 * dt, p.z + (dz / d) * p.speed * 1.6 * dt);
       return;
     }
     if (p.state === 'chase' && p.target) {
       const dx = p.target.x - p.x, dz = p.target.z - p.z;
       const d = Math.hypot(dx, dz) || 1;
       p.heading = Math.atan2(dx / d, dz / d);
-      p.x += (dx / d) * 6.5 * dt;
-      p.z += (dz / d) * 6.5 * dt;
+      pedMove(p, p.x + (dx / d) * 6.5 * dt, p.z + (dz / d) * 6.5 * dt);
       p.y = Math.max(0, terrainHeight(p.x, p.z));
       return;
     }
@@ -476,8 +557,7 @@ export function createPeds(city, opts = {}) {
         return;
       }
       p.heading = Math.atan2(dx / d, dz / d);
-      p.x += (dx / d) * p.speed * 1.4 * dt;
-      p.z += (dz / d) * p.speed * 1.4 * dt;
+      pedMove(p, p.x + (dx / d) * p.speed * 1.4 * dt, p.z + (dz / d) * p.speed * 1.4 * dt);
       p.y = Math.max(0, terrainHeight(p.x, p.z));
       return;
     }
@@ -505,7 +585,7 @@ export function createPeds(city, opts = {}) {
       p.heading += Math.PI;
       nx = p.x; nz = p.z;
     }
-    p.x = nx; p.z = nz;
+    pedMove(p, nx, nz);
     p.y = Math.max(0, terrainHeight(p.x, p.z));
     if (p.crossCd > 0) p.crossCd -= dt;
     p.idleIn -= dt;
@@ -547,7 +627,53 @@ export function createPeds(city, opts = {}) {
         if (p.state === 'stand' || p.state === 'chase') continue;
         if (Math.hypot(p.x - x, p.z - z) < radius) {
           p.state = 'flee'; p.stateT = 4; p.fleeX = x; p.fleeZ = z;
+          p.fleeSide = rand() < 0.5 ? -1 : 1; // dodge off to one side
           n++;
+        }
+      }
+      return n;
+    },
+    // Vehicle-threat flee (Mu 24 Nov 18:05 + 18:07 correction): an NPC
+    // runs away with both hands up when ANY land motor vehicle is about
+    // to hit them — cars AND motorbikes, scooters, angkot, bajaj, trucks,
+    // buses, police. Boats are not a threat (they stay on water); parked
+    // or crawling vehicles are not either. Called every frame from
+    // main.js with traffic.vehicles; throttled internally to 5 Hz.
+    // A vehicle counts when it is moving (>2 m/s), the NPC is roughly
+    // ahead of its travel direction (closing cone), and close enough that
+    // the car could reach them: the danger radius grows with speed
+    // (8 m + 0.9 × speed, capped at 30 m) so a fast car triggers the
+    // flee early enough for the NPC to actually clear the lane.
+    // Seated NPCs (coffee / bench / beach) stay put; officers chasing
+    // the player never flee.
+    checkVehicleThreats(vehicles, dt) {
+      this._threatT = (this._threatT || 0) + dt;
+      if (this._threatT < 0.2) return 0;
+      this._threatT = 0;
+      let n = 0;
+      for (const v of vehicles || []) {
+        if (!v || v.parked) continue;
+        if (v.type === 'boat' || v.type === 'fishingboat' || v.type === 'sailboat') continue;
+        const spd = Math.abs(v.speed || 0);
+        if (spd < 2) continue;
+        const dir = Math.sign(v.speed || 0) || 1; // reversing vehicles threaten behind them
+        const fx = Math.sin(v.heading) * dir, fz = Math.cos(v.heading) * dir;
+        const danger = Math.min(30, 8 + spd * 0.9);
+        for (const p of peds) {
+          if (p.state === 'chase' || p.pose === 'sit') continue;
+          const dx = p.x - v.x, dz = p.z - v.z;
+          if (Math.abs(dx) > danger || Math.abs(dz) > danger) continue;
+          const d = Math.hypot(dx, dz);
+          if (d > danger || d < 0.5) continue;
+          // Roughly ahead of the vehicle's travel direction and closing.
+          if ((dx * fx + dz * fz) / d < 0.35) continue;
+          // Dodge AWAY from the vehicle's path, not across it: the side
+          // is picked from which side of the path the NPC stands on.
+          const cross = fx * dz - fz * dx;
+          if (p.state !== 'flee') { p.state = 'flee'; p.stateT = 3; n++; }
+          else p.stateT = Math.max(p.stateT, 1.5);
+          p.fleeX = v.x; p.fleeZ = v.z;
+          p.fleeSide = cross >= 0 ? 1 : -1;
         }
       }
       return n;
@@ -637,7 +763,7 @@ export function createPeds(city, opts = {}) {
         const d = Math.hypot(p.x - camX, p.z - camZ);
         if (d > maxDist) continue;
         const moving = p.state === 'walk' || p.state === 'cross' || p.state === 'flee' || p.state === 'board' || p.state === 'chase';
-        const running = moving && p.pace === 'run';
+        const running = moving && (p.pace === 'run' || p.state === 'flee'); // fleeing is always a run
         const amp = moving ? (running ? 0.55 : 0.38) : 0;
         const phase = p.walkPhase + t * (running ? 1.6 : 1);
         const swing = Math.sin(phase) * amp;
@@ -671,8 +797,21 @@ export function createPeds(city, opts = {}) {
         const shoulderL = mat4TRS(-0.28 * s, 1.32 * s, 0, 0, 1, 1, 1);
         const shoulderR = mat4TRS(0.28 * s, 1.32 * s, 0, 0, 1, 1, 1);
         const armBase = seated ? seatM : upper;
-        const armLM = mat4Multiply(mat4Multiply(armBase, shoulderL), mat4RotX(-swing));
-        const armRM = mat4Multiply(mat4Multiply(armBase, shoulderR), mat4RotX(swing));
+        // HANDS UP (Mu 24 Nov): a fleeing NPC runs with BOTH arms raised
+        // above the head. The arm hangs -Y from the shoulder, so RotX(PI)
+        // flips it straight up (+0.3 tips it slightly forward) and RotZ
+        // splays it outward into a V — left arm out to the left, right
+        // arm out to the right. The round skin hands ride the wrists, so
+        // they follow the raised arms automatically.
+        const fleeing = p.state === 'flee';
+        const armRotL = fleeing
+          ? mat4Multiply(mat4RotZ(0.35), mat4RotX(Math.PI + 0.3))
+          : mat4RotX(-swing);
+        const armRotR = fleeing
+          ? mat4Multiply(mat4RotZ(-0.35), mat4RotX(Math.PI + 0.3))
+          : mat4RotX(swing);
+        const armLM = mat4Multiply(mat4Multiply(armBase, shoulderL), armRotL);
+        const armRM = mat4Multiply(mat4Multiply(armBase, shoulderR), armRotR);
         armL.matrices.push(armLM);
         armL.tints.push(armTint);
         armR.matrices.push(armRM);

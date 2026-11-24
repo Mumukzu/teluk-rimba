@@ -185,10 +185,13 @@ export function drawCityMap(c, city, w, h, player, timeHours, markers, opts = {}
     c.beginPath(); c.moveTo(0, Y(L)); c.lineTo(w, Y(L)); c.stroke();
   }
   // Buildings: every one of the 1,000, at its real position, in its real
-  // colour brightened to neon so the boxes read on the dark map.
+  // colour brightened to neon so the boxes read on the dark map. The box
+  // uses the VISUAL footprint (rotated towers swap w/d, same as
+  // buildingAABBs) so the map never disagrees with the 3D world.
   for (const b of city.buildings) {
+    const vw = b.rot ? b.d : b.w, vd = b.rot ? b.w : b.d;
     c.fillStyle = cssColor(neonColor(b.color), night ? 0.75 : 0.9);
-    c.fillRect(X(b.x - b.w / 2), Y(b.z - b.d / 2), Math.max(1, b.w * sc), Math.max(1, b.d * sc));
+    c.fillRect(X(b.x - vw / 2), Y(b.z - vd / 2), Math.max(1, vw * sc), Math.max(1, vd * sc));
   }
   // Rimba Stadium: green pitch rect with a white outline.
   if (city.stadium) {
