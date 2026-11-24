@@ -81,17 +81,19 @@ export function healthBarState(health) {
 // Map-screen layout (Mu, 24 Nov 17:09 — "Map di sebelah kiri. Di kanannya
 // itu tampilan progres misi"): the map canvas sits on the LEFT half of the
 // screen and a mission-progress panel fills the RIGHT. The canvas must fit
-// the viewport height together with the title row + legend, and the panel
-// needs a usable minimum width (240 px). At 960x540 the canvas is 430 px
-// and the panel 478 px; the panel caps at 560 px on wide screens and the
-// row is centred. Pure, Node-testable.
+// the viewport height together with the title row + legend (3 lines at
+// 430 px wide) + marker key — that chrome costs ~140 px, measured from the
+// first screenshots (110 px clipped the title and the key). The panel needs
+// a usable minimum width (240 px). At 960x540 the canvas is 400 px and the
+// panel 508 px; the panel caps at 560 px on wide screens and the row is
+// centred. Pure, Node-testable.
 // (Replaces fullMapLayout: the old centred single-column overlay is gone.)
 export function mapScreenLayout(vw, vh) {
   const w = Number.isFinite(vw) && vw > 0 ? vw : 960;
   const h = Number.isFinite(vh) && vh > 0 ? vh : 540;
-  const mapSize = Math.max(280, Math.min(560, h - 110, w - 352));
+  const mapSize = Math.max(280, Math.min(560, h - 140, w - 352));
   const panelWidth = Math.min(560, w - 32 - mapSize - 20);
-  return { mapSize, panelWidth, fits: mapSize + 110 <= h && panelWidth >= 240 };
+  return { mapSize, panelWidth, fits: mapSize + 140 <= h && panelWidth >= 240 };
 }
 
 // Mission progress rows for the map screen (Mu, 24 Nov 17:09): the right
@@ -299,8 +301,8 @@ export function createHud(city) {
   // 24 Nov 17:09 — map on the LEFT, mission progress panel on the RIGHT) ---
   let mapOverlay = null, mapCanvas = null, mapCtx = null, missionPanelEl = null;
   let mapOpen = false;
-  let mapSize = 430; // set by ensureMapOverlay from mapScreenLayout()
-  let panelWidth = 478;
+  let mapSize = 400; // set by ensureMapOverlay from mapScreenLayout()
+  let panelWidth = 508;
   // Mission progress shown in the panel: set every frame from main.js
   // (like setMapMarkers). lastHudState carries money/coins for the panel
   // stats; lastPanelKey skips re-rendering when nothing changed.
@@ -327,7 +329,7 @@ export function createHud(city) {
     if (mapOverlay) return;
     // Size the canvas + panel to the viewport so the whole overlay (title
     // row + map/legend + mission panel) fits — at 960x540 the canvas is
-    // 430 px and the panel 478 px. overflow-y:auto is a safety net for
+    // 400 px and the panel 508 px. overflow-y:auto is a safety net for
     // tiny viewports only.
     const vw = (typeof window !== 'undefined' && window.innerWidth) || 960;
     const vh = (typeof window !== 'undefined' && window.innerHeight) || 540;
@@ -336,7 +338,7 @@ export function createHud(city) {
     panelWidth = layout.panelWidth;
     mapOverlay = document.createElement('div');
     mapOverlay.id = 'full-map';
-    mapOverlay.style.cssText = 'position:fixed;inset:0;z-index:40;background:rgba(4,8,16,.92);display:none;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:system-ui,sans-serif;overflow-y:auto;';
+    mapOverlay.style.cssText = 'position:fixed;inset:0;z-index:40;background:rgba(4,8,16,.95);display:none;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:system-ui,sans-serif;overflow-y:auto;';
     const legend = LEGEND_ZONES.map((z) => {
       const c = zoneNeonFill(city, z);
       const sw = cssColor(c, 1);
@@ -351,7 +353,7 @@ export function createHud(city) {
       + '<div style="display:flex;gap:20px;align-items:flex-start;justify-content:center;max-width:calc(100vw - 32px);">'
       + '<div style="flex:0 0 auto;">'
       + '<canvas id="full-map-canvas" width="' + mapSize + '" height="' + mapSize + '" style="border:2px solid rgba(34,211,238,.7);border-radius:12px;background:#0a1826;box-shadow:0 0 24px rgba(34,211,238,.35);display:block;"></canvas>'
-      + '<div style="margin-top:8px;font-size:12px;opacity:.95;max-width:' + mapSize + 'px;text-align:center;line-height:1.7;">' + legend + '</div>'
+      + '<div style="margin-top:8px;font-size:12px;opacity:.95;max-width:' + mapSize + 'px;text-align:center;line-height:1.5;">' + legend + '</div>'
       + '<div style="margin-top:6px;font-size:13px;opacity:.9;text-align:center;">'
       + '<span style="color:#ffd23f;">◆</span> You &nbsp;'
       + '<span style="color:#ffd23f;">◆</span> Mission target &nbsp;'
@@ -359,7 +361,7 @@ export function createHud(city) {
       + '<span style="color:#fb923c;">$</span> Market shop &nbsp;'
       + '<span style="color:#ffd23f;">●</span> Coins found'
       + '</div></div>'
-      + '<div id="map-missions" style="flex:0 0 auto;width:' + panelWidth + 'px;max-width:calc(100vw - 32px);max-height:' + (mapSize + 60) + 'px;overflow-y:auto;border:1px solid rgba(255,210,63,.35);border-radius:12px;background:rgba(10,24,38,.75);box-shadow:0 0 24px rgba(255,210,63,.15);padding:12px 14px;box-sizing:border-box;"></div>'
+      + '<div id="map-missions" style="flex:0 0 auto;width:' + panelWidth + 'px;max-width:calc(100vw - 32px);max-height:' + (mapSize + 60) + 'px;overflow-y:auto;border:1px solid rgba(255,210,63,.35);border-radius:12px;background:rgba(10,24,38,.94);box-shadow:0 0 24px rgba(255,210,63,.15);padding:12px 14px;box-sizing:border-box;"></div>'
       + '</div>';
     document.body.appendChild(mapOverlay);
     mapCanvas = mapOverlay.querySelector('#full-map-canvas');

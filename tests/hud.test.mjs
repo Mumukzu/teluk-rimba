@@ -135,7 +135,7 @@ check('healthBarState defaults to 100', healthBarState(undefined).pct === 100);
   // wide, labels up to ~106 px wide at 11 px bold) and they stacked into
   // unreadable mush. Now zero area names are drawn; names live only in
   // the legend under the canvas. The draw here uses a 380 px test canvas
-  // (the real overlay canvas is 430 px via mapScreenLayout at 960x540).
+  // (the real overlay canvas is 400 px via mapScreenLayout at 960x540).
   const ctx2 = makeCtx();
   drawCityMap(ctx2, city, 380, 380, player, 10, [], { zoneAlpha: 0.5 });
   const texts2 = ctx2.calls.filter(([k]) => k === 'fillText').map(([, t]) => t);
@@ -157,9 +157,9 @@ check('healthBarState defaults to 100', healthBarState(undefined).pct === 100);
 // (Mu 24 Nov 17:09 — replaces the old centred fullMapLayout overlay.)
 {
   const l = mapScreenLayout(960, 540);
-  check('map screen at 960x540 uses a 430px canvas', l.mapSize === 430, JSON.stringify(l));
-  check('map screen at 960x540 has a 478px mission panel', l.panelWidth === 478, JSON.stringify(l));
-  check('map screen at 960x540 fits (430 + 110 = 540)', l.fits === true);
+  check('map screen at 960x540 uses a 400px canvas', l.mapSize === 400, JSON.stringify(l));
+  check('map screen at 960x540 has a 508px mission panel', l.panelWidth === 508, JSON.stringify(l));
+  check('map screen at 960x540 fits (400 + 140 = 540)', l.fits === true);
   check('map screen at 1920x1080 caps canvas at 560px', mapScreenLayout(1920, 1080).mapSize === 560);
   check('map screen at 1920x1080 caps panel at 560px', mapScreenLayout(1920, 1080).panelWidth === 560);
   check('map screen at 1280x720 caps canvas at 560px', mapScreenLayout(1280, 720).mapSize === 560);
@@ -167,7 +167,7 @@ check('healthBarState defaults to 100', healthBarState(undefined).pct === 100);
   check('map screen at 800x600 keeps a usable panel', mapScreenLayout(800, 600).panelWidth >= 240);
   check('map screen canvas never below 280px', mapScreenLayout(400, 300).mapSize === 280);
   check('map screen at 400x300 does not fit', mapScreenLayout(400, 300).fits === false);
-  check('mapScreenLayout defaults to 960x540 with no window', mapScreenLayout(undefined, undefined).mapSize === 430);
+  check('mapScreenLayout defaults to 960x540 with no window', mapScreenLayout(undefined, undefined).mapSize === 400);
 }
 
 // --- 4c. missionPanelRows / missionPanelHTML: real mission state, 6 rows ---
@@ -260,9 +260,9 @@ check('healthBarState defaults to 100', healthBarState(undefined).pct === 100);
   check('full map title is English', !!overlay && overlay.innerHTML.includes('TELUK RIMBA — MAP'));
   // Canvas sized to the viewport (Mu 24 Nov 14:33 — old fixed 560px canvas
   // overflowed a 540px-high viewport). Node has no window, so the
-  // fallback is 960x540 -> 430px canvas (mapScreenLayout, Mu 24 Nov 17:09
+  // fallback is 960x540 -> 400px canvas (mapScreenLayout, Mu 24 Nov 17:09
   // two-column layout: map left, mission panel right).
-  check('full map canvas is 430x430 at 960x540', !!overlay && overlay.innerHTML.includes('width="430" height="430"'), 'canvas sized to viewport');
+  check('full map canvas is 400x400 at 960x540', !!overlay && overlay.innerHTML.includes('width="400" height="400"'), 'canvas sized to viewport');
   // Mission panel: the map canvas comes BEFORE the panel container in the
   // overlay markup (map left, panel right), and the panel renders the real
   // mission rows once the HUD feeds it progress.
