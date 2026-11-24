@@ -183,8 +183,3 @@ export function heliBeamConeGeom() {
   }
   return g;
 }
-
-// Mission marker: a tall bright column at the current objective.
-export function markerGeom() {
-  return plainBox(1.6, 30, 1.6, [1, 1, 1]);
-}

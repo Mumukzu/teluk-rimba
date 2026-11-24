@@ -23,7 +23,7 @@ import { buildNightLightGeoms } from './nightlights.js';
 import { buildPlotDressing } from './plots.js';
 import { buildRiverfront } from './riverfront.js';
 import { buildStadium } from './stadium.js';
-import { heliBodyGeom, heliRotorGeom, planeGeom, heliBeamConeGeom, markerGeom } from './air.js';
+import { heliBodyGeom, heliRotorGeom, planeGeom, heliBeamConeGeom } from './air.js';
 import { wedgeGeom } from './extras.js';
 import { DAY_LENGTH } from './config.js';
 
@@ -296,12 +296,11 @@ export function createRenderer(canvas, city) {
   addDyn(progs.unlitInst, plainBox(1, 1, 1, [1, 1, 1]), 16, 'tracers'); // police gunfire (Mu 24 Nov 2026): tracer line + muzzle flash per shot, refilled from main.js; +1 draw while any shot is live, +0 when empty
   addDyn(progs.transpInst, landmarks.beamGeom, 1, 'beam');
   // Aircraft: police helicopter (body + spinning rotor), daytime plane,
-  // heli spotlight cone (night only), mission marker column.
+  // heli spotlight cone (night only).
   addDyn(progs.litInst, heliBodyGeom(), 1, 'heli');
   addDyn(progs.litInst, heliRotorGeom(), 1, 'heliRotor');
   addDyn(progs.litInst, planeGeom(), 1, 'plane');
   addDyn(progs.transpInst, heliBeamConeGeom(), 1, 'heliBeam');
-  addDyn(progs.unlitInst, markerGeom(), 1, 'marker');
   // Phase E2: hidden coins (spinning gold discs) + stunt ramps (wedges).
   addDyn(progs.unlitInst, plainBox(0.9, 0.9, 0.15, [1, 0.84, 0.2]), 12, 'coins');
   addDyn(progs.litInst, wedgeGeom(), 4, 'ramps');

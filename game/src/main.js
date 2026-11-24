@@ -945,19 +945,10 @@ if (params.sim) {
         if (spec.matrices.length) dyn[name] = spec;
       }
     }
-    // Mission marker: a tall bright column at the current objective
-    // (yellow) or at the mission board (green, no mission active).
-    // A courier job's target wins over the board marker while active.
-    {
-      const m = couriers.active ? couriers.marker() : missions.marker();
-      if (m) {
-        const pulse = 1 + 0.08 * Math.sin(game.elapsed * 3);
-        dyn.marker = {
-          matrices: [mat4TRS(m.x, 15, m.z, 0, pulse, 1, pulse)],
-          tints: [m.board ? [0.3, 0.9, 0.5] : [1, 0.85, 0.2]],
-        };
-      }
-    }
+    // Mission marker column REMOVED (Mu 24 Nov 2026: the tall green
+    // column at the mission board read as a vertical green bar in
+    // screenshots). Wayfinding stays via the minimap diamond + the
+    // objective text; no 3D column is drawn any more.
     // Lively city (Mu): laundry sway. Smoke REMOVED (Mu, 23 Nov 2026).
     // Vertical neon REMOVED (Mu, 24 Nov 2026). No flags/pennants —
     // forbidden. Rides dynamic meshes (render.js), refilled here every
