@@ -7,6 +7,7 @@
 // zone blocks, all 1,000 building boxes at their real positions, roads,
 // river, lake, sea, stadium, mission markers, player arrow, north marker.
 import { ROAD_LINES, RIVER_POINTS, AREA_NAMES, areaNameAt } from './city.js';
+import { MISSIONS } from './missions.js';
 
 // --- Pure helpers (exported for Node tests) ---
 
@@ -77,17 +78,75 @@ export function healthBarState(health) {
 // markers: [{x, z, color, shape}] — shape 'diamond' (mission/board),
 // 'dollar' (shop), 'dot' (coin found). opts: {zoneAlpha}.
 
-// Full-map overlay sizing (pure, Node-testable): the canvas must fit the
-// viewport together with the title, legend, marker key and Close button.
-// That chrome costs ~160 px at the sizes in ensureMapOverlay, so the canvas
-// is vh-160, clamped to [280, 560] and to vw-32. At 960x540 the canvas is
-// 380 px and the whole overlay fits (380 + 160 = 540).
-export function fullMapLayout(vw, vh) {
+// Map-screen layout (Mu, 24 Nov 17:09 — "Map di sebelah kiri. Di kanannya
+// itu tampilan progres misi"): the map canvas sits on the LEFT half of the
+// screen and a mission-progress panel fills the RIGHT. The canvas must fit
+// the viewport height together with the title row + legend, and the panel
+// needs a usable minimum width (240 px). At 960x540 the canvas is 430 px
+// and the panel 478 px; the panel caps at 560 px on wide screens and the
+// row is centred. Pure, Node-testable.
+// (Replaces fullMapLayout: the old centred single-column overlay is gone.)
+export function mapScreenLayout(vw, vh) {
   const w = Number.isFinite(vw) && vw > 0 ? vw : 960;
   const h = Number.isFinite(vh) && vh > 0 ? vh : 540;
-  const size = Math.max(280, Math.min(560, h - 160, w - 32));
-  return { size, fits: size + 160 <= h };
+  const mapSize = Math.max(280, Math.min(560, h - 110, w - 352));
+  const panelWidth = Math.min(560, w - 32 - mapSize - 20);
+  return { mapSize, panelWidth, fits: mapSize + 110 <= h && panelWidth >= 240 };
 }
+
+// Mission progress rows for the map screen (Mu, 24 Nov 17:09): the right
+// side of the map shows the 6 story missions with their real status, read
+// from the MISSIONS table — nothing invented. doneIds: ids already
+// completed. active: {id, stepIdx, timeLeft} of the running mission, or
+// null. Status: done / active / available (the first not-done job, when no
+// mission is running) / locked (a later job). detail is the sub-line under
+// the mission name: the current step + countdown while active, the earned
+// reward when done.
+export function missionPanelRows(doneIds, active) {
+  const done = new Set(doneIds || []);
+  const nextId = MISSIONS.find((m) => !done.has(m.id))?.id ?? null;
+  return MISSIONS.map((m) => {
+    const isDone = done.has(m.id);
+    const isActive = !!active && active.id === m.id;
+    const status = isDone ? 'done' : isActive ? 'active' : m.id === nextId ? 'available' : 'locked';
+    let detail;
+    if (isDone) detail = 'Complete — $' + m.reward + ' earned';
+    else if (isActive) {
+      const step = m.steps[active.stepIdx] || m.steps[0];
+      const t = Math.max(0, Math.floor(active.timeLeft || 0));
+      detail = step.label + ' (' + Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0') + ')';
+    } else if (status === 'available') detail = 'Next job — take it from Bang Darman at Rimba Plaza';
+    else detail = 'Locked — finish the previous job first';
+    return { id: m.id, name: m.name, reward: m.reward, status, detail };
+  });
+}
+
+// Mission-progress panel HTML (pure, Node-testable): the right side of the
+// map screen. money/coins are the live HUD values; doneIds/active are the
+// real mission state (see missionPanelRows). The panel is a string so the
+// overlay can inject it into #map-missions.
+export function missionPanelHTML(doneIds, active, money, coins) {
+  const rows = missionPanelRows(doneIds, active);
+  const coinsFound = coins ? coins.found : 0;
+  const coinsTotal = coins ? coins.total : 12;
+  const doneCount = (doneIds || []).length;
+  const chip = { done: ['DONE', '#4ade80'], active: ['ACTIVE', '#22d3ee'], available: ['NEXT', '#ffd23f'], locked: ['LOCKED', '#5a6b7d'] };
+  const rowHTML = rows.map((r) => {
+    const [label, color] = chip[r.status];
+    const bg = r.status === 'active' ? 'rgba(34,211,238,.10)' : r.status === 'done' ? 'rgba(74,222,128,.07)' : 'rgba(255,255,255,.03)';
+    return '<div style="border:1px solid ' + (r.status === 'active' ? 'rgba(34,211,238,.55)' : 'rgba(255,255,255,.14)') + ';border-radius:9px;padding:7px 10px;margin-top:6px;background:' + bg + ';">'
+      + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;"><span style="font-size:14px;font-weight:700;">M' + r.id + ' · ' + r.name + '</span>'
+      + '<span style="white-space:nowrap;"><span style="font-size:13px;font-weight:700;color:#ffd23f;">$' + r.reward + '</span> '
+      + '<span style="font-size:10px;font-weight:700;color:' + color + ';border:1px solid ' + color + ';border-radius:5px;padding:1px 5px;">' + label + '</span></span></div>'
+      + '<div style="font-size:12px;opacity:.85;margin-top:2px;line-height:1.35;">' + r.detail + '</div></div>';
+  }).join('');
+  return '<div style="font-size:16px;font-weight:700;letter-spacing:2px;color:#ffd23f;text-shadow:0 0 12px rgba(255,210,63,.6);">MISSION PROGRESS</div>'
+    + '<div style="margin-top:6px;font-size:13px;font-weight:700;">$' + (money || 0).toLocaleString('en-US')
+    + ' &nbsp;·&nbsp; ◉ ' + coinsFound + '/' + coinsTotal + ' coins &nbsp;·&nbsp; MISSIONS ' + doneCount + '/6</div>'
+    + rowHTML
+    + '<div style="margin-top:10px;font-size:12px;opacity:.7;">Take the next job from Bang Darman at the mission board, Rimba Plaza. Press M to close the map.</div>';
+}
+
 export function drawCityMap(c, city, w, h, player, timeHours, markers, opts = {}) {
   const sc = w / 1400;
   const X = (x) => (x + 700) * sc;
@@ -236,19 +295,45 @@ export function createHud(city) {
   const ctx = map.getContext('2d');
   const W = map.width, H = map.height;
 
-  // --- full-screen map overlay (M key, Phase E2) ---
-  let mapOverlay = null, mapCanvas = null, mapCtx = null;
+  // --- full-screen map overlay (M key, Phase E2; two-column layout, Mu
+  // 24 Nov 17:09 — map on the LEFT, mission progress panel on the RIGHT) ---
+  let mapOverlay = null, mapCanvas = null, mapCtx = null, missionPanelEl = null;
   let mapOpen = false;
-  let mapSize = 380; // set by ensureMapOverlay from fullMapLayout()
+  let mapSize = 430; // set by ensureMapOverlay from mapScreenLayout()
+  let panelWidth = 478;
+  // Mission progress shown in the panel: set every frame from main.js
+  // (like setMapMarkers). lastHudState carries money/coins for the panel
+  // stats; lastPanelKey skips re-rendering when nothing changed.
+  let missionProgress = { done: [], active: null };
+  let lastHudState = null;
+  let lastPanelKey = '';
   const LEGEND_ZONES = ['downtown', 'commercial', 'residential', 'beach', 'port', 'forest', 'plaza', 'market'];
+  function renderMissionPanel() {
+    if (!missionPanelEl) return;
+    const key = JSON.stringify([missionProgress.done, missionProgress.active, lastHudState ? [lastHudState.money, lastHudState.coins && lastHudState.coins.found] : null]);
+    if (key === lastPanelKey) return;
+    lastPanelKey = key;
+    missionPanelEl.innerHTML = missionPanelHTML(
+      missionProgress.done, missionProgress.active,
+      lastHudState ? lastHudState.money : 0,
+      lastHudState && lastHudState.coins ? lastHudState.coins : { found: 0, total: 12 },
+    );
+  }
+  function setMissionProgress(done, active) {
+    missionProgress = { done: done ? done.slice() : [], active: active || null };
+    if (mapOpen) renderMissionPanel();
+  }
   function ensureMapOverlay() {
     if (mapOverlay) return;
-    // Size the canvas to the viewport so the whole overlay (title +
-    // canvas + legend + key + Close button) fits — at 960x540 the canvas
-    // is 380 px. overflow-y:auto is a safety net for tiny viewports only.
+    // Size the canvas + panel to the viewport so the whole overlay (title
+    // row + map/legend + mission panel) fits — at 960x540 the canvas is
+    // 430 px and the panel 478 px. overflow-y:auto is a safety net for
+    // tiny viewports only.
     const vw = (typeof window !== 'undefined' && window.innerWidth) || 960;
     const vh = (typeof window !== 'undefined' && window.innerHeight) || 540;
-    mapSize = fullMapLayout(vw, vh).size;
+    const layout = mapScreenLayout(vw, vh);
+    mapSize = layout.mapSize;
+    panelWidth = layout.panelWidth;
     mapOverlay = document.createElement('div');
     mapOverlay.id = 'full-map';
     mapOverlay.style.cssText = 'position:fixed;inset:0;z-index:40;background:rgba(4,8,16,.92);display:none;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:system-ui,sans-serif;overflow-y:auto;';
@@ -257,26 +342,37 @@ export function createHud(city) {
       const sw = cssColor(c, 1);
       return '<span style="margin-right:12px;white-space:nowrap;"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:' + sw + ';box-shadow:0 0 6px ' + sw + ';vertical-align:-1px;"></span> ' + (AREA_NAMES[z] || z) + '</span>';
     }).join('');
-    mapOverlay.innerHTML = '<div style="font-size:20px;font-weight:700;letter-spacing:3px;margin-bottom:8px;color:#22d3ee;text-shadow:0 0 14px rgba(34,211,238,.8);">TELUK RIMBA — MAP</div>'
-      + '<canvas id="full-map-canvas" width="' + mapSize + '" height="' + mapSize + '" style="border:2px solid rgba(34,211,238,.7);border-radius:12px;background:#0a1826;box-shadow:0 0 24px rgba(34,211,238,.35);"></canvas>'
-      + '<div style="margin-top:8px;font-size:12px;opacity:.95;max-width:640px;text-align:center;line-height:1.7;">' + legend + '</div>'
-      + '<div style="margin-top:6px;font-size:13px;opacity:.9;">'
+    // Two columns: map (left) + mission progress (right). The legend and
+    // marker key stay under the map canvas; area names appear ONLY in the
+    // legend (Mu, 24 Nov 14:33 — no name text on the map tiles).
+    mapOverlay.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;width:' + (mapSize + 20 + panelWidth) + 'px;max-width:calc(100vw - 32px);margin-bottom:8px;">'
+      + '<div style="font-size:20px;font-weight:700;letter-spacing:3px;color:#22d3ee;text-shadow:0 0 14px rgba(34,211,238,.8);">TELUK RIMBA — MAP</div>'
+      + '<button data-close style="background:rgba(34,211,238,.15);color:#22d3ee;border:1px solid #22d3ee;border-radius:8px;padding:6px 16px;font-weight:700;font-size:13px;cursor:pointer;box-shadow:0 0 12px rgba(34,211,238,.35);">Close (M)</button></div>'
+      + '<div style="display:flex;gap:20px;align-items:flex-start;justify-content:center;max-width:calc(100vw - 32px);">'
+      + '<div style="flex:0 0 auto;">'
+      + '<canvas id="full-map-canvas" width="' + mapSize + '" height="' + mapSize + '" style="border:2px solid rgba(34,211,238,.7);border-radius:12px;background:#0a1826;box-shadow:0 0 24px rgba(34,211,238,.35);display:block;"></canvas>'
+      + '<div style="margin-top:8px;font-size:12px;opacity:.95;max-width:' + mapSize + 'px;text-align:center;line-height:1.7;">' + legend + '</div>'
+      + '<div style="margin-top:6px;font-size:13px;opacity:.9;text-align:center;">'
       + '<span style="color:#ffd23f;">◆</span> You &nbsp;'
       + '<span style="color:#ffd23f;">◆</span> Mission target &nbsp;'
       + '<span style="color:#4ade80;">◆</span> Mission board &nbsp;'
       + '<span style="color:#fb923c;">$</span> Market shop &nbsp;'
       + '<span style="color:#ffd23f;">●</span> Coins found'
-      + '</div>'
-      + '<button data-close style="margin-top:10px;background:rgba(34,211,238,.15);color:#22d3ee;border:1px solid #22d3ee;border-radius:8px;padding:7px 20px;font-weight:700;font-size:14px;cursor:pointer;box-shadow:0 0 12px rgba(34,211,238,.35);">Close (M)</button>';
+      + '</div></div>'
+      + '<div id="map-missions" style="flex:0 0 auto;width:' + panelWidth + 'px;max-width:calc(100vw - 32px);max-height:' + (mapSize + 60) + 'px;overflow-y:auto;border:1px solid rgba(255,210,63,.35);border-radius:12px;background:rgba(10,24,38,.75);box-shadow:0 0 24px rgba(255,210,63,.15);padding:12px 14px;box-sizing:border-box;"></div>'
+      + '</div>';
     document.body.appendChild(mapOverlay);
     mapCanvas = mapOverlay.querySelector('#full-map-canvas');
     mapCtx = mapCanvas.getContext('2d');
+    missionPanelEl = mapOverlay.querySelector('#map-missions');
     mapOverlay.querySelector('[data-close]').addEventListener('click', () => { closeMap(); });
+    renderMissionPanel();
   }
   function openMap(player, timeHours, markers) {
     ensureMapOverlay();
     mapOpen = true;
     mapOverlay.style.display = 'flex';
+    renderMissionPanel();
     drawCityMap(mapCtx, city, mapSize, mapSize, player, timeHours, markers || [], { zoneAlpha: 0.5 });
   }
   function closeMap() {
@@ -304,6 +400,10 @@ export function createHud(city) {
     // place, weapon {owned, ammo}, armor, medkits, drinks, boosted,
     // missionsDone, missionsTotal, targetDist (m|null), driving, armed,
     // health (0-100, real player health — police gunfire, Mu 24 Nov 2026)}
+    // Keep the map's mission panel live while it is open (money, coins and
+    // the mission countdown change as the player plays).
+    lastHudState = { money: s.money, coins: s.coins };
+    if (mapOpen) renderMissionPanel();
     moneyEl.textContent = '$' + s.money.toLocaleString('en-US');
     if (coinsEl && s.coins) coinsEl.textContent = '◉ ' + s.coins.found + '/' + s.coins.total + ' coins';
     const hh = Math.floor(s.timeHours) % 24;
@@ -391,5 +491,5 @@ export function createHud(city) {
   let lastMarkers = [];
   function setMapMarkers(markers) { lastMarkers = markers || []; }
 
-  return { update, drawMinimap, showHint, openMap, closeMap, toggleMap, setMapMarkers, get mapOpen() { return mapOpen; } };
+  return { update, drawMinimap, showHint, openMap, closeMap, toggleMap, setMapMarkers, setMissionProgress, get mapOpen() { return mapOpen; } };
 }

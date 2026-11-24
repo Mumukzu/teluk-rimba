@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { generateCity, AREA_NAMES } from '../game/src/city.js';
-import { neonColor, cssColor, zoneNeonFill, formatDistance, drawCityMap, createHud, healthBarState, fullMapLayout } from '../game/src/hud.js';
+import { neonColor, cssColor, zoneNeonFill, formatDistance, drawCityMap, createHud, healthBarState, mapScreenLayout, missionPanelRows, missionPanelHTML } from '../game/src/hud.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 let fails = 0;
@@ -42,7 +42,9 @@ function stubEl() {
     setAttribute(k, v) { this.attrs[k] = v; },
     addEventListener() {},
     getContext: () => makeCtx(),
-    querySelector: () => stubEl(),
+    // Cache one stub per selector so the test can read back what the HUD
+    // injected into a queried element (e.g. the #map-missions panel).
+    querySelector: (sel) => ((el._q ||= {})[sel] ||= stubEl()),
   };
   return el;
 }
@@ -132,7 +134,8 @@ check('healthBarState defaults to 100', healthBarState(undefined).pct === 100);
   // the old code drew one zone label per block (144 blocks, all ~84 m
   // wide, labels up to ~106 px wide at 11 px bold) and they stacked into
   // unreadable mush. Now zero area names are drawn; names live only in
-  // the legend under the canvas. Canvas is 380 px (fullMapLayout at 960x540).
+  // the legend under the canvas. The draw here uses a 380 px test canvas
+  // (the real overlay canvas is 430 px via mapScreenLayout at 960x540).
   const ctx2 = makeCtx();
   drawCityMap(ctx2, city, 380, 380, player, 10, [], { zoneAlpha: 0.5 });
   const texts2 = ctx2.calls.filter(([k]) => k === 'fillText').map(([, t]) => t);
@@ -150,15 +153,49 @@ check('healthBarState defaults to 100', healthBarState(undefined).pct === 100);
   check('big map at 380px still draws all 1,000 building boxes', small2.length >= 1000, small2.length + ' small rects');
 }
 
-// --- 4b. fullMapLayout: overlay fits the viewport ---
+// --- 4b. mapScreenLayout: map LEFT + mission panel RIGHT, fits viewport ---
+// (Mu 24 Nov 17:09 — replaces the old centred fullMapLayout overlay.)
 {
-  check('full map at 960x540 uses a 380px canvas', fullMapLayout(960, 540).size === 380, JSON.stringify(fullMapLayout(960, 540)));
-  check('full map at 960x540 fits (380 + 160 = 540)', fullMapLayout(960, 540).fits === true);
-  check('full map at 1920x1080 caps at 560px', fullMapLayout(1920, 1080).size === 560);
-  check('full map at 1280x720 caps at 560px', fullMapLayout(1280, 720).size === 560);
-  check('full map at 800x600 fits', fullMapLayout(800, 600).fits === true, JSON.stringify(fullMapLayout(800, 600)));
-  check('full map canvas never below 280px', fullMapLayout(400, 300).size === 280);
-  check('fullMapLayout defaults to 960x540 with no window', fullMapLayout(undefined, undefined).size === 380);
+  const l = mapScreenLayout(960, 540);
+  check('map screen at 960x540 uses a 430px canvas', l.mapSize === 430, JSON.stringify(l));
+  check('map screen at 960x540 has a 478px mission panel', l.panelWidth === 478, JSON.stringify(l));
+  check('map screen at 960x540 fits (430 + 110 = 540)', l.fits === true);
+  check('map screen at 1920x1080 caps canvas at 560px', mapScreenLayout(1920, 1080).mapSize === 560);
+  check('map screen at 1920x1080 caps panel at 560px', mapScreenLayout(1920, 1080).panelWidth === 560);
+  check('map screen at 1280x720 caps canvas at 560px', mapScreenLayout(1280, 720).mapSize === 560);
+  check('map screen at 800x600 fits', mapScreenLayout(800, 600).fits === true, JSON.stringify(mapScreenLayout(800, 600)));
+  check('map screen at 800x600 keeps a usable panel', mapScreenLayout(800, 600).panelWidth >= 240);
+  check('map screen canvas never below 280px', mapScreenLayout(400, 300).mapSize === 280);
+  check('map screen at 400x300 does not fit', mapScreenLayout(400, 300).fits === false);
+  check('mapScreenLayout defaults to 960x540 with no window', mapScreenLayout(undefined, undefined).mapSize === 430);
+}
+
+// --- 4c. missionPanelRows / missionPanelHTML: real mission state, 6 rows ---
+{
+  const fresh = missionPanelRows([], null);
+  check('panel lists all 6 missions', fresh.length === 6, fresh.length + ' rows');
+  check('panel M1 is Parcel Run $150', fresh[0].name === 'Parcel Run' && fresh[0].reward === 150, JSON.stringify(fresh[0]));
+  check('panel M6 is Mountain Road $1000', fresh[5].name === 'Mountain Road' && fresh[5].reward === 1000, JSON.stringify(fresh[5]));
+  check('panel fresh: M1 available, rest locked', fresh[0].status === 'available' && fresh.slice(1).every((r) => r.status === 'locked'), fresh.map((r) => r.status).join(','));
+  check('panel fresh: M1 detail points at the mission board', fresh[0].detail.includes('Rimba Plaza'), fresh[0].detail);
+  const mid = missionPanelRows([1], { id: 2, stepIdx: 0, timeLeft: 125 });
+  check('panel done: M1 done', mid[0].status === 'done');
+  check('panel done: M1 detail shows earned reward', mid[0].detail === 'Complete — $150 earned', mid[0].detail);
+  check('panel active: M2 active', mid[1].status === 'active');
+  check('panel active: M2 detail is the live step + countdown', mid[1].detail === 'Meet Sari at Rimba Market (2:05)', mid[1].detail);
+  check('panel active: M3 locked while M2 runs', mid[2].status === 'locked');
+  const done = missionPanelRows([1, 2, 3], null);
+  check('panel done 3: M4 available next', done[3].status === 'available' && done[3].name === 'Glass Tower');
+  const html = missionPanelHTML([1], { id: 2, stepIdx: 0, timeLeft: 125 }, 1450, { found: 3, total: 12 });
+  check('panel HTML has MISSION PROGRESS header', html.includes('MISSION PROGRESS'));
+  check('panel HTML lists every mission name', ['Parcel Run', 'Black Market', 'Forest Chase', 'Glass Tower', 'Night Port', 'Mountain Road'].every((n) => html.includes(n)));
+  check('panel HTML shows money + coins + progress', html.includes('$1,450') && html.includes('3/12 coins') && html.includes('MISSIONS 1/6'), html.slice(0, 200));
+  check('panel HTML shows the live step', html.includes('Meet Sari at Rimba Market (2:05)'));
+  check('panel HTML marks statuses', html.includes('DONE') && html.includes('ACTIVE') && html.includes('LOCKED'));
+  // When a mission is running it IS the next job, so no separate NEXT chip
+  // exists then — NEXT shows only with no mission active (fresh state).
+  const freshHtml = missionPanelHTML([], null, 0, { found: 0, total: 12 });
+  check('panel HTML shows NEXT on the first job when idle', freshHtml.includes('NEXT') && freshHtml.includes('M1 · Parcel Run'));
 }
 
 // --- 5. createHud().update() with full Neon City state ---
@@ -223,8 +260,26 @@ check('healthBarState defaults to 100', healthBarState(undefined).pct === 100);
   check('full map title is English', !!overlay && overlay.innerHTML.includes('TELUK RIMBA — MAP'));
   // Canvas sized to the viewport (Mu 24 Nov 14:33 — old fixed 560px canvas
   // overflowed a 540px-high viewport). Node has no window, so the
-  // fallback is 960x540 -> 380px canvas.
-  check('full map canvas is 380x380 at 960x540', !!overlay && overlay.innerHTML.includes('width="380" height="380"'), 'canvas sized to viewport');
+  // fallback is 960x540 -> 430px canvas (mapScreenLayout, Mu 24 Nov 17:09
+  // two-column layout: map left, mission panel right).
+  check('full map canvas is 430x430 at 960x540', !!overlay && overlay.innerHTML.includes('width="430" height="430"'), 'canvas sized to viewport');
+  // Mission panel: the map canvas comes BEFORE the panel container in the
+  // overlay markup (map left, panel right), and the panel renders the real
+  // mission rows once the HUD feeds it progress.
+  check('full map has a mission panel container', !!overlay && overlay.innerHTML.includes('id="map-missions"'));
+  check('map canvas is left of the mission panel', !!overlay && overlay.innerHTML.indexOf('full-map-canvas') < overlay.innerHTML.indexOf('map-missions'));
+  hud.setMissionProgress([1], { id: 2, stepIdx: 0, timeLeft: 125 });
+  hud.update(0.016, {
+    money: 1450, coins: { found: 3, total: 12 }, timeHours: 10.5, wanted: 0,
+    speedKmh: 0, objective: 'Meet Sari at Rimba Market', place: 'Rimba Central',
+    weapon: { owned: false, ammo: 0 }, armor: 0, medkits: 0,
+    boosted: false, missionsDone: 1, missionsTotal: 6, armed: false,
+    driving: false, targetDist: null, health: 100,
+  });
+  const panelEl = overlay.querySelector('#map-missions');
+  check('mission panel renders on open + update', !!panelEl && panelEl.innerHTML.includes('MISSION PROGRESS'), panelEl ? panelEl.innerHTML.slice(0, 80) : 'no panel el');
+  check('mission panel shows the active mission step', !!panelEl && panelEl.innerHTML.includes('Meet Sari at Rimba Market (2:05)'));
+  check('mission panel shows all 6 mission names', !!panelEl && ['Parcel Run', 'Black Market', 'Forest Chase', 'Glass Tower', 'Night Port', 'Mountain Road'].every((n) => panelEl.innerHTML.includes(n)));
   check('full map overlay scrolls on tiny viewports', !!overlay && overlay.style.cssText.includes('overflow-y:auto'));
 }
 

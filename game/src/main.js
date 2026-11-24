@@ -529,6 +529,11 @@ function stepWorld(dt) {
   });
   // Full-map markers (M key): mission/board target, the shop, coins found.
   hud.setMapMarkers(mapMarkers());
+  // Map screen mission panel (Mu, 24 Nov 17:09): the right side of the map
+  // shows the 6 missions with their real status — done ids + the running
+  // mission (id, step, countdown) or null when idle.
+  const ms = missions.saveState();
+  hud.setMissionProgress(missions.doneIds(), ms ? { id: ms.id, stepIdx: ms.step, timeLeft: missions.state.timeLeft } : null);
   hud.drawMinimap(player.state, game.timeHours, couriers.active ? couriers.marker() : missions.marker());
 }
 
