@@ -1,6 +1,7 @@
 // Lively city checks (Mu): varied building shapes, livelier facades,
-// vertical neon, street life, used roofs, small animations — plus the
+// street life, used roofs, small animations — plus the
 // ground-floor glass for tall buildings. All code-made, no flags.
+// (Vertical neon REMOVED 24 Nov 2026 — see Feature 3 note below.)
 // Pure geometry: buildLivelyMeshes + buildBuildingMeshes run in Node
 // (document is undefined — the canvas atlases are null there).
 import { generateCity, riverDistance } from '../game/src/city.js';
@@ -178,12 +179,14 @@ check('6 geometric murals on tall walls (no murals on CBD glass)', lv.counts.mur
 check('mural panels carry UVs', lv.muralGeom.uv.length === lv.muralGeom.pos.length / 3 * 2);
 check('laundry pieces fit the 200-capacity dynamic mesh', lv.counts.laundry <= 200, lv.counts.laundry + ' pieces');
 
-// ---- Feature 3: vertical neon ----
-check('vertical neon panels on commercial/CBD facades', lv.counts.neon === 140, lv.counts.neon + ' panels');
-check('one neon halo per panel', lv.neonGlow.matrices.length === lv.counts.neon);
-check('neon halos fit the 160-capacity dynamic mesh', lv.neonGlow.matrices.length <= 160);
-check('neon geometry + halos are finite',
-  allFin(lv.neonGlow.matrices) && lv.neonGeom.pos.every(Number.isFinite) && lv.neonGeom.uv.every(Number.isFinite));
+// ---- Feature 3: vertical neon REMOVED (Mu 24 Nov 2026, 16:05 WIB) ----
+// The 1x5 m boards read as solid bright vertical bars at oblique angles
+// (the green one showed up in s01r-opt3 / s02r-opt3) — all six tints are
+// the same artifact, so the whole feature is gone, not just the green
+// boards. The horizontal facade name boards (signs.js) stay.
+check('vertical neon boards removed (no geometry, no halo, no atlas)',
+  lv.neonGeom === undefined && lv.neonGlow === undefined && lv.neonAtlasCanvas === undefined);
+check('no neon count remains', lv.counts.neon === undefined);
 
 // ---- Feature 4: street life ----
 check('20 food carts placed', lv.counts.carts === 20);

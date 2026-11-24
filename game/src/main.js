@@ -614,7 +614,7 @@ if (params.sim) {
   // buildDynamics (player.partMatrices), not as a static mesh.
   const activityPropsMesh = renderer.makePlayerMesh(peds.activityPropsGeom());
   const landmarks = renderer.landmarks;
-  const lively = renderer.lively; // neon glow / laundry (buildDynamics)
+  const lively = renderer.lively; // laundry pieces (buildDynamics)
   const plotDressing = renderer.plotDressing; // yard fountain spots (animated water)
   let last = performance.now();
   let acc = 0;
@@ -958,22 +958,11 @@ if (params.sim) {
         };
       }
     }
-    // Lively city (Mu): neon flicker, laundry sway. Smoke REMOVED
-    // (Mu, 23 Nov 2026). No flags/pennants — forbidden. Both ride
-    // dynamic meshes (render.js), refilled here every frame from
-    // renderer.lively.
+    // Lively city (Mu): laundry sway. Smoke REMOVED (Mu, 23 Nov 2026).
+    // Vertical neon REMOVED (Mu, 24 Nov 2026). No flags/pennants —
+    // forbidden. Rides dynamic meshes (render.js), refilled here every
+    // frame from renderer.lively.
     if (lively) {
-      // Neon halo: gentle flicker — brightness breathes 0.82..1.0 with
-      // a per-sign phase. Night only (render.js skips it by day).
-      if (lively.neonGlow.matrices.length) {
-        const ng = { matrices: lively.neonGlow.matrices, tints: [] };
-        for (let i = 0; i < lively.neonGlow.tints.length; i++) {
-          const f = 0.82 + 0.18 * Math.sin(game.elapsed * 2.5 + lively.neonGlow.phases[i]);
-          const t = lively.neonGlow.tints[i];
-          ng.tints.push([t[0] * f, t[1] * f, t[2] * f]);
-        }
-        dyn.neonGlow = ng;
-      }
       // Laundry: each cloth swings around its line (local X axis) with
       // a per-piece phase — a slow breeze, never a snap.
       const la = { matrices: [], tints: [] };

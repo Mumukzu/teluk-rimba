@@ -6,14 +6,14 @@
 //      pitched roofs on low houses, balconies already exist (Phase F);
 //   2. livelier facades — AC boxes, balcony planters, curtains in some
 //      windows, geometric murals on a few tall walls (canvas patterns);
-//   3. vertical neon name boards on commercial/CBD facades (own names,
-//      bright at night, gently flickering);
+//   3. (REMOVED 24 Nov 2026 — vertical neon name boards: Mu said the
+//      green one reads as a solid vertical bar; all tints same artifact);
 //   4. street life — food carts, tent warungs, cafe tables on sidewalks;
 //   5. used roofs — gardens, small pools, helipads, small courts;
-//   6. small animations — neon flicker, laundry swaying in the wind
+//   6. small animations — laundry swaying in the wind
 //      (dynamic meshes, main.js). Chimney/warung smoke REMOVED (Mu,
 //      23 Nov 2026: the drifting puffs read as artefacts, not smoke).
-// Pure geometry (no document at build time — the two canvas atlases are
+// Pure geometry (no document at build time — the canvas atlas is
 // null in Node tests, same pattern as the rooftop signs).
 import { emptyGeom, plainBox, mat4TRS, mergeGeoms, translateGeom } from './gl.js';
 import { mulberry32 } from './rng.js';
@@ -304,79 +304,11 @@ export function buildLivelyMeshes(city) {
     });
   }
 
-  // ---- Feature 3: vertical neon name boards ----
-  // Papan nama toko VERTIKAL di fasad gedung komersial/CBD (h>=12):
-  // panel teks 1 x 5 m dari satu atlas (nama-nama BIKINAN SENDIRI —
-  // jangan copy nama dari referensi manapun) + halo neon di belakangnya
-  // yang menyala di malam hari dan berkedip halus (dynamic, feature 6).
-  const NEON_NAMES = [
-    'RIMBA MART', 'KOPI SENJA', 'NASI GORENG', 'BOBA TIME',
-    'LAUNDRY KU', 'BARBERSHOP', 'HOTEL RIMBA', 'FOTO STUDIO',
-    'APOTEK SEHAT', 'BAKSO MANTAP', 'SATE RIMBA', 'WARTEG 24',
-  ];
-  const NEON_COLORS = [
-    [1, 0.3, 0.6], [0.2, 0.9, 1], [0.6, 1, 0.3],
-    [1, 0.55, 0.15], [0.7, 0.4, 1], [1, 0.85, 0.2],
-  ];
-  const NEON_CELL_W = 256, NEON_CELL_H = 1024, NEON_COLS = 4, NEON_ROWS = 3;
-  const css = (t) => `rgb(${Math.round(t[0] * 255)},${Math.round(t[1] * 255)},${Math.round(t[2] * 255)})`;
-  const drawNeonAtlas = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = NEON_COLS * NEON_CELL_W;
-    canvas.height = NEON_ROWS * NEON_CELL_H;
-    const ctx = canvas.getContext('2d');
-    NEON_NAMES.forEach((name, i) => {
-      const col = i % NEON_COLS, row = Math.floor(i / NEON_COLS);
-      const x0 = col * NEON_CELL_W, y0 = row * NEON_CELL_H;
-      const tint = NEON_COLORS[i % NEON_COLORS.length];
-      ctx.fillStyle = '#10182a';
-      ctx.fillRect(x0, y0, NEON_CELL_W, NEON_CELL_H);
-      ctx.strokeStyle = css(tint);
-      ctx.lineWidth = 10;
-      ctx.strokeRect(x0 + 10, y0 + 10, NEON_CELL_W - 20, NEON_CELL_H - 20);
-      ctx.save();
-      ctx.translate(x0 + NEON_CELL_W / 2, y0 + NEON_CELL_H / 2);
-      ctx.rotate(-Math.PI / 2); // text reads bottom-to-top
-      ctx.font = 'bold 92px Arial, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.shadowColor = css(tint);
-      ctx.shadowBlur = 24;
-      ctx.fillStyle = css(tint);
-      ctx.fillText(name, 0, 0);
-      ctx.restore();
-    });
-    return canvas;
-  };
-  const neonGeom = { pos: [], uv: [] };
-  const neonGlowMatrices = [], neonGlowTints = [], neonGlowPhases = [];
-  let neonCount = 0;
-  for (const b of city.buildings) {
-    if ((b.zone !== 'commercial' && b.zone !== 'downtown') || b.h < 12) continue;
-    if (hash01(b.x + 7, b.z + 3) >= 0.45) continue;
-    const nameIdx = neonCount % NEON_NAMES.length;
-    const tint = NEON_COLORS[nameIdx % NEON_COLORS.length];
-    const side = hash01(b.x + 4, b.z + 1) < 0.5 ? -1 : 1;
-    const along = side * b.w * 0.28;
-    const cr = Math.cos(b.rot), sr = Math.sin(b.rot);
-    // Text panel: front face, centre y 6.0 (above the awning at 3.1),
-    // 0.12 proud. Halo box: same centre, 0.06 proud, slightly larger
-    // so it peeks out around the panel edges at night.
-    const lzP = b.d / 2 + 0.12, lzH = b.d / 2 + 0.06;
-    const px = b.x + along * cr + lzP * sr, pz = b.z - along * sr + lzP * cr;
-    const hx = b.x + along * cr + lzH * sr, hz = b.z - along * sr + lzH * cr;
-    const n = [sr, 0, cr]; // front-face normal
-    const col = nameIdx % NEON_COLS, row = Math.floor(nameIdx / NEON_COLS);
-    const atlasW = NEON_COLS * NEON_CELL_W, atlasH = NEON_ROWS * NEON_CELL_H;
-    const u0 = (col * NEON_CELL_W) / atlasW, u1 = ((col + 1) * NEON_CELL_W) / atlasW;
-    const vTop = 1 - (row * NEON_CELL_H) / atlasH;
-    const vBottom = 1 - ((row + 1) * NEON_CELL_H) / atlasH;
-    addPanelQuad(neonGeom, px, 6.0, pz, n, 1.0, 5.0, [u0, vBottom, u1, vTop]);
-    neonGlowMatrices.push(mat4TRS(hx, 6.0, hz, b.rot, 1, 1, 1));
-    neonGlowTints.push(tint);
-    neonGlowPhases.push(hash01(b.x, b.z + 6) * 6.28);
-    neonCount++;
-  }
+  // ---- Feature 3: vertical neon name boards — REMOVED (Mu 24 Nov 2026) ----
+  // The 1 x 5 m boards read as solid bright vertical bars at oblique
+  // angles (the green one showed up in s01r-opt3 / s02r-opt3) — all six
+  // tints are the same artifact, so the whole feature is gone, not just
+  // the green boards. The horizontal facade name boards (signs.js) stay.
 
   // ---- Feature 4: street life (no pennant flags — forbidden by Mu) ----
   // Food carts, tent warungs, cafe tables+chairs on sidewalk edges —
@@ -569,15 +501,13 @@ export function buildLivelyMeshes(city) {
     clutter,
     curtains: { geom: curtainQuad, matrices: curtainMatrices, tints: curtainTints },
     muralGeom, muralAtlasCanvas: typeof document === 'undefined' ? null : drawMuralAtlas(),
-    neonGeom, neonAtlasCanvas: typeof document === 'undefined' ? null : drawNeonAtlas(),
-    neonGlow: { matrices: neonGlowMatrices, tints: neonGlowTints, phases: neonGlowPhases },
     laundryPieces,
     streetSpots,
     clothGeom,
     counts: {
       stepped: steppedMatrices.length, pitched: pitchedMatrices.length,
       curtains: curtainMatrices.length, laundry: laundryPieces.length,
-      murals: muralPicks.length, neon: neonCount,
+      murals: muralPicks.length,
       carts: streetCounts.carts, tents: streetCounts.tents, cafe: streetCounts.cafe,
       roofUse: roofUseCount, roofUseKinds,
       clutterTris: clutter.pos.length / 9,

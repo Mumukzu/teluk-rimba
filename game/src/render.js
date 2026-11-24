@@ -54,11 +54,9 @@ export function createRenderer(canvas, city) {
   const rooftopSignTexture = rooftopSigns.atlasCanvas
     ? createCanvasTexture(gl, rooftopSigns.atlasCanvas) : null;
   const shopGlow = buildShopGlow(city);
-  const lively = buildLivelyMeshes(city); // varied shapes, facades, neon, street life, used roofs
+  const lively = buildLivelyMeshes(city); // varied shapes, facades, street life, used roofs
   const muralTexture = lively.muralAtlasCanvas
     ? createCanvasTexture(gl, lively.muralAtlasCanvas) : null;
-  const neonTexture = lively.neonAtlasCanvas
-    ? createCanvasTexture(gl, lively.neonAtlasCanvas) : null;
   const stars = buildStarsSpec();
   const wet = buildWetGeoms();
   const nightPools = buildNightLightGeoms(city, landmarks);
@@ -138,13 +136,9 @@ export function createRenderer(canvas, city) {
     const muralMesh = createTexturedMesh(gl, progs.textured, lively.muralGeom);
     meshes.push({ mesh: muralMesh, prog: progs.textured, model: mat4Identity(), textured: true, texture: muralTexture });
   }
-  // Vertical neon name boards (Mu): our own shop names on commercial/CBD
-  // facades, one shared atlas, one textured draw. The glow halo behind
-  // each board is a dynamic night-only mesh (feature 6). (+1 draw.)
-  if (neonTexture) {
-    const neonMesh = createTexturedMesh(gl, progs.textured, lively.neonGeom);
-    meshes.push({ mesh: neonMesh, prog: progs.textured, model: mat4Identity(), textured: true, texture: neonTexture });
-  }
+  // Vertical neon name boards REMOVED (Mu 24 Nov 2026): the 1x5 m boards
+  // read as solid bright vertical bars at oblique angles (green one in
+  // s01r-opt3/s02r-opt3). The horizontal facade boards (signs.js) stay.
   addInst(progs.litInst, buildingMeshes.roofDeck);
   addInst(progs.litInst, buildingMeshes.parapetNS);
   addInst(progs.litInst, buildingMeshes.parapetEW);
@@ -311,11 +305,10 @@ export function createRenderer(canvas, city) {
   // Phase E2: hidden coins (spinning gold discs) + stunt ramps (wedges).
   addDyn(progs.unlitInst, plainBox(0.9, 0.9, 0.15, [1, 0.84, 0.2]), 12, 'coins');
   addDyn(progs.litInst, wedgeGeom(), 4, 'ramps');
-  // Lively city (Mu): neon halo glow (night only, flickers), laundry
-  // cloth pieces (sway in the wind). Smoke REMOVED (Mu, 23 Nov 2026:
-  // puffs read as artefacts). All refilled every frame from main.js
-  // buildDynamics. (+2 draws.)
-  addDyn(progs.unlitInst, plainBox(1.25, 5.25, 0.06, [1, 1, 1]), 160, 'neonGlow');
+  // Lively city (Mu): laundry cloth pieces (sway in the wind). Smoke
+  // REMOVED (Mu, 23 Nov 2026: puffs read as artefacts). Vertical neon
+  // REMOVED (Mu, 24 Nov 2026: boards read as solid vertical bars).
+  // All refilled every frame from main.js buildDynamics. (+1 draw.)
   addDyn(progs.litInst, lively.clothGeom, 200, 'laundry');
   const flatQuadGeom = (() => {
     const g = { pos: [], nrm: [], col: [] };
@@ -334,7 +327,7 @@ export function createRenderer(canvas, city) {
 
   // Sun rig for a given time of day (hours 0-24). Returns sky/fog colours.
   // Night is dark (horizon stays dark) but alive: moonlight lifts the
-  // ambient a touch, and the lit windows / lamps / neon carry the glitter.
+  // ambient a touch, and the lit windows / lamps carry the glitter.
   function lightFor(timeHours, rainAmt = 0) {
     const dayT = (timeHours - 6) / 12; // 0 at 06:00, 1 at 18:00
     const elev = Math.sin(dayT * Math.PI); // 0 at dawn/dusk, 1 at noon
@@ -461,7 +454,6 @@ export function createRenderer(canvas, city) {
       if (name === 'taillights' && light.isDay) continue;
       if (name === 'beamcones' && light.isDay) continue;
       if (name === 'beacons' && light.isDay) continue;
-      if (name === 'neonGlow' && light.isDay) continue; // neon halo: night only
       if (name === 'rain' && rainAmt < 0.05) continue;
       updateDynamicInstancedMesh(gl, entry.mesh, spec.matrices, spec.tints);
       const uniforms = { ...common, uModel: mat4Identity() };
@@ -487,7 +479,7 @@ export function createRenderer(canvas, city) {
     get tris() { return tris; },
     dayLength: DAY_LENGTH,
     landmarks,
-    lively, // neon glow bases / laundry pieces (main.js buildDynamics)
+    lively, // laundry pieces (main.js buildDynamics)
     plotDressing, // yard fountain spots (animated water rides the flow mesh)
   };
 }
