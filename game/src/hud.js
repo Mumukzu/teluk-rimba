@@ -68,9 +68,26 @@ export function healthBarState(health) {
 }
 
 // Shared map drawing: zone blocks, sea, lake, river, roads, buildings,
-// stadium, markers, player arrow, north marker, zone labels (big map only).
+// stadium, markers, player arrow, north marker. NO area-name text is drawn
+// on the map tiles (Mu, 24 Nov 14:33 — "mini mapnya gak usah pake tulisan
+// nama setiap daerah"): the old code drew one zone label per block (144
+// blocks, all ~84 m wide, labels up to ~106 px wide at 11 px bold), so the
+// names stacked into unreadable mush. Area names live only in the legend
+// under the canvas.
 // markers: [{x, z, color, shape}] — shape 'diamond' (mission/board),
-// 'dollar' (shop), 'dot' (coin found). opts: {labels, zoneAlpha}.
+// 'dollar' (shop), 'dot' (coin found). opts: {zoneAlpha}.
+
+// Full-map overlay sizing (pure, Node-testable): the canvas must fit the
+// viewport together with the title, legend, marker key and Close button.
+// That chrome costs ~160 px at the sizes in ensureMapOverlay, so the canvas
+// is vh-160, clamped to [280, 560] and to vw-32. At 960x540 the canvas is
+// 380 px and the whole overlay fits (380 + 160 = 540).
+export function fullMapLayout(vw, vh) {
+  const w = Number.isFinite(vw) && vw > 0 ? vw : 960;
+  const h = Number.isFinite(vh) && vh > 0 ? vh : 540;
+  const size = Math.max(280, Math.min(560, h - 160, w - 32));
+  return { size, fits: size + 160 <= h };
+}
 export function drawCityMap(c, city, w, h, player, timeHours, markers, opts = {}) {
   const sc = w / 1400;
   const X = (x) => (x + 700) * sc;
@@ -121,31 +138,9 @@ export function drawCityMap(c, city, w, h, player, timeHours, markers, opts = {}
     c.lineWidth = 1;
     c.strokeRect(X(st.x0), Y(st.z0), (st.x1 - st.x0) * sc, (st.z1 - st.z0) * sc);
   }
-  // Zone labels (big map only): English area name at each block centre.
-  if (opts.labels && w > 300) {
-    c.textAlign = 'center';
-    c.textBaseline = 'middle';
-    c.font = 'bold 11px system-ui,sans-serif';
-    for (const b of city.blocks) {
-      if ((b.x1 - b.x0) * sc < 30) continue;
-      const label = AREA_NAMES[b.zone] || b.zone;
-      const lx = X((b.x0 + b.x1) / 2), ly = Y((b.z0 + b.z1) / 2);
-      c.lineWidth = 3;
-      c.strokeStyle = 'rgba(0,0,0,.85)';
-      c.strokeText(label, lx, ly);
-      c.fillStyle = '#fff';
-      c.fillText(label, lx, ly);
-    }
-    if (city.stadium) {
-      const st = city.stadium;
-      const lx = X((st.x0 + st.x1) / 2), ly = Y((st.z0 + st.z1) / 2);
-      c.lineWidth = 3;
-      c.strokeStyle = 'rgba(0,0,0,.85)';
-      c.strokeText(st.name, lx, ly);
-      c.fillStyle = '#fff';
-      c.fillText(st.name, lx, ly);
-    }
-  }
+  // No text labels on the map tiles (Mu, 24 Nov 14:33): zone/area names
+  // appear only in the legend under the canvas. The stadium is drawn as
+  // a green pitch rect with a white outline — no name text on it either.
   // Markers.
   for (const m of markers || []) {
     const mx = X(m.x), my = Y(m.z);
@@ -244,28 +239,35 @@ export function createHud(city) {
   // --- full-screen map overlay (M key, Phase E2) ---
   let mapOverlay = null, mapCanvas = null, mapCtx = null;
   let mapOpen = false;
+  let mapSize = 380; // set by ensureMapOverlay from fullMapLayout()
   const LEGEND_ZONES = ['downtown', 'commercial', 'residential', 'beach', 'port', 'forest', 'plaza', 'market'];
   function ensureMapOverlay() {
     if (mapOverlay) return;
+    // Size the canvas to the viewport so the whole overlay (title +
+    // canvas + legend + key + Close button) fits — at 960x540 the canvas
+    // is 380 px. overflow-y:auto is a safety net for tiny viewports only.
+    const vw = (typeof window !== 'undefined' && window.innerWidth) || 960;
+    const vh = (typeof window !== 'undefined' && window.innerHeight) || 540;
+    mapSize = fullMapLayout(vw, vh).size;
     mapOverlay = document.createElement('div');
     mapOverlay.id = 'full-map';
-    mapOverlay.style.cssText = 'position:fixed;inset:0;z-index:40;background:rgba(4,8,16,.92);display:none;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:system-ui,sans-serif;';
+    mapOverlay.style.cssText = 'position:fixed;inset:0;z-index:40;background:rgba(4,8,16,.92);display:none;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:system-ui,sans-serif;overflow-y:auto;';
     const legend = LEGEND_ZONES.map((z) => {
       const c = zoneNeonFill(city, z);
       const sw = cssColor(c, 1);
       return '<span style="margin-right:12px;white-space:nowrap;"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:' + sw + ';box-shadow:0 0 6px ' + sw + ';vertical-align:-1px;"></span> ' + (AREA_NAMES[z] || z) + '</span>';
     }).join('');
-    mapOverlay.innerHTML = '<div style="font-size:22px;font-weight:700;letter-spacing:3px;margin-bottom:10px;color:#22d3ee;text-shadow:0 0 14px rgba(34,211,238,.8);">TELUK RIMBA — MAP</div>'
-      + '<canvas id="full-map-canvas" width="560" height="560" style="border:2px solid rgba(34,211,238,.7);border-radius:12px;background:#0a1826;box-shadow:0 0 24px rgba(34,211,238,.35);"></canvas>'
-      + '<div style="margin-top:12px;font-size:13px;opacity:.95;max-width:640px;text-align:center;line-height:1.9;">' + legend + '</div>'
-      + '<div style="margin-top:6px;font-size:14px;opacity:.9;">'
+    mapOverlay.innerHTML = '<div style="font-size:20px;font-weight:700;letter-spacing:3px;margin-bottom:8px;color:#22d3ee;text-shadow:0 0 14px rgba(34,211,238,.8);">TELUK RIMBA — MAP</div>'
+      + '<canvas id="full-map-canvas" width="' + mapSize + '" height="' + mapSize + '" style="border:2px solid rgba(34,211,238,.7);border-radius:12px;background:#0a1826;box-shadow:0 0 24px rgba(34,211,238,.35);"></canvas>'
+      + '<div style="margin-top:8px;font-size:12px;opacity:.95;max-width:640px;text-align:center;line-height:1.7;">' + legend + '</div>'
+      + '<div style="margin-top:6px;font-size:13px;opacity:.9;">'
       + '<span style="color:#ffd23f;">◆</span> You &nbsp;'
       + '<span style="color:#ffd23f;">◆</span> Mission target &nbsp;'
       + '<span style="color:#4ade80;">◆</span> Mission board &nbsp;'
       + '<span style="color:#fb923c;">$</span> Market shop &nbsp;'
       + '<span style="color:#ffd23f;">●</span> Coins found'
       + '</div>'
-      + '<button data-close style="margin-top:12px;background:rgba(34,211,238,.15);color:#22d3ee;border:1px solid #22d3ee;border-radius:8px;padding:8px 22px;font-weight:700;font-size:15px;cursor:pointer;box-shadow:0 0 12px rgba(34,211,238,.35);">Close (M)</button>';
+      + '<button data-close style="margin-top:10px;background:rgba(34,211,238,.15);color:#22d3ee;border:1px solid #22d3ee;border-radius:8px;padding:7px 20px;font-weight:700;font-size:14px;cursor:pointer;box-shadow:0 0 12px rgba(34,211,238,.35);">Close (M)</button>';
     document.body.appendChild(mapOverlay);
     mapCanvas = mapOverlay.querySelector('#full-map-canvas');
     mapCtx = mapCanvas.getContext('2d');
@@ -275,7 +277,7 @@ export function createHud(city) {
     ensureMapOverlay();
     mapOpen = true;
     mapOverlay.style.display = 'flex';
-    drawCityMap(mapCtx, city, 560, 560, player, timeHours, markers || [], { labels: true, zoneAlpha: 0.5 });
+    drawCityMap(mapCtx, city, mapSize, mapSize, player, timeHours, markers || [], { zoneAlpha: 0.5 });
   }
   function closeMap() {
     if (mapOverlay) mapOverlay.style.display = 'none';
@@ -379,11 +381,11 @@ export function createHud(city) {
     const markers = marker
       ? [{ x: marker.x, z: marker.z, color: marker.board ? '#4ade80' : '#ffd23f', shape: 'diamond' }]
       : [];
-    drawCityMap(ctx, city, W, H, player, timeHours, markers, { labels: false, zoneAlpha: 0.32 });
+    drawCityMap(ctx, city, W, H, player, timeHours, markers, { zoneAlpha: 0.32 });
     // Active zone strip under the minimap.
     if (zoneEl) zoneEl.textContent = areaNameAt(city, player.x, player.z).toUpperCase();
     // If the full map is open, keep it live too.
-    if (mapOpen) drawCityMap(mapCtx, city, 560, 560, player, timeHours, lastMarkers, { labels: true, zoneAlpha: 0.5 });
+    if (mapOpen) drawCityMap(mapCtx, city, mapSize, mapSize, player, timeHours, lastMarkers, { zoneAlpha: 0.5 });
   }
 
   let lastMarkers = [];

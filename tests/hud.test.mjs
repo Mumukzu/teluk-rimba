@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { generateCity, AREA_NAMES } from '../game/src/city.js';
-import { neonColor, cssColor, zoneNeonFill, formatDistance, drawCityMap, createHud, healthBarState } from '../game/src/hud.js';
+import { neonColor, cssColor, zoneNeonFill, formatDistance, drawCityMap, createHud, healthBarState, fullMapLayout } from '../game/src/hud.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 let fails = 0;
@@ -103,11 +103,11 @@ check('healthBarState is low at 30', healthBarState(30).low === true);
 check('healthBarState is not low at 31', healthBarState(31).low === false);
 check('healthBarState defaults to 100', healthBarState(undefined).pct === 100);
 
-// --- 4. drawCityMap: real building boxes, zone blocks, N marker, labels ---
+// --- 4. drawCityMap: real building boxes, zone blocks, N marker, NO labels ---
 {
   const ctx = makeCtx();
   const player = { x: 0, z: 0, facing: 0 };
-  drawCityMap(ctx, city, 200, 200, player, 10, [{ x: 100, z: -100, color: '#ffd23f', shape: 'diamond' }], { labels: false, zoneAlpha: 0.32 });
+  drawCityMap(ctx, city, 200, 200, player, 10, [{ x: 100, z: -100, color: '#ffd23f', shape: 'diamond' }], { zoneAlpha: 0.32 });
   const rects = ctx.calls.filter(([k]) => k === 'fillRect');
   const smallRects = rects.filter(([, , , w, h]) => w <= 9 && h <= 9 && w >= 1 && h >= 1);
   check('minimap draws all 1,000 building boxes', smallRects.length >= 1000, smallRects.length + ' small rects');
@@ -121,22 +121,44 @@ check('healthBarState defaults to 100', healthBarState(undefined).pct === 100);
   // must still draw at 130x130. Buildings are 1-4px at this scale
   // (1px ~= 10.8m), so the small-rects filter still catches every one.
   const ctx130 = makeCtx();
-  drawCityMap(ctx130, city, 130, 130, player, 10, [{ x: 100, z: -100, color: '#ffd23f', shape: 'diamond' }], { labels: false, zoneAlpha: 0.32 });
+  drawCityMap(ctx130, city, 130, 130, player, 10, [{ x: 100, z: -100, color: '#ffd23f', shape: 'diamond' }], { zoneAlpha: 0.32 });
   const rects130 = ctx130.calls.filter(([k]) => k === 'fillRect');
   const small130 = rects130.filter(([, , , w, h]) => w <= 9 && h <= 9 && w >= 1 && h >= 1);
   check('minimap at 130px still draws all 1,000 building boxes', small130.length >= 1000, small130.length + ' small rects');
   const texts130 = ctx130.calls.filter(([k]) => k === 'fillText').map(([, t]) => t);
   check('minimap at 130px still draws north marker N', texts130.includes('N'), texts130.join(','));
   check('minimap at 130px still draws mission diamond marker', ctx130.calls.some(([k]) => k === 'moveTo'));
-  // Big map with labels: English zone names + stadium name.
+  // Big map (Mu 24 Nov 14:33 — NO area-name writing on the map tiles):
+  // the old code drew one zone label per block (144 blocks, all ~84 m
+  // wide, labels up to ~106 px wide at 11 px bold) and they stacked into
+  // unreadable mush. Now zero area names are drawn; names live only in
+  // the legend under the canvas. Canvas is 380 px (fullMapLayout at 960x540).
   const ctx2 = makeCtx();
-  drawCityMap(ctx2, city, 560, 560, player, 10, [], { labels: true, zoneAlpha: 0.5 });
+  drawCityMap(ctx2, city, 380, 380, player, 10, [], { zoneAlpha: 0.5 });
   const texts2 = ctx2.calls.filter(([k]) => k === 'fillText').map(([, t]) => t);
-  for (const z of ZONES) {
-    check('big map labels zone ' + AREA_NAMES[z], texts2.includes(AREA_NAMES[z]));
+  for (const name of Object.values(AREA_NAMES)) {
+    check('big map draws no area name "' + name + '"', !texts2.includes(name));
   }
-  check('big map labels the stadium', texts2.includes(city.stadium.name), city.stadium.name);
+  check('big map draws no stadium name', !texts2.includes(city.stadium.name), city.stadium.name);
+  check('big map only text is the N marker', texts2.length === 1 && texts2[0] === 'N', texts2.join(','));
   check('big map draws N marker', texts2.includes('N'));
+  const rects2 = ctx2.calls.filter(([k]) => k === 'fillRect');
+  // At 380px (sc = 380/1400) the biggest building box is 15.2 px, so the
+  // small-rect filter is <= 17 px here (the 9 px filter only fits the
+  // 130/200 px minimap scales). Zone blocks are 22.8 px, excluded.
+  const small2 = rects2.filter(([, , , w, h]) => w <= 17 && h <= 17 && w >= 1 && h >= 1);
+  check('big map at 380px still draws all 1,000 building boxes', small2.length >= 1000, small2.length + ' small rects');
+}
+
+// --- 4b. fullMapLayout: overlay fits the viewport ---
+{
+  check('full map at 960x540 uses a 380px canvas', fullMapLayout(960, 540).size === 380, JSON.stringify(fullMapLayout(960, 540)));
+  check('full map at 960x540 fits (380 + 160 = 540)', fullMapLayout(960, 540).fits === true);
+  check('full map at 1920x1080 caps at 560px', fullMapLayout(1920, 1080).size === 560);
+  check('full map at 1280x720 caps at 560px', fullMapLayout(1280, 720).size === 560);
+  check('full map at 800x600 fits', fullMapLayout(800, 600).fits === true, JSON.stringify(fullMapLayout(800, 600)));
+  check('full map canvas never below 280px', fullMapLayout(400, 300).size === 280);
+  check('fullMapLayout defaults to 960x540 with no window', fullMapLayout(undefined, undefined).size === 380);
 }
 
 // --- 5. createHud().update() with full Neon City state ---
@@ -199,6 +221,11 @@ check('healthBarState defaults to 100', healthBarState(undefined).pct === 100);
   check('full map legend lists Rimba Central', !!overlay && overlay.innerHTML.includes('Rimba Central'), 'legend present');
   check('full map legend lists Coral Beach', !!overlay && overlay.innerHTML.includes('Coral Beach'));
   check('full map title is English', !!overlay && overlay.innerHTML.includes('TELUK RIMBA — MAP'));
+  // Canvas sized to the viewport (Mu 24 Nov 14:33 — old fixed 560px canvas
+  // overflowed a 540px-high viewport). Node has no window, so the
+  // fallback is 960x540 -> 380px canvas.
+  check('full map canvas is 380x380 at 960x540', !!overlay && overlay.innerHTML.includes('width="380" height="380"'), 'canvas sized to viewport');
+  check('full map overlay scrolls on tiny viewports', !!overlay && overlay.style.cssText.includes('overflow-y:auto'));
 }
 
 // --- 6. index.html: English, circular minimap, all Neon City ids, neon palette ---
