@@ -26,7 +26,8 @@ import { createAutopilot } from './autopilot.js';
 import { createAircraft } from './air.js';
 import { createAudio, createSettingsUI } from './audio.js';
 import { createShop, createCoins, createStunts, createCouriers, createShopUI, SHOP_POS, COIN_SPOTS } from './extras.js';
-import { saveGame, loadGame, clearSave } from './save.js';
+import { saveGame, loadGame, clearSave, listSlots } from './save.js';
+import { createStartMenu } from './menu.js';
 import { mat4TRS, mat4RotX, mat4Multiply } from './gl.js';
 
 const params = parseShotParams();
@@ -43,6 +44,10 @@ const start = params.spawn || START_POS;
 const audio = createAudio(city);
 window.__AUDIO__ = audio;
 const settings = createSettingsUI(audio); // full settings menu (Phase E2)
+// The in-game Settings button stays hidden while the start menu is up —
+// the menu has its own SETTINGS panel; the button appears once play starts
+// (startGame, real starts only, so ?shot frames stay clean).
+if (settings && settings.btn) settings.btn.style.display = 'none';
 // First gesture anywhere also unlocks the AudioContext (the start screen
 // click is the normal path; this covers clicks that land elsewhere first).
 window.addEventListener('pointerdown', () => audio.unlock(), { once: true });
@@ -87,13 +92,16 @@ const weather = createWeather({ override: params.weather || null });
 const aircraft = createAircraft(city);
 // Missions + autopilot (tests only) + save/load + shop/extras (Phase E2).
 let missions, shop, coins, stunts, couriers;
+// The slot the player is playing in (picked on the start menu; 1 by
+// default). Pause-menu / auto saves always write to this slot.
+let activeSlot = 1;
 const doSave = () => saveGame({
   name: game.playerName || 'Wowok',
   money: game.money, done: missions.doneIds(), active: missions.saveState(),
   shop: shop.saveState(), health: game.health,
   coins: coins.saveState(), stunts: stunts.saveState(),
   courier: couriers.saveState(),
-});
+}, activeSlot);
 couriers = createCouriers({ game, player, hud, audio, onSave: doSave });
 missions = createMissions({ city, game, player, traffic, peds, wanted, hud, audio, onSave: doSave, couriers });
 shop = createShop({ game, wanted, hud, audio, onSave: doSave, rank: () => missions.doneIds().length });
@@ -102,11 +110,11 @@ stunts = createStunts({ game, hud, audio, onSave: doSave });
 const shopUI = createShopUI(shop, game);
 player.setRampFn((x, z) => stunts.rampHeightAt(x, z));
 const autopilot = params.autopilot ? createAutopilot(city) : null;
-// Restore a previous session (money + missions + shop + coins + stunts +
-// couriers), unless a test mission was requested — test runs start fresh
-// from the mission's start point.
-const saved = loadGame();
-if (saved && !params.mission) {
+// Restore a save into the running game (money + missions + shop + coins +
+// stunts + couriers). Called only when the player picks a slot on the
+// start menu — nothing is restored before that, so NEW GAME starts fresh.
+function applySave(saved) {
+  if (!saved) return;
   if (saved.name) game.playerName = saved.name;
   if (typeof saved.health === 'number') game.health = Math.max(0, Math.min(100, saved.health));
   missions.restore(saved);
@@ -125,20 +133,31 @@ if (params.mission) {
 const aabbs = buildingAABBs(city);
 if (!params.hud) document.getElementById('hud').style.display = 'none';
 
-// Start screen: click to start (also unlocks the AudioContext; the audio
-// phase wires every sound in from here).
+// Start menu (Mu 24 Nov): the golden-hour drone video loops behind NEW
+// GAME / LOAD GAME / SETTINGS until the player picks something — the game
+// does NOT start before that (game.started stays false, the player cannot
+// move). Clicking NEW GAME starts fresh into the picked slot (its old save,
+// if any, is cleared first); picking a slot restores that save.
 const overlay = document.getElementById('start-screen');
 function startGame(skipAudio) {
   if (game.started) return;
   game.started = true;
   overlay.style.display = 'none';
+  const menuVideo = document.getElementById('menu-video');
+  if (menuVideo) menuVideo.pause(); // the loop is menu-only: stop it in-game
+  if (!skipAudio && settings && settings.btn) settings.btn.style.display = '';
   if (skipAudio) return; // screenshot/test mode: no user gesture, no audio yet
   audio.unlock();
   audio.uiClick();
   hud.showHint('WASD walk • Shift run • drag mouse for camera • M map');
 }
-overlay.addEventListener('click', startGame);
-overlay.addEventListener('keydown', (e) => { if (e.code === 'Enter' || e.code === 'Space') startGame(); });
+createStartMenu({
+  overlay,
+  audio,
+  getSlots: listSlots,
+  onNewGame: (slot) => { activeSlot = slot; clearSave(slot); startGame(); },
+  onLoadSlot: (slot, data) => { activeSlot = slot; applySave(data); startGame(); },
+});
 
 // Screenshot / test mode starts straight into the 3D world — no start screen
 // covering the frame (the grader screenshots ?shot=... directly).
@@ -303,7 +322,7 @@ window.__GAME__ = {
   driving() { return game.driving ? game.driving.type : null; },
 };
 window.__MISSIONS__ = missions;
-window.__SAVE__ = { save: doSave, load: loadGame, clear: clearSave };
+window.__SAVE__ = { save: doSave, load: () => loadGame(activeSlot), clear: () => clearSave(activeSlot), slots: listSlots };
 window.__AIRCRAFT__ = aircraft;
 window.__SHOP__ = shop;
 window.__EXTRAS__ = { shop, coins, stunts, couriers };
