@@ -17,7 +17,7 @@ import { createHud } from './hud.js';
 import { createRenderer } from './render.js';
 import { parseShotParams, timeForShot } from './shots.js';
 import { createTraffic, stepWheelState } from './vehicles.js';
-import { spawnLotCars } from './parking.js';
+import { spawnLotCars, spawnYardCars } from './parking.js';
 import { createPeds } from './peds.js';
 import { createWanted } from './police.js';
 import { createWeather } from './weather.js';
@@ -606,6 +606,9 @@ if (params.sim) {
   // empty. This runs in the non-sim branch only because the spots ride
   // on plotDressing, which only the renderer builds.
   spawnLotCars(traffic, renderer.plotDressing.parking.carSpots);
+  // Yard + kerb cars are stealable too (Mu): the yard/kerb cars spawn
+  // as parked traffic entities, same as the lot cars above.
+  spawnYardCars(traffic, renderer.plotDressing.yardCarSpots);
   // Activity props (coffee tables, benches): one static mesh from the same
   // spot lists the activity NPCs sit at. The player is drawn per-part from
   // buildDynamics (player.partMatrices), not as a static mesh.

@@ -479,3 +479,19 @@ export function spawnLotCars(traffic, spots) {
   }
   return spawned;
 }
+
+// Turn yard + kerb spots into stealable parked traffic entities (Mu):
+// same pattern as spawnLotCars — each spot spawns via the same
+// spawnParked missions use, rides at y 0.09 just above the yard paving
+// (top 0.07-0.08), and joins traffic.parked so the off-lanes checks
+// cover it too.
+export function spawnYardCars(traffic, spots) {
+  const spawned = [];
+  for (const s of spots) {
+    const v = traffic.spawnParked(s.type, s.x, s.z, s.heading);
+    v.y = 0.09;
+    traffic.parked.push(v);
+    spawned.push(v);
+  }
+  return spawned;
+}

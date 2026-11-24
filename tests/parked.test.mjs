@@ -1,7 +1,8 @@
 // Parked-lot cars are stealable (Mu): every parking-lot car is a parked
 // traffic entity (same spawnParked missions use), not static decoration.
-// Walk up, press E, drive away — the bay stays empty. Yard cars (1,132)
-// stay decoration; the 24 hand-placed parked cars are untouched.
+// Walk up, press E, drive away — the bay stays empty. Yard + kerb cars
+// (888) are stealable too — see tests/yardcars.test.mjs. The 24
+// hand-placed parked cars are untouched.
 // Run: node tests/parked.test.mjs
 import { generateCity } from '../game/src/city.js';
 import { buildParking, spawnLotCars } from '../game/src/parking.js';

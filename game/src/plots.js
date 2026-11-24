@@ -6,8 +6,7 @@
 import { mulberry32, range, rangeInt } from './rng.js';
 import { riverDistance, ROAD_LINES, ASPHALT_HALF } from './city.js';
 import { emptyGeom, plainBox } from './gl.js';
-import { distinctColor, parkedCarGeom } from './vehicles.js';
-import { buildParking, simpleParkedCarGeom } from './parking.js';
+import { buildParking } from './parking.js';
 
 // Yard paving (Mu: subtle and calm — no more chessboard): small 4x2 m
 // rectangular blocks in running bond, all nearly the same soft tone
@@ -163,30 +162,23 @@ function yardBenchGeom() {
   return g;
 }
 
-// Parked-car template: the sculpted body is identical for every parked
-// car — only the paint differs. Rebuilding carGeom per car costs ~7 ms;
-// 434 cars was ~3 s of load time. Build once, stamp tinted copies (same
-// tint rule parkedCarGeom uses: white body parts take the paint colour).
-let parkedTemplate = null;
-function parkedCarStamp(color) {
-  if (!parkedTemplate) parkedTemplate = parkedCarGeom([1, 1, 1]);
-  const g = { pos: [...parkedTemplate.pos], nrm: [...parkedTemplate.nrm], col: [] };
-  for (let i = 0; i < parkedTemplate.col.length; i += 3) {
-    const r = parkedTemplate.col[i], gg = parkedTemplate.col[i + 1], b = parkedTemplate.col[i + 2];
-    if (r === 1 && gg === 1 && b === 1) g.col.push(color[0], color[1], color[2]);
-    else g.col.push(r, gg, b);
-  }
-  return g;
-}
-
 export function buildPlotDressing(city) {
   const rand = mulberry32(20261128);
+  // Yard/kerb car TYPE pick (Mu: stealable): a SEPARATE seeded stream so
+  // the rand/yardRand placement streams stay byte-identical (same
+  // discipline as the lot cars' typeRand in parking.js).
+  const yardTypeRand = mulberry32(20261137);
+  const pickYardType = () => {
+    const tr = yardTypeRand();
+    return tr < 0.40 ? 'car' : tr < 0.70 ? 'sedan' : tr < 0.85 ? 'mpv' : 'jeep';
+  };
   const paving = emptyGeom();
   const props = emptyGeom();
   const dressed = [];
   let cars = 0, fences = 0, flowers = 0, benches = 0, bins = 0, pots = 0;
   let kerbCars = 0, simpleCars = 0; // kerb-row cars + all simple-geometry cars
   const blockCarSpots = []; // {blk, x, z} of every block-pass parked car (kerb + block)
+  const yardCarSpots = []; // {x, z, rot, heading, type, kind} per yard/kerb car — stealable parked traffic entities
   // Parking zones (Mu): computed FIRST so the block pass and the yard
   // pass keep their trees/cars/fences out of the lots. The pad + bay
   // lines + arrows merge into the paving mesh; the lot cars merge into
@@ -200,9 +192,6 @@ export function buildPlotDressing(city) {
   pushAll(props.pos, parking.cars.pos); pushAll(props.nrm, parking.cars.nrm); pushAll(props.col, parking.cars.col);
   const lotRects = parking.lots.map((l) => l.rect);
   const lotHit = (x0, z0, x1, z1, m = 0) => lotRects.some((r) => x0 - m < r.x1 && x1 + m > r.x0 && z0 - m < r.z1 && z1 + m > r.z0);
-  // Decorative parked cars get distinct colours too (same allocator as
-  // the traffic fleet, continuing its sequence).
-  let colorIdx = 1000;
 
   const blocks = city.blocks.filter((b) =>
     (b.zone === 'downtown' || b.zone === 'commercial' || b.zone === 'residential'));
@@ -259,7 +248,13 @@ export function buildPlotDressing(city) {
     for (let k = 0; k < nCars; k++) {
       const s = spot(2.2, 1.2);
       if (!s) continue;
-      addPart(props, parkedCarStamp(distinctColor(colorIdx++)), s.x, 0.06, s.z, range(rand, 0, Math.PI * 2));
+      // Stealable (Mu): recorded as a spot, NOT baked — spawnYardCars
+      // turns it into a parked traffic entity. The rot draw stays so
+      // the rand stream is byte-identical; heading = rot + PI/2 (the
+      // sculpted car's front +X maps to (sin h, cos h), same formula
+      // as the lot cars in parking.js).
+      const rot = range(rand, 0, Math.PI * 2);
+      yardCarSpots.push({ x: s.x, z: s.z, rot, heading: rot + Math.PI / 2, type: pickYardType(), kind: 'block' });
       cars++;
       carSpots.push({ x: s.x, z: s.z });
       blockCarSpots.push({ blk: b, x: s.x, z: s.z });
@@ -287,7 +282,7 @@ export function buildPlotDressing(city) {
         else if (edge === 2) { x = b.x0 + 4.5; z = b.cz + along; rot = Math.PI / 2; }
         else { x = b.x1 - 4.5; z = b.cz + along; rot = Math.PI / 2; }
         if (!kerbOk(x, z)) continue;
-        addPart(props, simpleParkedCarGeom(distinctColor(colorIdx++)), x, 0.06, z, rot);
+        yardCarSpots.push({ x, z, rot, heading: rot + Math.PI / 2, type: pickYardType(), kind: 'kerb' });
         kerbCars++;
         simpleCars++;
         carSpots.push({ x, z });
@@ -468,7 +463,8 @@ export function buildPlotDressing(city) {
     for (let k = 0; k < nYardCars; k++) {
       const s = tryPlace(2.1, 2.1, 2.1);
       if (!s) continue;
-      addPart(props, simpleParkedCarGeom(distinctColor(colorIdx++)), s.x, 0.06, s.z, range(yardRand, 0, Math.PI * 2));
+      const rot = range(yardRand, 0, Math.PI * 2);
+      yardCarSpots.push({ x: s.x, z: s.z, rot, heading: rot + Math.PI / 2, type: pickYardType(), kind: 'yard' });
       yardCars++;
       simpleCars++;
       got++;
@@ -508,7 +504,8 @@ export function buildPlotDressing(city) {
       } else if (kind === 'car') {
         const s = tryPlace(2.1, 2.1, 2.1);
         if (!s) continue;
-        addPart(props, parkedCarStamp(distinctColor(colorIdx++)), s.x, 0.06, s.z, range(yardRand, 0, Math.PI * 2));
+        const rot = range(yardRand, 0, Math.PI * 2);
+        yardCarSpots.push({ x: s.x, z: s.z, rot, heading: rot + Math.PI / 2, type: pickYardType(), kind: 'yard' });
         yardCars++;
         got++;
       } else if (kind === 'fountain') {
@@ -641,6 +638,7 @@ export function buildPlotDressing(city) {
   return {
     paving, props, fountainSpots,
     parking, // lot spots for spawnLotCars (main.js, non-sim branch)
+    yardCarSpots, // yard + kerb spots for spawnYardCars (main.js, non-sim branch)
     parkingSymbols: parking.symbols,
     counts: { blocks: dressed.length, cars, fences, flowerBeds: flowers, benches, bins, pots, yardTrees, yardBenches, yardCars, yardFlowers, yardFountains, yardDressed, yardLawns, streetTrees: streetTrees2, kerbCars, simpleCars, parkingLots: parking.counts.lots, parkingCars: parking.counts.cars, parkingBays: parking.counts.bays, parkingSymbols: parking.counts.symbols, beachParks, beachBenches, beachTrees, beachFlowers },
   };
