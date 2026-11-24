@@ -36,8 +36,8 @@ function stubEl() {
     style: {},
     textContent: '',
     innerHTML: '',
-    width: 200,
-    height: 200,
+    width: 130,
+    height: 130,
     attrs: {},
     setAttribute(k, v) { this.attrs[k] = v; },
     addEventListener() {},
@@ -116,6 +116,18 @@ check('healthBarState defaults to 100', healthBarState(undefined).pct === 100);
   const texts = ctx.calls.filter(([k]) => k === 'fillText').map(([, t]) => t);
   check('minimap draws north marker N', texts.includes('N'), texts.join(','));
   check('minimap draws mission diamond marker', ctx.calls.some(([k]) => k === 'moveTo'));
+  // Real minimap size (Mu 24 Nov 12:51 — shrunk 200px -> 130px, it read too
+  // big in frame): all 1,000 boxes, the N marker and the mission diamond
+  // must still draw at 130x130. Buildings are 1-4px at this scale
+  // (1px ~= 10.8m), so the small-rects filter still catches every one.
+  const ctx130 = makeCtx();
+  drawCityMap(ctx130, city, 130, 130, player, 10, [{ x: 100, z: -100, color: '#ffd23f', shape: 'diamond' }], { labels: false, zoneAlpha: 0.32 });
+  const rects130 = ctx130.calls.filter(([k]) => k === 'fillRect');
+  const small130 = rects130.filter(([, , , w, h]) => w <= 9 && h <= 9 && w >= 1 && h >= 1);
+  check('minimap at 130px still draws all 1,000 building boxes', small130.length >= 1000, small130.length + ' small rects');
+  const texts130 = ctx130.calls.filter(([k]) => k === 'fillText').map(([, t]) => t);
+  check('minimap at 130px still draws north marker N', texts130.includes('N'), texts130.join(','));
+  check('minimap at 130px still draws mission diamond marker', ctx130.calls.some(([k]) => k === 'moveTo'));
   // Big map with labels: English zone names + stadium name.
   const ctx2 = makeCtx();
   drawCityMap(ctx2, city, 560, 560, player, 10, [], { labels: true, zoneAlpha: 0.5 });
@@ -194,6 +206,9 @@ check('healthBarState defaults to 100', healthBarState(undefined).pct === 100);
   const html = readFileSync(join(__dirname, '..', 'game', 'index.html'), 'utf8');
   check('html lang is en', html.includes('<html lang="en">'));
   check('minimap is circular (border-radius 50%)', html.includes('border-radius: 50%'));
+  check('minimap is 130px (Mu: shrunk from 200px, it read too big)', html.includes('width: 130px; height: 130px'));
+  check('minimap canvas is 130x130', html.includes('width="130" height="130"'));
+  check('old 200px minimap is gone', !html.includes('width: 200px; height: 200px') && !html.includes('width="200" height="200"'));
   for (const id of ['hud-speedo', 'hud-speedo-arc', 'hud-speedo-text', 'hud-crosshair', 'hud-weapon', 'hud-weapon-name', 'hud-ammo', 'hud-distance', 'hud-zone', 'hud-missions', 'hud-armor', 'hud-medkit', 'hud-boost', 'hud-health', 'hud-health-text', 'hud-health-track', 'hud-health-fill']) {
     check('index.html has #' + id, html.includes('id="' + id + '"'));
   }

@@ -25,7 +25,7 @@
   #hud-missions { font-size: 12px; letter-spacing: 1px; color: #22d3ee; padding: 3px 10px; display: inline-block; margin-top: 5px; }
   /* Bottom-left: circular minimap + active zone strip. */
   #minimap-wrap { position: absolute; bottom: 14px; left: 14px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-  #minimap { width: 200px; height: 200px; border: 2px solid rgba(34,211,238,.8); border-radius: 50%; background: #0a1826; box-shadow: 0 0 20px rgba(34,211,238,.45); }
+  #minimap { width: 130px; height: 130px; border: 2px solid rgba(34,211,238,.8); border-radius: 50%; background: #0a1826; box-shadow: 0 0 20px rgba(34,211,238,.45); }
   #hud-zone { font-size: 13px; font-weight: 700; letter-spacing: 2px; color: #22d3ee; padding: 4px 12px; text-shadow: 0 0 10px rgba(34,211,238,.7); }
   /* Bottom-right: health bar, owned-item chips, weapon slot, round speedometer. */
   #hud-br { position: absolute; bottom: 14px; right: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 7px; }
@@ -110,7 +110,7 @@
     <div id="hud-stars">☆☆☆</div>
   </div>
   <div id="minimap-wrap">
-    <canvas id="minimap" width="200" height="200"></canvas>
+    <canvas id="minimap" width="130" height="130"></canvas>
     <div id="hud-zone" class="neon-panel">RIMBA CENTRAL</div>
   </div>
   <div id="hud-br">
