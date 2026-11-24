@@ -35,6 +35,7 @@ audio.thunder(); audio.bark(); audio.birdChirp(); audio.gull(); audio.npcVoice()
 audio.heartbeat(); audio.busted(); audio.busStop(); audio.doorThud(); audio.engineStart();
 audio.collision(30); audio.brake(); audio.screech(); audio.missionStart(); audio.missionFail();
 audio.missionBell(); audio.distantHorn(); audio.clank(); audio.planeWhoosh(); audio.boatSplash();
+audio.wantedUp(1); audio.wantedUp(3);
 {
   const d = audio.debugStats();
   const total = Object.values(d.counts).reduce((a, b) => a + b, 0);
@@ -42,6 +43,7 @@ audio.missionBell(); audio.distantHorn(); audio.clank(); audio.planeWhoosh(); au
   check('gunshot counted', d.counts.gunshot === 1);
   check('coin counted', d.counts.coin === 2, 'missionComplete plays a coin too');
   check('impact split by material', d.counts['impact:metal'] === 1 && d.counts['impact:water'] === 1);
+  check('wantedUp counted at both levels', d.counts.wantedUp === 2);
   check('no voices live without a context', d.active === 0);
   check('nothing dropped without a context', d.dropped === 0);
 }
@@ -105,6 +107,29 @@ check('unknown type falls back', engineBaseFreq('hovercraft') === 70);
   check('wanted 3 + close police triggers heartbeat', (after.counts.heartbeat || 0) > 0,
     `heartbeats: ${after.counts.heartbeat || 0}`);
   check('update counted nothing unexpected', after.dropped === 0);
+}
+
+// --- wanted-level-up sting: fired by update() on a rise, once per rise ---
+{
+  const a2 = createAudio(city); // fresh instance: prevWanted starts at 0
+  a2.update(1 / 60, { wanted: 0 });
+  check('no sting at wanted 0', (a2.debugStats().counts.wantedUp || 0) === 0);
+  a2.update(1 / 60, { wanted: 1 });
+  check('sting on 0 -> 1', a2.debugStats().counts.wantedUp === 1);
+  a2.update(1 / 60, { wanted: 1 });
+  check('no repeat sting at the same level', a2.debugStats().counts.wantedUp === 1);
+  a2.update(1 / 60, { wanted: 3 });
+  check('sting again on 1 -> 3', a2.debugStats().counts.wantedUp === 2);
+  a2.update(1 / 60, { wanted: 0 });
+  check('no sting when wanted falls', a2.debugStats().counts.wantedUp === 2);
+  a2.update(1 / 60, {});
+  check('missing wanted in state is safe', a2.debugStats().counts.wantedUp === 2);
+  // Audibility is gain-gated (UI bus + master mute), not call-gated: the
+  // sting is still counted while muted, it just sounds at gain 0.
+  a2.setMuted(true);
+  a2.wantedUp(2);
+  check('sting counted even while muted', a2.debugStats().counts.wantedUp === 3);
+  a2.setMuted(false);
 }
 
 // --- ducking + voice cap constants ---

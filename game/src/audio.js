@@ -66,6 +66,7 @@ export function createAudio(city) {
   let heartT = 0; // heartbeat timer (danger state)
   let lastArea = 'downtown';
   let lastMode = 'day';
+  let prevWanted = 0; // last wanted level seen by update() (sting on rise)
   let prevPlaneActive = false;
   let thunderTimer = 20;
   const timers = { gull: 6, bird: 3, bark: 18, horn: 12, clank: 10, npc: 5 };
@@ -547,6 +548,16 @@ export function createAudio(city) {
         tone(buses.ui, { at: 0.1, type: 'sine', freq: 330, freqEnd: 165, dur: 0.45, peak: 0.18 });
       });
     },
+    // Wanted level rose: a short two-note police sting; higher + a touch
+    // louder as the heat rises. Triggered from update() (see below).
+    wantedUp(level) {
+      const lvl = Math.max(1, Math.min(5, level || 1));
+      return play('wantedUp', 3, () => {
+        const f1 = 440 + lvl * 40, f2 = 554 + lvl * 40;
+        tone(buses.ui, { type: 'square', freq: f1, dur: 0.16, peak: 0.12 + lvl * 0.01 });
+        tone(buses.ui, { at: 0.16, type: 'square', freq: f2, dur: 0.24, peak: 0.12 + lvl * 0.01 });
+      });
+    },
     shipHorn() {
       return play('shipHorn', 2, () => {
         tone(buses.sfx, { type: 'sine', freq: 110, dur: 1.6, peak: 0.35, attack: 0.15 });
@@ -687,6 +698,11 @@ export function createAudio(city) {
     } else {
       stepAccum = 0;
     }
+
+    // --- wanted-level-up sting: once per rise, never on a fall or repeat ---
+    const wantedNow = s.wanted || 0;
+    if (wantedNow > prevWanted) sfx.wantedUp(wantedNow);
+    prevWanted = wantedNow;
 
     if (!ctx || !loops) return; // counted-only mode: triggers still counted
 
